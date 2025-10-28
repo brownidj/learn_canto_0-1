@@ -1,0 +1,881 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+    <class>MainWindow</class>
+    <widget class="QMainWindow" name="MainWindow">
+        <property name="geometry">
+            <rect>
+                <x>0</x>
+                <y>0</y>
+                <width>720</width>
+                <height>1280</height>
+            </rect>
+        </property>
+        <property name="windowTitle">
+            <string>My Cantonese Words</string>
+        </property>
+        <property name="animated">
+            <bool>true</bool>
+        </property>
+        <property name="dockNestingEnabled">
+            <bool>false</bool>
+        </property>
+        <property name="unifiedTitleAndToolBarOnMac">
+            <bool>false</bool>
+        </property>
+        <widget class="QWidget" name="centralwidget">
+            <layout class="QVBoxLayout" name="centralVerticalLayout" stretch="1,0">
+                <property name="leftMargin">
+                    <number>18</number>
+                </property>
+                <property name="topMargin">
+                    <number>18</number>
+                </property>
+                <property name="rightMargin">
+                    <number>18</number>
+                </property>
+                <property name="bottomMargin">
+                    <number>18</number>
+                </property>
+                <item>
+                    <layout class="QVBoxLayout" name="contentLayout" stretch="1,0,1,0,0,0,0">
+                        <property name="spacing">
+                            <number>8</number>
+                        </property>
+                        <item>
+                            <layout class="QHBoxLayout" name="jyutpingRow">
+                                <item>
+                                    <widget class="QLineEdit" name="jyutping">
+                                        <property name="minimumSize">
+                                            <size>
+                                                <width>300</width>
+                                                <height>60</height>
+                                            </size>
+                                        </property>
+                                        <property name="styleSheet">
+                                            <string notr="true">font-size: 36pt; color: grey; padding: 8px;</string>
+                                        </property>
+                                        <property name="readOnly">
+                                            <bool>true</bool>
+                                        </property>
+                                        <property name="placeholderText">
+                                            <string>nei5 hou2</string>
+                                        </property>
+                                    </widget>
+                                </item>
+                            </layout>
+                        </item>
+                        <item>
+                            <layout class="QHBoxLayout" name="categoryRow">
+                                <property name="spacing">
+                                    <number>6</number>
+                                </property>
+                                <item>
+                                    <spacer name="horizontalSpacer">
+                                        <property name="orientation">
+                                            <enum>Qt::Orientation::Horizontal</enum>
+                                        </property>
+                                        <property name="sizeHint" stdset="0">
+                                            <size>
+                                                <width>40</width>
+                                                <height>20</height>
+                                            </size>
+                                        </property>
+                                    </spacer>
+                                </item>
+                                <item>
+                                    <widget class="QLabel" name="labelCategory">
+                                        <property name="text">
+                                            <string>Category:</string>
+                                        </property>
+                                    </widget>
+                                </item>
+                                <item>
+                                    <widget class="QComboBox" name="comboCategory">
+                                        <property name="editable">
+                                            <bool>false</bool>
+                                        </property>
+                                    </widget>
+                                </item>
+                            </layout>
+                        </item>
+                        <item>
+                            <widget class="QLabel" name="labelHanzi">
+                                <property name="minimumSize">
+                                    <size>
+                                        <width>0</width>
+                                        <height>200</height>
+                                    </size>
+                                </property>
+                                <property name="maximumSize">
+                                    <size>
+                                        <width>16777215</width>
+                                        <height>360</height>
+                                    </size>
+                                </property>
+                                <property name="sizePolicy">
+                                    <sizepolicy hsizetype="Ignored" vsizetype="Preferred">
+                                        <horstretch>0</horstretch>
+                                        <verstretch>0</verstretch>
+                                    </sizepolicy>
+                                </property>
+                                <property name="styleSheet">
+                                    <string notr="true">font-size: 96pt; font-weight: 600;</string>
+                                </property>
+                                <property name="text">
+                                    <string>你好</string>
+                                </property>
+                                <property name="alignment">
+                                    <set>Qt::AlignmentFlag::AlignCenter</set>
+                                </property>
+                            </widget>
+                        </item>
+                        <item>
+                            <widget class="QGroupBox" name="groupMeanings">
+                                <property name="title">
+                                    <string>Translation</string>
+                                </property>
+                                <layout class="QVBoxLayout" name="layoutMeanings">
+                                    <property name="spacing">
+                                        <number>6</number>
+                                    </property>
+                                    <property name="leftMargin">
+                                        <number>6</number>
+                                    </property>
+                                    <property name="topMargin">
+                                        <number>6</number>
+                                    </property>
+                                    <property name="rightMargin">
+                                        <number>6</number>
+                                    </property>
+                                    <property name="bottomMargin">
+                                        <number>6</number>
+                                    </property>
+                                    <item>
+                                        <widget class="QTextEdit" name="textMeanings">
+                                            <property name="minimumSize">
+                                                <size>
+                                                    <width>0</width>
+                                                    <height>60</height>
+                                                </size>
+                                            </property>
+                                            <property name="maximumSize">
+                                                <size>
+                                                    <width>16777215</width>
+                                                    <height>60</height>
+                                                </size>
+                                            </property>
+                                            <property name="sizePolicy">
+                                                <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                                                    <horstretch>0</horstretch>
+                                                    <verstretch>0</verstretch>
+                                                </sizepolicy>
+                                            </property>
+                                            <property name="readOnly">
+                                                <bool>true</bool>
+                                            </property>
+                                            <property name="placeholderText">
+                                                <string>Meanings will appear here…</string>
+                                            </property>
+                                        </widget>
+                                    </item>
+                                </layout>
+                            </widget>
+                        </item>
+                        <item>
+                            <spacer name="spacerBetweenMeaningsRadicals">
+                                <property name="orientation">
+                                    <enum>Qt::Orientation::Vertical</enum>
+                                </property>
+                                <property name="sizeHint" stdset="0">
+                                    <size>
+                                        <width>20</width>
+                                        <height>20</height>
+                                    </size>
+                                </property>
+                            </spacer>
+                        </item>
+                        <item>
+                            <widget class="QGroupBox" name="groupRadicals">
+                                <property name="title">
+                                    <string>Radicals</string>
+                                </property>
+                                <layout class="QHBoxLayout" name="layoutRadicals">
+                                    <property name="spacing">
+                                        <number>6</number>
+                                    </property>
+                                    <property name="leftMargin">
+                                        <number>6</number>
+                                    </property>
+                                    <property name="topMargin">
+                                        <number>6</number>
+                                    </property>
+                                    <property name="rightMargin">
+                                        <number>6</number>
+                                    </property>
+                                    <property name="bottomMargin">
+                                        <number>6</number>
+                                    </property>
+                                    <item>
+                                        <widget class="QLabel" name="labelRadical1">
+                                            <property name="text">
+                                                <string>⼈</string>
+                                            </property>
+                                            <property name="alignment">
+                                                <set>Qt::AlignmentFlag::AlignCenter</set>
+                                            </property>
+                                        </widget>
+                                    </item>
+                                    <item>
+                                        <widget class="QLabel" name="labelRadical2">
+                                            <property name="text">
+                                                <string>⼝</string>
+                                            </property>
+                                            <property name="alignment">
+                                                <set>Qt::AlignmentFlag::AlignCenter</set>
+                                            </property>
+                                        </widget>
+                                    </item>
+                                </layout>
+                            </widget>
+                        </item>
+                        <item>
+                            <spacer name="spacerBetweenRadicalsSound">
+                                <property name="orientation">
+                                    <enum>Qt::Orientation::Vertical</enum>
+                                </property>
+                                <property name="sizeHint" stdset="0">
+                                    <size>
+                                        <width>20</width>
+                                        <height>20</height>
+                                    </size>
+                                </property>
+                            </spacer>
+                        </item>
+                        <item>
+                            <widget class="QGroupBox" name="groupSoundToneMastery">
+                                <property name="title">
+                                    <string>Sound and Tone Mastery</string>
+                                </property>
+                                <layout class="QVBoxLayout" name="layoutSoundToneMastery">
+                                    <property name="spacing">
+                                        <number>6</number>
+                                    </property>
+                                    <property name="leftMargin">
+                                        <number>6</number>
+                                    </property>
+                                    <property name="topMargin">
+                                        <number>6</number>
+                                    </property>
+                                    <property name="rightMargin">
+                                        <number>6</number>
+                                    </property>
+                                    <property name="bottomMargin">
+                                        <number>6</number>
+                                    </property>
+                                    <item>
+                                        <widget class="QGroupBox" name="groupVisualToneGraphs">
+                                            <property name="title">
+                                                <string>Tone Graphs</string>
+                                            </property>
+                                            <layout class="QVBoxLayout" name="VisualToneGraphs">
+                                                <property name="spacing">
+                                                    <number>6</number>
+                                                </property>
+                                                <property name="leftMargin">
+                                                    <number>6</number>
+                                                </property>
+                                                <property name="topMargin">
+                                                    <number>6</number>
+                                                </property>
+                                                <property name="rightMargin">
+                                                    <number>6</number>
+                                                </property>
+                                                <property name="bottomMargin">
+                                                    <number>6</number>
+                                                </property>
+                                                <item>
+                                                    <widget class="QLabel" name="labelVisualToneGraph1">
+                                                        <property name="text">
+                                                            <string>你</string>
+                                                        </property>
+                                                        <property name="alignment">
+                                                            <set>Qt::AlignmentFlag::AlignCenter</set>
+                                                        </property>
+                                                    </widget>
+                                                </item>
+                                                <item>
+                                                    <widget class="QLabel" name="labelVisualToneGraph2">
+                                                        <property name="text">
+                                                            <string>好</string>
+                                                        </property>
+                                                        <property name="alignment">
+                                                            <set>Qt::AlignmentFlag::AlignCenter</set>
+                                                        </property>
+                                                    </widget>
+                                                </item>
+                                            </layout>
+                                        </widget>
+                                    </item>
+                                    <item>
+                                        <layout class="QHBoxLayout" name="comparisonRow">
+                                            <property name="spacing">
+                                                <number>6</number>
+                                            </property>
+                                            <item>
+                                                <widget class="QLabel" name="comparison">
+                                                    <property name="text">
+                                                        <string>Comparison</string>
+                                                    </property>
+                                                </widget>
+                                            </item>
+                                            <item>
+                                                <widget class="QPushButton" name="btnComparisonPlay">
+                                                    <property name="text">
+                                                        <string>Play</string>
+                                                    </property>
+                                                </widget>
+                                            </item>
+                                        </layout>
+                                    </item>
+                                </layout>
+                            </widget>
+                        </item>
+                        <item>
+                            <spacer name="spacerAfterRadicals">
+                                <property name="orientation">
+                                    <enum>Qt::Orientation::Vertical</enum>
+                                </property>
+                                <property name="sizeHint" stdset="0">
+                                    <size>
+                                        <width>20</width>
+                                        <height>80</height>
+                                    </size>
+                                </property>
+                            </spacer>
+                        </item>
+                    </layout>
+                </item>
+                <item>
+                    <widget class="QFrame" name="bottomBar">
+                        <property name="frameShape">
+                            <enum>QFrame::Shape::StyledPanel</enum>
+                        </property>
+                        <property name="frameShadow">
+                            <enum>QFrame::Shadow::Raised</enum>
+                        </property>
+                        <layout class="QHBoxLayout" name="bottomBarLayout">
+                            <property name="spacing">
+                                <number>8</number>
+                            </property>
+                            <property name="leftMargin">
+                                <number>8</number>
+                            </property>
+                            <property name="topMargin">
+                                <number>8</number>
+                            </property>
+                            <property name="rightMargin">
+                                <number>8</number>
+                            </property>
+                            <property name="bottomMargin">
+                                <number>8</number>
+                            </property>
+                            <item>
+                                <widget class="QPushButton" name="btnPrevious">
+                                    <property name="toolTip">
+                                        <string>Previous</string>
+                                    </property>
+                                    <property name="text">
+                                        <string>◀</string>
+                                    </property>
+                                </widget>
+                            </item>
+                            <item>
+                                <widget class="QPushButton" name="btnListen">
+                                    <property name="toolTip">
+                                        <string>Listen / Play</string>
+                                    </property>
+                                    <property name="text">
+                                        <string>Play</string>
+                                    </property>
+                                </widget>
+                            </item>
+                            <item>
+                                <widget class="QPushButton" name="btnNext">
+                                    <property name="toolTip">
+                                        <string>Next</string>
+                                    </property>
+                                    <property name="text">
+                                        <string>▶</string>
+                                    </property>
+                                </widget>
+                            </item>
+                            <item>
+                                <widget class="QPushButton" name="btnTortoise">
+                                    <property name="toolTip">
+                                        <string>Turtle (Slow mode)</string>
+                                    </property>
+                                    <property name="text">
+                                        <string>🐢</string>
+                                    </property>
+                                    <property name="checkable">
+                                        <bool>true</bool>
+                                    </property>
+                                    <property name="checked">
+                                        <bool>false</bool>
+                                    </property>
+                                </widget>
+                            </item>
+                            <item>
+                                <widget class="QPushButton" name="btnAuto">
+                                    <property name="toolTip">
+                                        <string>Auto play</string>
+                                    </property>
+                                    <property name="text">
+                                        <string>Auto</string>
+                                    </property>
+                                    <property name="checkable">
+                                        <bool>true</bool>
+                                    </property>
+                                    <property name="checked">
+                                        <bool>false</bool>
+                                    </property>
+                                </widget>
+                            </item>
+                        </layout>
+                    </widget>
+                </item>
+            </layout>
+        </widget>
+        <widget class="QToolBar" name="mainToolBar">
+            <property name="windowTitle">
+                <string>Toolbar</string>
+            </property>
+            <property name="toolButtonStyle">
+                <enum>Qt::ToolButtonStyle::ToolButtonTextOnly</enum>
+            </property>
+            <attribute name="toolBarArea">
+                <enum>TopToolBarArea</enum>
+            </attribute>
+            <attribute name="toolBarBreak">
+                <bool>false</bool>
+            </attribute>
+            <addaction name="actionHamburger"/>
+            <addaction name="actionSearch"/>
+        </widget>
+        <widget class="QDockWidget" name="navDrawer">
+            <property name="allowedAreas">
+                <set>Qt::DockWidgetArea::LeftDockWidgetArea</set>
+            </property>
+            <property name="windowTitle">
+                <string>Menu</string>
+            </property>
+            <attribute name="dockWidgetArea">
+                <number>1</number>
+            </attribute>
+            <widget class="QWidget" name="dockContents">
+                <layout class="QVBoxLayout" name="dockLayout">
+                    <property name="leftMargin">
+                        <number>8</number>
+                    </property>
+                    <property name="topMargin">
+                        <number>8</number>
+                    </property>
+                    <property name="rightMargin">
+                        <number>8</number>
+                    </property>
+                    <property name="bottomMargin">
+                        <number>8</number>
+                    </property>
+                    <item>
+                        <widget class="QPushButton" name="btnAdd">
+                            <property name="text">
+                                <string>Add</string>
+                            </property>
+                        </widget>
+                    </item>
+                    <item>
+                        <widget class="QGroupBox" name="groupWpm">
+                            <property name="title">
+                                <string>WPM</string>
+                            </property>
+                            <layout class="QVBoxLayout" name="layoutWpm">
+                                <property name="spacing">
+                                    <number>6</number>
+                                </property>
+                                <property name="leftMargin">
+                                    <number>6</number>
+                                </property>
+                                <property name="topMargin">
+                                    <number>6</number>
+                                </property>
+                                <property name="rightMargin">
+                                    <number>6</number>
+                                </property>
+                                <property name="bottomMargin">
+                                    <number>6</number>
+                                </property>
+                                <item>
+                                    <widget class="QSlider" name="sliderWpm">
+                                        <property name="minimum">
+                                            <number>60</number>
+                                        </property>
+                                        <property name="maximum">
+                                            <number>220</number>
+                                        </property>
+                                        <property name="singleStep">
+                                            <number>20</number>
+                                        </property>
+                                        <property name="pageStep">
+                                            <number>20</number>
+                                        </property>
+                                        <property name="value">
+                                            <number>120</number>
+                                        </property>
+                                        <property name="orientation">
+                                            <enum>Qt::Orientation::Horizontal</enum>
+                                        </property>
+                                    </widget>
+                                </item>
+                            </layout>
+                        </widget>
+                    </item>
+                    <item>
+                        <widget class="QGroupBox" name="groupRepeats">
+                            <property name="title">
+                                <string>Repeats</string>
+                            </property>
+                            <layout class="QVBoxLayout" name="layoutRepeats">
+                                <property name="spacing">
+                                    <number>6</number>
+                                </property>
+                                <property name="leftMargin">
+                                    <number>6</number>
+                                </property>
+                                <property name="topMargin">
+                                    <number>6</number>
+                                </property>
+                                <property name="rightMargin">
+                                    <number>6</number>
+                                </property>
+                                <property name="bottomMargin">
+                                    <number>6</number>
+                                </property>
+                                <item>
+                                    <widget class="QSlider" name="sliderRepeats">
+                                        <property name="minimum">
+                                            <number>1</number>
+                                        </property>
+                                        <property name="maximum">
+                                            <number>10</number>
+                                        </property>
+                                        <property name="singleStep">
+                                            <number>1</number>
+                                        </property>
+                                        <property name="pageStep">
+                                            <number>1</number>
+                                        </property>
+                                        <property name="value">
+                                            <number>1</number>
+                                        </property>
+                                        <property name="orientation">
+                                            <enum>Qt::Orientation::Horizontal</enum>
+                                        </property>
+                                    </widget>
+                                </item>
+                            </layout>
+                        </widget>
+                    </item>
+                    <item>
+                        <widget class="QToolButton" name="btnDelaysDisclosure">
+                            <property name="text">
+                                <string>▶ Delays (Advanced)</string>
+                            </property>
+                            <property name="checkable">
+                                <bool>true</bool>
+                            </property>
+                            <property name="checked">
+                                <bool>false</bool>
+                            </property>
+                            <property name="toolButtonStyle">
+                                <enum>Qt::ToolButtonStyle::ToolButtonTextOnly</enum>
+                            </property>
+                            <property name="autoRaise">
+                                <bool>true</bool>
+                            </property>
+                        </widget>
+                    </item>
+                    <item>
+                        <widget class="QGroupBox" name="groupDelays">
+                            <property name="visible">
+                                <bool>false</bool>
+                            </property>
+                            <property name="title">
+                                <string>Delays</string>
+                            </property>
+                            <layout class="QVBoxLayout" name="layoutDelays">
+                                <property name="spacing">
+                                    <number>6</number>
+                                </property>
+                                <property name="leftMargin">
+                                    <number>6</number>
+                                </property>
+                                <property name="topMargin">
+                                    <number>6</number>
+                                </property>
+                                <property name="rightMargin">
+                                    <number>6</number>
+                                </property>
+                                <property name="bottomMargin">
+                                    <number>6</number>
+                                </property>
+                                <item>
+                                    <widget class="QLabel" name="labelIntroDelay">
+                                        <property name="text">
+                                            <string>Intro delay</string>
+                                        </property>
+                                    </widget>
+                                </item>
+                                <item>
+                                    <widget class="QSlider" name="sliderIntroDelay">
+                                        <property name="minimum">
+                                            <number>0</number>
+                                        </property>
+                                        <property name="maximum">
+                                            <number>10</number>
+                                        </property>
+                                        <property name="orientation">
+                                            <enum>Qt::Orientation::Horizontal</enum>
+                                        </property>
+                                    </widget>
+                                </item>
+                                <item>
+                                    <widget class="QLabel" name="labelRepeatDelay">
+                                        <property name="text">
+                                            <string>Repeat delay</string>
+                                        </property>
+                                    </widget>
+                                </item>
+                                <item>
+                                    <widget class="QSlider" name="sliderRepeatDelay">
+                                        <property name="minimum">
+                                            <number>0</number>
+                                        </property>
+                                        <property name="maximum">
+                                            <number>10</number>
+                                        </property>
+                                        <property name="orientation">
+                                            <enum>Qt::Orientation::Horizontal</enum>
+                                        </property>
+                                    </widget>
+                                </item>
+                                <item>
+                                    <widget class="QLabel" name="labelExtroDelay">
+                                        <property name="text">
+                                            <string>Extro delay</string>
+                                        </property>
+                                    </widget>
+                                </item>
+                                <item>
+                                    <widget class="QSlider" name="sliderExtroDelay">
+                                        <property name="minimum">
+                                            <number>0</number>
+                                        </property>
+                                        <property name="maximum">
+                                            <number>10</number>
+                                        </property>
+                                        <property name="orientation">
+                                            <enum>Qt::Orientation::Horizontal</enum>
+                                        </property>
+                                    </widget>
+                                </item>
+                                <item>
+                                    <widget class="QLabel" name="labelAutoDelay">
+                                        <property name="text">
+                                            <string>Auto delay</string>
+                                        </property>
+                                    </widget>
+                                </item>
+                                <item>
+                                    <widget class="QSlider" name="sliderAutoDelay">
+                                        <property name="minimum">
+                                            <number>0</number>
+                                        </property>
+                                        <property name="maximum">
+                                            <number>10</number>
+                                        </property>
+                                        <property name="orientation">
+                                            <enum>Qt::Orientation::Horizontal</enum>
+                                        </property>
+                                    </widget>
+                                </item>
+                            </layout>
+                        </widget>
+                    </item>
+                    <item>
+                        <widget class="QToolButton" name="btnTonesAndRadicalsToggle">
+                            <property name="text">
+                                <string>Tones and Radicals</string>
+                            </property>
+                            <property name="checkable">
+                                <bool>true</bool>
+                            </property>
+                            <property name="checked">
+                                <bool>false</bool>
+                            </property>
+                            <property name="toolButtonStyle">
+                                <enum>Qt::ToolButtonStyle::ToolButtonTextOnly</enum>
+                            </property>
+                            <property name="autoRaise">
+                                <bool>true</bool>
+                            </property>
+                        </widget>
+                    </item>
+                    <item>
+                        <widget class="QToolButton" name="btnAboutDisclosure">
+                            <property name="text">
+                                <string>▶ About</string>
+                            </property>
+                            <property name="checkable">
+                                <bool>true</bool>
+                            </property>
+                            <property name="checked">
+                                <bool>false</bool>
+                            </property>
+                            <property name="toolButtonStyle">
+                                <enum>Qt::ToolButtonStyle::ToolButtonTextOnly</enum>
+                            </property>
+                            <property name="autoRaise">
+                                <bool>true</bool>
+                            </property>
+                        </widget>
+                    </item>
+                    <item>
+                        <widget class="QGroupBox" name="groupAbout">
+                            <property name="visible">
+                                <bool>false</bool>
+                            </property>
+                            <property name="title">
+                                <string>About</string>
+                            </property>
+                            <property name="flat">
+                                <bool>false</bool>
+                            </property>
+                            <layout class="QVBoxLayout" name="layoutAbout">
+                                <property name="leftMargin">
+                                    <number>6</number>
+                                </property>
+                                <property name="topMargin">
+                                    <number>6</number>
+                                </property>
+                                <property name="rightMargin">
+                                    <number>6</number>
+                                </property>
+                                <property name="bottomMargin">
+                                    <number>6</number>
+                                </property>
+                                <item>
+                                    <widget class="QTextBrowser" name="textAbout">
+                                        <property name="readOnly">
+                                            <bool>true</bool>
+                                        </property>
+                                        <property name="html">
+                                            <string>&lt;!DOCTYPE HTML PUBLIC &quot;-//W3C//DTD HTML 4.0//EN&quot; &quot;http://www.w3.org/TR/REC-html40/strict.dtd&quot;&gt;
+                                                &lt;html&gt;&lt;head&gt;&lt;meta name=&quot;qrichtext&quot; content=&quot;1&quot;
+                                                /&gt;&lt;meta charset=&quot;utf-8&quot; /&gt;&lt;style type=&quot;text/css&quot;&gt;
+                                                p, li { white-space: pre-wrap; }
+                                                hr { height: 1px; border-width: 0; }
+                                                li.unchecked::marker { content: &quot;\2610&quot;; }
+                                                li.checked::marker { content: &quot;\2612&quot;; }
+                                                &lt;/style&gt;&lt;/head&gt;&lt;body style=&quot;
+                                                font-family:'.AppleSystemUIFont'; font-size:13pt; font-weight:400;
+                                                font-style:normal;&quot;&gt;
+                                                &lt;p style=&quot; margin-top:0px; margin-bottom:0px; margin-left:0px;
+                                                margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt; &lt;/p&gt;
+                                                &lt;p style=&quot; margin-top:12px; margin-bottom:12px; margin-left:0px;
+                                                margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;Sed ut
+                                                perspiciatis unde omnis iste natus error sit voluptatem accusantium
+                                                doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo
+                                                inventore veritatis et quasi architecto beatae vitae dicta sunt
+                                                explicabo. Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut
+                                                odit aut fugit, sed quia consequuntur magni dolores eos qui ratione
+                                                voluptatem sequi nesciunt. Neque porro quisquam est, qui dolorem ipsum
+                                                quia dolor sit amet, consectetur, adipisci velit, sed quia non numquam
+                                                eius modi tempora incidunt ut labore et dolore magnam aliquam quaerat
+                                                voluptatem. Ut enim ad minima veniam, quis nostrum exercitationem ullam
+                                                corporis suscipit laboriosam, nisi ut aliquid ex ea commodi consequatur?
+                                                Quis autem vel eum iure reprehenderit qui in ea voluptate velit esse
+                                                quam nihil molestiae consequatur, vel illum qui dolorem eum fugiat quo
+                                                voluptas nulla pariatur? &lt;span style=&quot; font-style:italic;&quot;&gt;Cicero
+                                                45 BC&lt;/span&gt; &lt;/p&gt;&lt;/body&gt;&lt;/html&gt;
+                                            </string>
+                                        </property>
+                                        <property name="openExternalLinks">
+                                            <bool>true</bool>
+                                        </property>
+                                    </widget>
+                                </item>
+                            </layout>
+                        </widget>
+                    </item>
+                    <item>
+                        <spacer name="dockSpacer">
+                            <property name="orientation">
+                                <enum>Qt::Orientation::Vertical</enum>
+                            </property>
+                            <property name="sizeHint" stdset="0">
+                                <size>
+                                    <width>20</width>
+                                    <height>40</height>
+                                </size>
+                            </property>
+                        </spacer>
+                    </item>
+                    <item>
+                        <widget class="QPushButton" name="btnReset">
+                            <property name="toolTip">
+                                <string>Reset to default settings</string>
+                            </property>
+                            <property name="text">
+                                <string>Reset</string>
+                            </property>
+                        </widget>
+                    </item>
+                    <item>
+                        <spacer name="dockSpacer">
+                            <property name="orientation">
+                                <enum>Qt::Orientation::Vertical</enum>
+                            </property>
+                            <property name="sizeHint" stdset="0">
+                                <size>
+                                    <width>20</width>
+                                    <height>40</height>
+                                </size>
+                            </property>
+                        </spacer>
+                    </item>
+                </layout>
+            </widget>
+        </widget>
+        <action name="actionHamburger">
+            <property name="text">
+                <string>☰</string>
+            </property>
+            <property name="toolTip">
+                <string>Menu</string>
+            </property>
+        </action>
+        <action name="actionSearch">
+            <property name="text">
+                <string>🔍</string>
+            </property>
+            <property name="toolTip">
+                <string>Search</string>
+            </property>
+        </action>
+        <zorder>centralwidget</zorder>
+        <zorder>mainToolBar</zorder>
+        <zorder>navDrawer</zorder>
+    </widget>
+    <resources/>
+    <connections/>
+</ui>

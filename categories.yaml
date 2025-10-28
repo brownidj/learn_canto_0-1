@@ -1,0 +1,18 @@
+
+
+numbers: [零, 一, 二, 三, 四, 五, 六, 七, 八, 九, 十]
+weekdays: [星期一, 星期二, 星期五, 星期日]
+zodiac: [鼠, 牛, 虎, 兔, 龍, 蛇, 馬, 羊, 猴, 雞, 狗, 豬]
+greetings: [你好, 早晨, 午安, 晚安, 再見, 拜拜, 唔該, 多謝你, 唔好意思]
+family: [媽媽]
+places: [中國, 香港]
+nature_ocean: [海灘, 洋, 海潮汐]
+weather: [好熱, 好凍, 潮濕, 乾燥]
+time_calendar: [年, 月, 日, 時, 二零二五年, 十月, 三月, 十一月, 十二月, 上個月, 四季, 春, 夏天, 秋, 冬]
+school_tests: [考試]
+health: [醫院, 痛]
+animals: [蜘蛛, 蝙蝠, 鯊魚]
+household: [鏡]
+money_shopping: [錢, 平啲, 有冇折呀, 呢本書幾錢呀]
+communication: [電話, 號碼, 講, 識, 識唔識, 唔識]
+pronouns_possessive: [我, 你, 佢, 我哋, 你哋, 佢哋, 我嘅, 你嘅, 佢嘅]
