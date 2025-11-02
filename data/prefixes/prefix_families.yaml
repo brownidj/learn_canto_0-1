@@ -1,0 +1,12 @@
+vocative_aa3:
+  chars: [阿, 亞, 亚, 啊, 吖, 呀]
+  function: neutral vocative
+ranking:
+  chars: [大, 細, 老]
+  function: relative / social ranking
+pejorative:
+  chars: [死, 鬼, 豬]
+  function: teasing or negative tone
+semantic:
+  chars: [水, 火, 電, 雪, 黑, 白, 紅, 青, 公, 私]
+  function: derivational / semantic

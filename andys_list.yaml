@@ -1,500 +1,502 @@
-
-
 一:
-  - - one
-  - jat1
-二:
-  - - two
-  - ji6
-三:
-  - - three
-  - saam1
-四:
-  - - four
-  - sei3
-五:
-  - - five
-  - ng5
-六:
-  - - six
-  - luk6
-七:
-  - - seven
-  - cat1
-八:
-  - - eight
-  - baat3
-九:
-  - - nine
-  - gau2
-十:
-  - - ten
-  - sap6
-零:
-  - - zero
-  - ling4
-我:
-  - - I
-    - me
-  - ngo5
-人:
-  - - person
-  - jan4
-男:
-  - - male
-  - naam4
-女人:
-  - - woman
-  - neoi5 jan4
-女:
-  - - daughter
-  - neoi5
-男仔:
-  - - boy
-  - naam4 zai2
-男人:
-  - - man
-  - naam4 jan4
-你:
-  - - you
-  - nei5
-你哋:
-  - - you guys
-  - nei5 dei6
-佢:
-  - - he
-    - she
-  - keoi5
-我哋:
-  - - we
-  - ngo5 dei6
-佢哋:
-  - - they
-  - keoi5 dei6
-唔該:
-  - - thanks(informal)
-  - m4 goi1
-多謝你:
-  - - thank you very much
-  - do1 ze6 nei5
-你好:
-  - - hello (informal)
-    - you good
-  - nei5 hou2
-拜拜:
-  - - bye bye (informal)
-  - baai1 baai3
-再見:
-  - - good-bye (formal)
-  - zoi3 gin3
-唔得:
-  - - no
-  - m4 dak1
-請:
-  - - please
-  - cing2
-我係:
-  - - I am
-  - ngo5 hai6
-年:
-  - - year
-  - nin4
-錢:
-  - - money
-  - cin2
-幾:
-  - - how much
-  - gei2
-上:
-  - - up
-  - soeng6
-下:
-  - - down
-  - haa6
-日:
-  - - day
-  - jat6
-太陽:
-  - - sun
-    - the sun
-  - taai3 joeng4
-好:
-  - - good
-  - hou2
-開心:
-  - - happy
-    - hot
-  - hoi1 sam1
-去見面:
-  - - meet
-  - heoi3 gin3 min6
-月亮:
-  - - moon
-  - jyut6 loeng6
-天空:
-  - - sky
-  - tin1 hung1
-星星:
-  - - stars
-  - sing1 sing1
-月:
-  - - month
-  - jyut6
-三月:
-  - - March
-  - saam1 jyut6
-十一月:
-  - - November
-  - sap6 jat1 jyut6
-十二月:
-  - - December
-  - sap6 ji6 jyut6
-春:
-  - - spring
-  - ceon1
-夏天:
-  - - summer
-  - haa6 tin1
-秋:
-  - - autumn
-  - cau1
-四季:
-  - - four seasons
-  - sei3 gwai3
-好熱:
-  - - very hot
-  - hou2 jit6
-冬:
-  - - winter
-  - dung1
-好凍:
-  - - very cold
-  - hou2 dung3
-潮濕:
-  - - humid
-  - ciu4 sap1
-乾燥:
-  - - dry
-  - gon1 cou3
-星期:
-  - - day of the week
-    - week
-  - sing1 kei4
-星期一:
-  - - Monday
-  - sing1 kei4 jat1
-星期二:
-  - - Tuesday
-  - sing1 kei4 ji6
-星期五:
-  - - Friday
-  - sing1 kei4 ng5
-星期日:
-  - - Sunday
-  - sing1 kei4 jat6
-邊個嘅:
-  - - whose
-  - bin1 go3 ge3
-佢嘅:
-  - - his/hers
-  - keoi5 ge3
-你嘅:
-  - - your/yours
-    - yours
-  - nei5 ge3
-我嘅:
-  - - my (with object after)
-    - my/mine
-  - ngo5 ge3
-邊個:
-  - - who
-  - bin1 go3
-可以:
-  - - can
-  - ho2 ji5
-唔可以:
-  - - can not
-  - m4 ho2 ji5
-可能:
-  - - maybe
-  - ho2 nang4
-宜家:
-  - - now
-  - ji4 gaa1
-幾點呀:
-  - - what time ?
-  - gei2 dim2 aa3
-姐姐:
-  - - older sister
-  - ze2 ze1
-妹妹:
-  - - younger sister
-  - mui6 mui2
-哥哥:
-  - - older brother
-  - go1 go1
-弟弟:
-  - - younger brother
-  - dai6 dai2
-鐘:
-  - - clock
-  - zung1
-十七分:
-  - - seventeen minutes
-  - sap6 cat1 fan1
-二零二五年:
-  - - twenty twenty-five
-  - ji6 ling4 ji6 ng5 nin4
-十月:
-  - - October
-  - sap6 jyut6
-八日:
-  - - eighth day
-  - baat3 jat6
-下午:
-  - - afternoon
-  - haa6 ng5
-一點:
-  - - one o-clock
-  - jat1 dim2
-時:
-  - - time/hour
-  - si4
-個:
-  - - single digit
-  - go3
+- - one
+- jat1
 一萬:
-  - - ten thousand
-  - jat1 maan6
-千:
-  - - thousand
-  - cin1
-平啲:
-  - - a bit cheap
-  - ping4 di1
-我鐘意食:
-  - - I like to eat
-  - ngo5 zung1 ji3 sik6
-唔駛客氣:
-  - - youre welcome
-  - m4 sai2 haak3 hei3
-中國:
-  - - China
-  - zung1 gwok3
-香港:
-  - - Hong Kong
-  - hoeng1 gong2
-廣東話:
-  - - Cantonese
-  - gwong2 dung1 waa2
-普通話:
-  - - Mandarin
-  - pou2 tung1 waa2
-我想飲:
-  - - I want to drink
-  - ngo5 soeng2 jam2
-早晨:
-  - - good morning
-  - zou2 san4
-午安:
-  - - good afternoon
-  - ng5 on1
-晚安:
-  - - good night
-  - maan5 on1
-秒:
-  - - second
-  - miu5
-沙:
-  - - sand
-  - saa1
-钞:
-  - - note (money)
-  - caau1
-今日係:
-  - - today is
-  - gam1 jat6 hai6
-水:
-  - - water
-  - seoi2
-醫院:
-  - - hospital
-  - ji1 jyun2
-飛機:
-  - - aeroplane
-  - fei1 gei1
-地震:
-  - - earthquake
-  - dei6 zan3
-蜘蛛:
-  - - spider
-  - zi1 zyu1
-邊到:
-  - - where
-  - bin1 dou6
-飲野:
-  - - drinks or drink something
-  - jam2 je5
-你食左飯未呀:
-  - - have you eaten rice yet
-  - nei5 sik6 zo2 faan6 mei6 aa3
-呢個係咩:
-  - - this item is what
-  - ni1 go3 hai6 me1
-你好 我係 好高興認識你:
-  - - Hello. I am pleased to meet you
-  - nei5 hou2 ngo5 hai6 hou2 gou1 hing3 jing6 sik1 nei5
-講:
-  - - speak/say
-  - gong2
-識:
-  - - know
-  - sik1
-識唔識:
-  - - do you know
-  - sik1 m4 sik1
-唔好意思:
-  - - sorry, excuse me
-  - m4 hou2 ji3 si1
-唔識:
-  - - no
-  - m4 sik1
-少少:
-  - - a little
-  - siu2 siu2
-閂門:
-  - - close the door
-  - saan1 mun4
-係星期三:
-  - - its Wednesday
-  - hai6 sing1 kei4 saam1
-放假:
-  - - day off
-  - fong3 gaa3
-假期:
-  - - holiday
-  - gaa3 kei4
-平日:
-  - - weekday
-  - ping4 jat6
-週末:
-  - - weekend
-  - zau1 mut6
+- - ten thousand
+- jat1 maan6
+一點:
+- - one o-clock
+- jat1 dim2
+七:
+- - seven
+- cat1
+三:
+- - three
+- saam1
+三月:
+- - March
+- saam1 jyut6
+上:
+- - up
+- soeng6
 上個月:
-  - - last month
-  - soeng6 go3 jyut6
-痛:
-  - - pain
-  - tung3
-有冇折呀:
-  - - any discount?
-  - jau5 mou5 zit3 aa3
-呢本書幾錢呀:
-  - - how much is this book?
-  - ni1 bun2 syu1 gei2 cin2 aa3
-鏡:
-  - - mirror
-  - geng3
-未來:
-  - - future
-  - mei6 loi4
-水浸:
-  - - flood
-  - seoi2 zam3
-蝙蝠:
-  - - bat
-  - pin1 fuk1
-有:
-  - - have
-  - jau5
-冇:
-  - - don't have
-  - mou5
-電話:
-  - - phone
-  - din6 waa2
-號碼:
-  - - number
-  - hou6 maa5
+- - last month
+- soeng6 go3 jyut6
+下:
+- - down
+- haa6
+下午:
+- - afternoon
+- haa6 ng5
+中國:
+- - China
+- zung1 gwok3
+九:
+- - nine
+- gau2
+乾燥:
+- - dry
+- gon1 cou3
+二:
+- - two
+- ji6
+二零二五年:
+- - twenty twenty-five
+- ji6 ling4 ji6 ng5 nin4
+五:
+- - five
+- ng5
+人:
+- - person
+- jan4
+今日係:
+- - today is
+- gam1 jat6 hai6
+你:
+- - you
+- nei5
+你哋:
+- - you guys
+- nei5 dei6
+你嘅:
+- - your/yours
+  - yours
+- nei5 ge3
+你好:
+- - hello (informal)
+  - you good
+- nei5 hou2
+你好 我係 好高興認識你:
+- - Hello. I am pleased to meet you
+- nei5 hou2 ngo5 hai6 hou2 gou1 hing3 jing6 sik1 nei5
+你食左飯未呀:
+- - have you eaten rice yet
+- nei5 sik6 zo2 faan6 mei6 aa3
+佢:
+- - he
+  - she
+- keoi5
+佢哋:
+- - they
+- keoi5 dei6
+佢嘅:
+- - his/hers
+- keoi5 ge3
 係:
-  - - yes
-    - is
-  - hai6
-鯊魚:
-  - - shark
-  - saa1 jyu4
-針:
-  - - needle
-  - zam1
-行雷:
-  - - thunder
-  - haang4 leoi4
-考試:
-  - - exam
-  - haau2 si3
-海灘:
-  - - beach
-  - hoi2 taan1
-洋:
-  - - ocean
-  - joeng4
-泳衣:
-  - - swimsuit
-  - wing6 ji1
-海潮汐:
-  - - tide
-  - hoi2 ciu4 zik6
-媽媽:
-  - - mama
-  - maa4 maa1
-呢度:
-  - - here
-  - ni1 dou6
-嗰度:
-  - - there
-  - go2 dou6
-呢本書:
-  - - this book
-  - ni1 bun2 syu1
-我電話號碼:
-  - - my phone number
-  - ngo5 din6 waa2 hou6 maa5
-我電話號碼係:
-  - - my phone number is
-  - ngo5 din6 waa2 hou6 maa5 hai6
-鼠:
-  - - rat
-  - syu2
-牛:
-  - - ox
-  - ngau4
-虎:
-  - - tiger
-  - fu2
+- - 'True'
+  - is
+- hai6
+係星期三:
+- - its Wednesday
+- hai6 sing1 kei4 saam1
+個:
+- - single digit
+- go3
+假期:
+- - holiday
+- gaa3 kei4
+先生:
+- - husband
+  - Mr
+- sin1 saang1
 兔:
-  - - rabbit
-  - tou3
-龍:
-  - - dragon
-  - lung4
-蛇:
-  - - snake
-  - se4
-馬:
-  - - horse
-  - maa5
-羊:
-  - - sheep
-  - joeng4
-猴:
-  - - monkey
-  - hau4
-雞:
-  - - rooster
-  - gai1
+- - rabbit
+- tou3
+八:
+- - eight
+- baat3
+八日:
+- - eighth day
+- baat3 jat6
+六:
+- - six
+- luk6
+冇:
+- - don't have
+- mou5
+再見:
+- - good-bye (formal)
+- zoi3 gin3
+冬:
+- - winter
+- dung1
+十:
+- - ten
+- sap6
+十一月:
+- - November
+- sap6 jat1 jyut6
+十七分:
+- - seventeen minutes
+- sap6 cat1 fan1
+十二月:
+- - December
+- sap6 ji6 jyut6
+十月:
+- - October
+- sap6 jyut6
+千:
+- - thousand
+- cin1
+午安:
+- - good afternoon
+- ng5 on1
+去見面:
+- - meet
+- heoi3 gin3 min6
+可以:
+- - can
+- ho2 ji5
+可能:
+- - maybe
+- ho2 nang4
+呢個係咩:
+- - this item is what
+- ni1 go3 hai6 me1
+呢度:
+- - here
+- ni1 dou6
+呢本書:
+- - this book
+- ni1 bun2 syu1
+呢本書幾錢呀:
+- - how much is this book?
+- ni1 bun2 syu1 gei2 cin2 aa3
+哥哥:
+- - older brother
+- go1 go1
+唔可以:
+- - can not
+- m4 ho2 ji5
+唔好意思:
+- - sorry, excuse me
+- m4 hou2 ji3 si1
+唔得:
+- - 'False'
+- m4 dak1
+唔該:
+- - thanks(informal)
+- m4 goi1
+唔識:
+- - 'False'
+- m4 sik1
+唔駛客氣:
+- - youre welcome
+- m4 sai2 haak3 hei3
+嗰度:
+- - there
+- go2 dou6
+四:
+- - four
+- sei3
+四季:
+- - four seasons
+- sei3 gwai3
+地震:
+- - earthquake
+- dei6 zan3
+夏天:
+- - summer
+- haa6 tin1
+多謝你:
+- - thank you very much
+- do1 ze6 nei5
+天空:
+- - sky
+- tin1 hung1
+太陽:
+- - sun
+  - the sun
+- taai3 joeng4
+女:
+- - daughter
+- neoi5
+女人:
+- - woman
+- neoi5 jan4
+好:
+- - good
+- hou2
+好凍:
+- - very cold
+- hou2 dung3
+好熱:
+- - very hot
+- hou2 jit6
+妹妹:
+- - younger sister
+- mui6 mui2
+姐姐:
+- - older sister
+- ze2 ze1
+媽媽:
+- - mama
+- maa4 maa1
+宜家:
+- - now
+- ji4 gaa1
+少少:
+- - a little
+- siu2 siu2
+平啲:
+- - a bit cheap
+- ping4 di1
+平日:
+- - weekday
+- ping4 jat6
+年:
+- - year
+- nin4
+幾:
+- - how much
+- gei2
+幾點呀:
+- - what time ?
+- gei2 dim2 aa3
+廣東話:
+- - Cantonese
+- gwong2 dung1 waa2
+弟弟:
+- - younger brother
+- dai6 dai2
+我:
+- - I
+  - me
+- ngo5
+我係:
+- - I am
+- ngo5 hai6
+我哋:
+- - we
+- ngo5 dei6
+我嘅:
+- - my (with object after)
+  - my/mine
+- ngo5 ge3
+我想飲:
+- - I want to drink
+- ngo5 soeng2 jam2
+我鐘意食:
+- - I like to eat
+- ngo5 zung1 ji3 sik6
+我電話號碼:
+- - my phone number
+- ngo5 din6 waa2 hou6 maa5
+我電話號碼係:
+- - my phone number is
+- ngo5 din6 waa2 hou6 maa5 hai6
+拜拜:
+- - bye bye (informal)
+- baai1 baai3
+放假:
+- - day off
+- fong3 gaa3
+日:
+- - day
+- jat6
+早晨:
+- - good morning
+- zou2 san4
+星星:
+- - stars
+- sing1 sing1
+星期:
+- - day of the week
+  - week
+- sing1 kei4
+星期一:
+- - Monday
+- sing1 kei4 jat1
+星期二:
+- - Tuesday
+- sing1 kei4 ji6
+星期五:
+- - Friday
+- sing1 kei4 ng5
+星期日:
+- - Sunday
+- sing1 kei4 jat6
+春:
+- - spring
+- ceon1
+時:
+- - time/hour
+- si4
+晚安:
+- - good night
+- maan5 on1
+普通話:
+- - Mandarin
+- pou2 tung1 waa2
+月:
+- - month
+- jyut6
+月亮:
+- - moon
+- jyut6 loeng6
+有:
+- - have
+- jau5
+有冇折呀:
+- - any discount?
+- jau5 mou5 zit3 aa3
+未來:
+- - future
+- mei6 loi4
+水:
+- - water
+- seoi2
+水浸:
+- - flood
+- seoi2 zam3
+沙:
+- - sand
+- saa1
+泳衣:
+- - swimsuit
+- wing6 ji1
+洋:
+- - ocean
+- joeng4
+海潮汐:
+- - tide
+- hoi2 ciu4 zik6
+海灘:
+- - beach
+- hoi2 taan1
+潮濕:
+- - humid
+- ciu4 sap1
+牛:
+- - ox
+- ngau4
 狗:
-  - - dog
-  - gau2
+- - dog
+- gau2
+猴:
+- - monkey
+- hau4
+男:
+- - male
+- naam4
+男人:
+- - man
+- naam4 jan4
+男仔:
+- - boy
+- naam4 zai2
+痛:
+- - pain
+- tung3
+秋:
+- - autumn
+- cau1
+秒:
+- - second
+- miu5
+羊:
+- - sheep
+- joeng4
+考試:
+- - exam
+- haau2 si3
+虎:
+- - tiger
+- fu2
+號碼:
+- - number
+- hou6 maa5
+蛇:
+- - snake
+- se4
+蜘蛛:
+- - spider
+- zi1 zyu1
+蝙蝠:
+- - bat
+- pin1 fuk1
+行雷:
+- - thunder
+- haang4 leoi4
+請:
+- - please
+- cing2
+講:
+- - speak/say
+- gong2
+識:
+- - know
+- sik1
+識唔識:
+- - do you know
+- sik1 m4 sik1
 豬:
-  - - pig
-  - zyu1
+- - pig
+- zyu1
+週末:
+- - weekend
+- zau1 mut6
+邊個:
+- - who
+- bin1 go3
+邊個嘅:
+- - whose
+- bin1 go3 ge3
+邊到:
+- - where
+- bin1 dou6
+醫院:
+- - hospital
+- ji1 jyun2
+針:
+- - needle
+- zam1
+錢:
+- - money
+- cin2
+鏡:
+- - mirror
+- geng3
+鐘:
+- - clock
+- zung1
+钞:
+- - note (money)
+- caau1
+閂門:
+- - close the door
+- saan1 mun4
+開心:
+- - happy
+  - hot
+- hoi1 sam1
+雞:
+- - rooster
+- gai1
+零:
+- - zero
+- ling4
+電話:
+- - phone
+- din6 waa2
+飛機:
+- - aeroplane
+- fei1 gei1
+飲野:
+- - drinks or drink something
+- jam2 je5
+香港:
+- - Hong Kong
+- hoeng1 gong2
+馬:
+- - horse
+- maa5
+鯊魚:
+- - shark
+- saa1 jyu4
+鼠:
+- - rat
+- syu2
+龍:
+- - dragon
+- lung4

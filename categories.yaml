@@ -1,18 +1,371 @@
+animals:
+  items:
+  - 蜘蛛
+  - 蝙蝠
+  - 鯊魚
+  examples_en:
+  - spider (蜘蛛)
+  - bat (蝙蝠)
+  - shark (鯊魚)
 
+colors:
+  items:
+  - 黑
+  - 白
+  - 紅
+  - 綠
+  - 藍
+  - 黃
+  - 紫
+  - 橙
+  - 灰
+  - 啡
+  - 金
+  - 銀
+  examples_en:
+  - black (黑)
+  - white (白)
+  - red (紅)
 
-numbers: [零, 一, 二, 三, 四, 五, 六, 七, 八, 九, 十]
-weekdays: [星期一, 星期二, 星期五, 星期日]
-zodiac: [鼠, 牛, 虎, 兔, 龍, 蛇, 馬, 羊, 猴, 雞, 狗, 豬]
-greetings: [你好, 早晨, 午安, 晚安, 再見, 拜拜, 唔該, 多謝你, 唔好意思]
-family: [媽媽]
-places: [中國, 香港]
-nature_ocean: [海灘, 洋, 海潮汐]
-weather: [好熱, 好凍, 潮濕, 乾燥]
-time_calendar: [年, 月, 日, 時, 二零二五年, 十月, 三月, 十一月, 十二月, 上個月, 四季, 春, 夏天, 秋, 冬]
-school_tests: [考試]
-health: [醫院, 痛]
-animals: [蜘蛛, 蝙蝠, 鯊魚]
-household: [鏡]
-money_shopping: [錢, 平啲, 有冇折呀, 呢本書幾錢呀]
-communication: [電話, 號碼, 講, 識, 識唔識, 唔識]
-pronouns_possessive: [我, 你, 佢, 我哋, 你哋, 佢哋, 我嘅, 你嘅, 佢嘅]
+communication:
+  items:
+  - 唔識
+  - 我電話號碼
+  - 我電話號碼係
+  - 號碼
+  - 講
+  - 識
+  - 識唔識
+  - 電話
+  examples_en:
+  - don’t know (唔識)
+  - my phone number (我電話號碼)
+  - my phone number is (我電話號碼係)
+
+descriptions_adjectives:
+  items:
+  - 靚
+  - 好
+  - 勁
+  - 難
+  - 易
+  - 快
+  - 慢
+  - 貴
+  - 平
+  - 高
+  - 矮
+  - 大
+  - 細
+  - 正
+  - 冇用
+  examples_en:
+  - beautiful (靚)
+  - good (好)
+  - powerful (勁)
+
+direction:
+  items:
+  - 上
+  - 下
+  examples_en:
+  - up (上)
+  - down (下)
+
+family:
+  items:
+  - 先生
+  - 哥哥
+  - 女
+  - 女人
+  - 妹妹
+  - 姐姐
+  - 媽媽
+  - 弟弟
+  examples_en:
+  - husband (先生)
+  - older brother (哥哥)
+  - daughter (女)
+
+food, eating, drinking:
+  items:
+  - 你食左飯未呀
+  - 我想飲
+  - 我鐘意食
+  - 水
+  - 飲野
+  examples_en:
+  - have you eaten yet (你食左飯未呀)
+  - I want to drink (我想飲)
+  - I like to eat (我鐘意食)
+
+greetings:
+  items:
+  - 你好
+  - 你好 我係 好高興認識你
+  - 再見
+  - 午安
+  - 唔好意思
+  - 唔該
+  - 多謝你
+  - 拜拜
+  - 早晨
+  - 晚安
+  examples_en:
+  - hello (你好)
+  - nice to meet you (你好 我係 好高興認識你)
+  - goodbye (再見)
+
+health:
+  items:
+  - 痛
+  - 醫院
+  examples_en:
+  - pain (痛)
+  - hospital (醫院)
+
+household:
+  items:
+  - 鏡
+  examples_en:
+  - mirror (鏡)
+
+languages:
+  items:
+  - 廣東話
+  - 普通話
+  examples_en:
+  - Cantonese (廣東話)
+  - Mandarin (普通話)
+
+measurements:
+  items:
+  - 少少
+  examples_en:
+  - a little bit (少少)
+
+money_shopping:
+  items:
+  - 呢本書幾錢呀
+  - 平啲
+  - 有冇折呀
+  - 錢
+  - 钞
+  examples_en:
+  - how much is this book (呢本書幾錢呀)
+  - cheaper (平啲)
+  - any discount (有冇折呀)
+
+nature_air:
+  items:
+  - 天空
+  - 太陽
+  - 星星
+  - 月亮
+  examples_en:
+  - sky (天空)
+  - sun (太陽)
+  - star (星星)
+
+nature_land:
+  items:
+  - 地震
+  - 沙
+  examples_en:
+  - earthquake (地震)
+  - sand (沙)
+
+nature_water:
+  items:
+  - 洋
+  - 海潮汐
+  - 海灘
+  examples_en:
+  - ocean (洋)
+  - tide (海潮汐)
+  - beach (海灘)
+
+numbers:
+  items:
+  - 一
+  - 一萬
+  - 七
+  - 三
+  - 九
+  - 二
+  - 五
+  - 個
+  - 八
+  - 六
+  - 十
+  - 千
+  - 四
+  - 零
+  examples_en:
+  - one (一)
+  - ten thousand (一萬)
+  - seven (七)
+
+people:
+  items:
+  - 人
+  - 女
+  - 女人
+  - 男
+  - 男人
+  - 男仔
+  examples_en:
+  - person (人)
+  - female (女)
+  - woman (女人)
+
+places:
+  items:
+  - 中國
+  - 香港
+  examples_en:
+  - China (中國)
+  - Hong Kong (香港)
+
+pronouns_possessive:
+  items:
+  - 你
+  - 你哋
+  - 你嘅
+  - 佢
+  - 佢哋
+  - 佢嘅
+  - 我
+  - 我哋
+  - 我嘅
+  examples_en:
+  - you (你)
+  - you (plural) (你哋)
+  - your (你嘅)
+
+roles_titles:
+  items:
+  - 阿sir
+  - 老師
+  - 先生
+  - 太太
+  - 阿姨
+  - 伯伯
+  - 叔叔
+  - 哥哥
+  - 姐姐
+  - 阿婆
+  - 老闆
+  - 同事
+  examples_en:
+  - sir (阿sir)
+  - teacher (老師)
+  - mister (先生)
+
+school_tests:
+  items:
+  - 考試
+  examples_en:
+  - exam (考試)
+
+technology_media:
+  items:
+  - 電話
+  - 手機
+  - 電腦
+  - 電視
+  - 平板
+  - 網絡
+  - 網頁
+  - 電郵
+  - 相機
+  - 收音機
+  - 訊息
+  - 充電
+  examples_en:
+  - telephone (電話)
+  - mobile phone (手機)
+  - computer (電腦)
+
+time_calendar:
+  items:
+  - 一點
+  - 三月
+  - 上個月
+  - 下午
+  - 二零二五年
+  - 今日係
+  - 係星期三
+  - 假期
+  - 八日
+  - 冬
+  - 十一月
+  - 十七分
+  - 十二月
+  - 十月
+  - 四季
+  - 夏天
+  - 平日
+  - 年
+  - 幾點呀
+  - 日
+  - 星期
+  - 春
+  - 時
+  - 月
+  - 秋
+  - 秒
+  - 週末
+  examples_en:
+  - one o’clock (一點)
+  - March (三月)
+  - last month (上個月)
+
+vehicle:
+  items:
+  - 飛機
+  examples_en:
+  - airplane (飛機)
+
+weather:
+  items:
+  - 乾燥
+  - 好凍
+  - 好熱
+  - 水浸
+  - 潮濕
+  - 行雷
+  examples_en:
+  - dry (乾燥)
+  - very cold (好凍)
+  - very hot (好熱)
+
+weekdays:
+  items:
+  - 星期一
+  - 星期二
+  - 星期五
+  - 星期日
+  examples_en:
+  - Monday (星期一)
+  - Tuesday (星期二)
+  - Friday (星期五)
+
+zodiac:
+  items:
+  - 兔
+  - 牛
+  - 狗
+  - 猴
+  - 羊
+  - 虎
+  - 蛇
+  - 豬
+  - 雞
+  - 馬
+  - 鼠
+  - 龍
+  examples_en:
+  - rabbit (兔)
+  - ox (牛)
+  - dog (狗)
