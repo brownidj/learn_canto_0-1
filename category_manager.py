@@ -119,6 +119,7 @@ class CategoryManagerDialog(QDialog):
         - When editing category combos, moving an item out of 'unassigned'
           can optionally jump focus to the next unassigned row.
     """
+    MAX_HANZI_CANDIDATES = 10
 
     def __init__(self, parent, vocab_items: dict, categories_map: dict):
         super().__init__(parent)
@@ -322,13 +323,23 @@ class CategoryManagerDialog(QDialog):
         formEntry.addRow("Meanings:", self._add_mn)
         formEntry.addRow("Notes:", self._add_notes)
 
-        # Category (editable combobox; defaults to 'unassigned')
+        # Category (editable combobox; starts with no selection)
         self._add_cat = QComboBox(groupEntry)
         self._add_cat.setObjectName("comboAddCategories")
         self._add_cat.setEditable(True)  # editable ONLY in Add panel
         self._add_cat.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
         self._add_cat.clear()
         self._add_cat.addItems(self._all_cats)
+        # Start with no selected category so the user must explicitly choose one.
+        # (This also avoids accidental defaulting to the first category.)
+        try:
+            self._add_cat.setCurrentIndex(-1)
+            if self._add_cat.isEditable() and self._add_cat.lineEdit():
+                _le_cat0 = self._add_cat.lineEdit()
+                _le_cat0.setText("")
+                _le_cat0.setPlaceholderText("None chosen yet — type or choose a category…")
+        except Exception:
+            pass
         try:
             logger.debug("AddItem: category list populated (n=%d): %s",
                          self._add_cat.count(),
@@ -351,7 +362,7 @@ class CategoryManagerDialog(QDialog):
         try:
             le = self._add_cat.lineEdit()
             if le:
-                le.setPlaceholderText("Type or choose a category…")
+                le.setPlaceholderText("None chosen yet — type or choose a category…")
                 le.setClearButtonEnabled(True)
                 le.setToolTip("Select an existing category or type a new one; press Enter to add.")
 
@@ -413,6 +424,7 @@ class CategoryManagerDialog(QDialog):
                                         f"‘{canon}’ is a reserved name and cannot be used.",
                                     )
                                     return
+
                                 # Confirm creation
                                 resp = QMessageBox.question(
                                     self,
@@ -858,6 +870,69 @@ class CategoryManagerDialog(QDialog):
             self._reverse_jyut_map = {}
         return self._reverse_jyut_map
 
+    def _load_hanzi_style_map(self) -> dict:
+        """Lazy-load data/hanzi_style.yaml (Hanzi -> {style, source, notes})."""
+        try:
+            if hasattr(self, "_hanzi_style_map") and isinstance(self._hanzi_style_map, dict) and self._hanzi_style_map:
+                return self._hanzi_style_map
+        except Exception:
+            pass
+
+        self._hanzi_style_map = {}
+        try:
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            candidates = [
+                os.path.join(base_dir, "data", "hanzi_style.yaml"),
+                os.path.join(os.path.dirname(base_dir), "data", "hanzi_style.yaml"),
+            ]
+            path = next((p for p in candidates if os.path.exists(p)), None)
+            if not path:
+                return self._hanzi_style_map
+
+            with open(path, "r", encoding="utf-8") as fh:
+                raw = yaml.safe_load(fh) or {}
+
+            if isinstance(raw, dict):
+                cleaned = {}
+                for k, v in raw.items():
+                    hk = (str(k) or "").strip()
+                    if not hk:
+                        continue
+                    if isinstance(v, dict):
+                        cleaned[hk] = v
+                    else:
+                        cleaned[hk] = {"style": "unknown"}
+                self._hanzi_style_map = cleaned
+        except Exception:
+            self._hanzi_style_map = {}
+
+        return self._hanzi_style_map
+
+    def _hanzi_style(self, hanzi: str) -> str:
+        try:
+            m = self._load_hanzi_style_map()
+            v = m.get(hanzi)
+            if isinstance(v, dict):
+                return str(v.get("style") or "unknown").strip().lower()
+        except Exception:
+            pass
+        return "unknown"
+
+    def _is_colloquial_hanzi(self, hanzi: str) -> bool:
+        st = self._hanzi_style(hanzi)
+        # includes: colloquial-core, colloquial-casual, and “both colloquial and written”
+        return ("colloquial" in st)
+
+    def _curate_top_hanzi_candidates(self, ranked: list[str]) -> list[str]:
+        if not ranked:
+            return []
+        try:
+            colloq = [hz for hz in ranked if self._is_colloquial_hanzi(hz)]
+        except Exception:
+            colloq = []
+        chosen = colloq if colloq else ranked
+        return chosen[: self.MAX_HANZI_CANDIDATES]
+
     def _abbr_for_source(self, src: str) -> str:
         s = (src or "").strip().lower()
         mapping = {
@@ -1076,9 +1151,9 @@ class CategoryManagerDialog(QDialog):
         """
         Meanings priority:
           1) andys_list.yaml (self._vocab)
-          1b) CEDICT phrase-level (if available)
-          2) CC-Canto (if present)
-          3) builtin fallback (optional)
+          2) CC-Canto (prefer Cantonese/colloquial when available)
+          3) CEDICT phrase-level (fallback)
+          4) builtin fallback (optional)
         Tries a normalized variant (e.g., 亚/亞 -> 阿…) if raw form has no gloss.
         """
 
@@ -1094,7 +1169,26 @@ class CategoryManagerDialog(QDialog):
                             out_local.extend([str(x) for x in mv if x])
             except Exception:
                 pass
-            # 1b) CEDICT phrase-level (if available)
+            # Decide whether to prefer CC-Canto (Cantonese/colloquial) over CEDICT.
+            prefer_cccanto = False
+            try:
+                if isinstance(h, str) and len(h) == 1:
+                    prefer_cccanto = True
+                elif hasattr(self, "_is_colloquial_hanzi") and callable(self._is_colloquial_hanzi):
+                    prefer_cccanto = bool(self._is_colloquial_hanzi(h))
+            except Exception:
+                prefer_cccanto = False
+
+            # 2) CC-Canto (prefer when available)
+            if not out_local and prefer_cccanto:
+                try:
+                    idx_canto = self._load_cccanto_index()
+                    if isinstance(idx_canto, dict):
+                        out_local.extend(idx_canto.get(h, []) or [])
+                except Exception:
+                    pass
+
+            # 3) CEDICT phrase-level (fallback)
             if not out_local:
                 try:
                     idx_ce = self._load_cedict_index()
@@ -1104,8 +1198,10 @@ class CategoryManagerDialog(QDialog):
                             out_local.extend(g_ce)
                 except Exception:
                     pass
-            # 2) CC-Canto
-            if not out_local:
+
+            # If we didn't prefer CC-Canto initially (e.g., multi-character words),
+            # still try it as a fallback before giving up.
+            if not out_local and (not prefer_cccanto):
                 try:
                     idx_canto = self._load_cccanto_index()
                     if isinstance(idx_canto, dict):
@@ -1570,6 +1666,12 @@ class CategoryManagerDialog(QDialog):
                 logger.debug("rank: clean-first order -> %s", [c[0] for c in cands])
             except Exception:
                 pass
+            # Restrict to top 10, preferring colloquial entries when available
+            try:
+                ranked_hz = self._curate_top_hanzi_candidates([hz for (hz, _, _) in cands])
+                cands = [c for c in cands if c[0] in ranked_hz]
+            except Exception:
+                cands = cands[: self.MAX_HANZI_CANDIDATES]
 
             # In phrase mode (multi‑syllable Jyutping), drop single‑character candidates that
             # typically come from char‑level heuristics. This avoids cases like 'mai5 sik1'

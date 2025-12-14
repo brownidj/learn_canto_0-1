@@ -714,6 +714,13 @@ entries:
       hanzi: 佢嘅
       notes: Possessive for 佢 / 佢哋; often context tells singular vs plural.
       register: colloquial
+  laa1:
+    jyutping: laa1
+    senses:
+    - categories:
+      - communication
+      gloss: now, for now, up to now
+      hanzi: 啦
   laam4:
     jyutping: laam4
     senses:
@@ -1533,6 +1540,13 @@ entries:
       gloss: good morning
       hanzi: 早晨
       register: colloquial
+  zung1:
+    jyutping: zung1
+    senses:
+    - categories:
+      - descriptions_adjectives
+      gloss: end, finish
+      hanzi: 終
   zung1 gwok3:
     headword: 中國
     jyutping: zung1 gwok3
