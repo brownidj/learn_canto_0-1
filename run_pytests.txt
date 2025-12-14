@@ -1,0 +1,2 @@
+.venv/bin/python3 -m pytest -q tests/
+.venv/bin/python3 -m pytest tests/

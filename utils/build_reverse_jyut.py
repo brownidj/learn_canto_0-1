@@ -21,7 +21,7 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 try:
-    from utils import get_cccanto_reverse_map
+    from utils.utils import get_cccanto_reverse_map
 except Exception:
     print("ERROR: Could not import utils.get_cccanto_reverse_map")
     sys.exit(1)

@@ -31,10 +31,74 @@ _CCC_MEANINGS_BY_HANZI: dict[str, list[str]] = {}
 # Canonical value shape: [[english...], "jyutping"]
 
 # === Unihan config (single source of truth) ===
-UNIHAN_JSON_PATH = os.path.join("data", "Unihan", "unihan_cantonese_chars.json")
+UNIHAN_JSON_PATH = os.path.join("../data", "Unihan", "unihan_cantonese_chars.json")
 _CHAR_MAP_CACHE = None  # type: ignore
 
+# ============================================================
+# Category Manager – pure helpers (import-safe, no side effects)
+# ============================================================
 
+CATEGORY_PLACEHOLDER_TEXT = "— choose category —"
+
+
+def is_category_placeholder(category: object) -> bool:
+    if category is None or not isinstance(category, str):
+        return True
+
+    cat_norm = category.strip().lower()
+    if not cat_norm:
+        return True
+
+    cat_norm = cat_norm.replace("—", "-").replace("–", "-")
+
+    if "choose category" in cat_norm:
+        return True
+
+    if cat_norm in {"- choose category -", "choose category", "-- choose category --"}:
+        return True
+
+    return False
+
+
+def save_enabled_gate(jyut: object, hanzi: object, meanings: object, category: object) -> bool:
+    if not isinstance(jyut, str) or not jyut.strip():
+        return False
+    if not isinstance(hanzi, str) or not hanzi.strip():
+        return False
+
+    if not isinstance(meanings, list) or not meanings:
+        return False
+    if not any(isinstance(m, str) and m.strip() for m in meanings):
+        return False
+
+    if is_category_placeholder(category):
+        return False
+
+    return True
+
+
+def should_show_custom_hanzi_button(candidates: object) -> bool:
+    if candidates is None:
+        return True
+    if not isinstance(candidates, list):
+        return True
+    usable = [c for c in candidates if isinstance(c, str) and c.strip()]
+    return len(usable) == 0
+
+
+def prefer_meanings(primary: object, fallback: object) -> list[str]:
+    out: list[str] = []
+
+    if isinstance(primary, list):
+        out = [m.strip() for m in primary if isinstance(m, str) and m.strip()]
+
+    if out:
+        return out
+
+    if isinstance(fallback, list):
+        return [m.strip() for m in fallback if isinstance(m, str) and m.strip()]
+
+    return []
 # ----------------------------
 # 1) Canonical conversion
 # ----------------------------
@@ -214,7 +278,7 @@ def sanitize_hanzi_key(hanzi):
 # Frequency merge utilities
 # ----------------------------
 
-FREQ_DIR_DEFAULT = os.path.join("data", "frequency")
+FREQ_DIR_DEFAULT = os.path.join("../data", "frequency")
 
 
 def load_freq_csv(path: str) -> dict:
@@ -367,8 +431,8 @@ def build_freq_rank(freq_dir: str = FREQ_DIR_DEFAULT,
 # ----------------------------
 from collections import Counter, defaultdict
 
-REVERSE_MANUAL_DEFAULT = os.path.join("data", "reverse_manual.yaml")
-UNIHAN_CHARMAP_DEFAULT = os.path.join("data", "Unihan", "unihan_cantonese_chars.json")
+REVERSE_MANUAL_DEFAULT = os.path.join("../data", "reverse_manual.yaml")
+UNIHAN_CHARMAP_DEFAULT = os.path.join("../data", "Unihan", "unihan_cantonese_chars.json")
 
 
 # utils.py
@@ -1096,7 +1160,7 @@ def _is_cjk(ch: str) -> bool:
 # HKCANCOR -> frequency CSV builder (via pycantonese)
 # ----------------------------
 
-def build_hkcancor_csv(out_path: str = os.path.join("data", "frequency", "hkcancor_words.csv")) -> str:
+def build_hkcancor_csv(out_path: str = os.path.join("../data", "frequency", "hkcancor_words.csv")) -> str:
     """Build a word frequency CSV from the HKCANCOR corpus using pycantonese.
 
     Output CSV headers: hanzi,jyut,freq
@@ -1618,3 +1682,87 @@ def shortlist_candidates(
 	•	Father’s sister’s husband: 姑丈 — gu1 zoeng6
 	•	Mother’s sister’s husband: 姨丈 — ji4 zoeng6
 '''
+
+
+# -----------------------------
+# Pure helpers (Qt-free)
+# -----------------------------
+
+CATEGORY_PLACEHOLDER_DEFAULTS = {
+    "- choose category -",
+    "-- choose category --",
+    "choose category",
+    CATEGORY_PLACEHOLDER_TEXT,
+}
+
+
+def is_category_placeholder(category: str | None) -> bool:
+    """
+    Return True if `category` is missing or is a UI placeholder/sentinel rather than a real category.
+    Intended for both UI gating and pure unit tests.
+    """
+    if category is None or not isinstance(category, str):
+        return True
+
+    cat_norm = category.strip().lower()
+    cat_norm = cat_norm.replace("—", "-").replace("–", "-")
+
+    if not cat_norm:
+        return True
+
+    # Tolerant placeholder detection
+    if "choose category" in cat_norm:
+        return True
+
+    if cat_norm in CATEGORY_PLACEHOLDER_DEFAULTS:
+        return True
+
+    return False
+
+
+def save_enabled_gate(jyut: str | None, hanzi: str | None, meanings: list[str] | None, category: str | None) -> bool:
+    """
+    Return True if Save should be enabled for the given Add/Edit inputs.
+    Pure logic only; caller handles UI state.
+    """
+    if not isinstance(jyut, str) or not jyut.strip():
+        return False
+
+    if not isinstance(hanzi, str) or not hanzi.strip():
+        return False
+
+    if not isinstance(meanings, list) or not meanings:
+        return False
+
+    if not any(isinstance(m, str) and m.strip() for m in meanings):
+        return False
+
+    if is_category_placeholder(category):
+        return False
+
+    return True
+
+
+def should_show_custom_hanzi_button(candidate_hanzi: list[str] | None) -> bool:
+    """
+    Regression guard: only show the 'None of these / enter my own Hanzi' path when there are
+    no usable candidates. This prevents accidental auto-trigger or mis-wiring.
+    """
+    if not isinstance(candidate_hanzi, list) or not candidate_hanzi:
+        return True
+    # If all candidates are blank/whitespace, treat as empty
+    return not any(isinstance(c, str) and c.strip() for c in candidate_hanzi)
+
+
+def prefer_meanings(primary: list[str] | None, fallback: list[str] | None) -> list[str]:
+    """
+    Regression guard: do not overwrite good meanings with weaker fallback meanings.
+    If `primary` has any non-blank content, keep it; otherwise use `fallback`.
+    """
+    p = primary if isinstance(primary, list) else []
+    f = fallback if isinstance(fallback, list) else []
+
+    if any(isinstance(m, str) and m.strip() for m in p):
+        return p
+
+    return f

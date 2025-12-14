@@ -1,7 +1,17 @@
+# ----------------------------------------
+# Standard library imports
+# ----------------------------------------
 import logging
 import os
 
+# ----------------------------------------
+# Third-party imports
+# ----------------------------------------
 import yaml
+
+# ----------------------------------------
+# PySide6 imports
+# ----------------------------------------
 from PySide6.QtCore import QTimer as _CatTimer
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -20,7 +30,27 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
 )
 
+# ----------------------------------------
+# Domain imports
+# ----------------------------------------
+from domain.category_rules import (
+    CATEGORY_PLACEHOLDER_TEXT,
+    is_category_placeholder,
+    save_enabled_gate,
+    should_show_custom_hanzi_button,
+    prefer_meanings,
+    HanziStyleIndex,
+    CandidateCurator,
+    abbr_for_source,
+)
+
+
 logger = logging.getLogger(__name__)
+
+
+# ------------------------------
+# Internal helpers (UI-free)
+# ------------------------------
 
 
 # Minimal state diagram (conceptual)
@@ -138,6 +168,13 @@ class CategoryManagerDialog(QDialog):
         self._cand_gloss_cache = {}
 
         self.setWindowTitle("Add & Edit Items")
+        # UI-free helpers
+        try:
+            _project_dir = os.path.dirname(os.path.abspath(__file__))
+        except Exception:
+            _project_dir = os.getcwd()
+        self._style_index = HanziStyleIndex(_project_dir)
+        self._candidate_curator = CandidateCurator(self._style_index, self.MAX_HANZI_CANDIDATES)
         logger.debug("CategoryManagerDialog: init start (building UI and wiring)")
 
         # Wide enough to keep Entry/Hanzi side-by-side
@@ -365,202 +402,9 @@ class CategoryManagerDialog(QDialog):
                 le.setPlaceholderText("None chosen yet — type or choose a category…")
                 le.setClearButtonEnabled(True)
                 le.setToolTip("Select an existing category or type a new one; press Enter to add.")
-
-                # Hook: add-on-enter (normalise/create category, then trigger candidate lookup if needed)
-                # Hook: add-on-enter (normalise/create category, then trigger candidate lookup if needed)
-                def _on_add_cat_text_committed():
-                    """
-                    Commit the category from the editable combo box.
-
-                    Workflow:
-                      - Require a non-empty category.
-                      - Normalise and, if necessary, create a new category.
-                      - If Jyutping is present but Hanzi is still empty, trigger
-                        reverse lookup now so the chosen category can influence
-                        Hanzi candidate ranking.
-                    """
-                    text = (self._add_cat.currentText() or "").strip()
-                    # The user must explicitly choose or type a category before we can proceed.
-                    if not text:
-                        QMessageBox.warning(
-                            self,
-                            "Category required",
-                            "Please choose or type a category for this entry.\n"
-                            "If you really cannot decide, you can use ‘unassigned’."
-                        )
-                        try:
-                            if self._add_cat.isEditable() and self._add_cat.lineEdit():
-                                le_cat = self._add_cat.lineEdit()
-                                le_cat.setFocus()
-                                le_cat.selectAll()
-                            else:
-                                self._add_cat.setFocus()
-                        except Exception:
-                            pass
-                        return
-
-                    try:
-                        # If helpers exist, use them; otherwise add directly if unique
-                        if hasattr(self, "_canon_cat_name") and hasattr(self, "_find_existing_canonical"):
-                            canon = self._canon_cat_name(text)
-                            existing = self._find_existing_canonical(canon)
-                            if existing:
-                                # Use existing canonical name and exit
-                                self._add_cat.blockSignals(True)
-                                try:
-                                    idx = self._add_cat.findText(existing)
-                                    if idx >= 0:
-                                        self._add_cat.setCurrentIndex(idx)
-                                    else:
-                                        self._add_cat.setCurrentText(existing)
-                                finally:
-                                    self._add_cat.blockSignals(False)
-                            else:
-                                # Reserved?
-                                if hasattr(self, "_is_reserved_cat") and self._is_reserved_cat(canon):
-                                    QMessageBox.information(
-                                        self,
-                                        "Category",
-                                        f"‘{canon}’ is a reserved name and cannot be used.",
-                                    )
-                                    return
-
-                                # Confirm creation
-                                resp = QMessageBox.question(
-                                    self,
-                                    "Add Category",
-                                    f"Add new category ‘{canon}’?",
-                                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                                    QMessageBox.StandardButton.No,
-                                )
-                                if resp != QMessageBox.StandardButton.Yes:
-                                    return
-                                # Create via helper if present, else inline
-                                if hasattr(self, "_add_new_category"):
-                                    self._add_new_category(canon)
-                                else:
-                                    # Inline creation
-                                    if canon not in self._cats:
-                                        self._cats[canon] = []
-                                        self._all_cats = sorted(set(self._cats.keys()), key=lambda s: s.lower())
-                                        self._add_cat.blockSignals(True)
-                                        try:
-                                            self._add_cat.clear()
-                                            self._add_cat.addItems(self._all_cats)
-                                            idx = self._add_cat.findText(canon)
-                                            if idx >= 0:
-                                                self._add_cat.setCurrentIndex(idx)
-                                        finally:
-                                            self._add_cat.blockSignals(False)
-
-                        # After category is confirmed (existing or newly created), if we already have
-                        # Jyutping but no Hanzi yet, trigger the reverse lookup now:
-                        #   Jyutping -> Category -> Hanzi candidates.
-                        jy_txt = ""
-                        if getattr(self, "_add_jy", None) is not None:
-                            jy_txt = (self._add_jy.text() or "").strip()
-                        hz_txt = ""
-                        if getattr(self, "_add_hz", None) is not None:
-                            hz_txt = (self._add_hz.text() or "").strip()
-
-                        if jy_txt and not hz_txt:
-
-                            def _post_cat_fill():
-                                """
-                                After the user commits a Category:
-                                  - Run reverse lookup for Hanzi candidates.
-                                  - If we have candidates: show the candidates combo and move focus to the Hanzi block.
-                                  - If we have no candidates: hide the combo and show the custom-Hanzi button, then
-                                    move focus to the Hanzi edit field.
-                                """
-                                try:
-                                    n = self._fill_hanzi_candidates(self._normalize_jy(jy_txt))
-                                except Exception:
-                                    n = 0
-
-                                try:
-                                    cand_combo = getattr(self, "_cand_combo", None)
-                                except Exception:
-                                    cand_combo = None
-
-                                has_candidates = bool(n and n > 0)
-
-                                try:
-                                    if has_candidates and cand_combo is not None:
-                                        # Case 1: candidates exist -> show combobox and drop it down, then focus it.
-                                        try:
-                                            cand_combo.setVisible(True)
-                                            cand_combo.showPopup()
-                                            cand_combo.setFocus()
-                                        except Exception:
-                                            pass
-                                        # Hide custom-Hanzi button if present; we are in "candidate mode".
-                                        try:
-                                            btn_custom = getattr(self, "_btn_custom_hz", None)
-                                            if btn_custom is not None:
-                                                btn_custom.setVisible(False)
-                                        except Exception:
-                                            pass
-                                    else:
-                                        # Case 2: no candidates -> hide/clear combobox, show custom-Hanzi button, focus Hanzi field.
-                                        try:
-                                            if cand_combo is not None:
-                                                cand_combo.blockSignals(True)
-                                                try:
-                                                    cand_combo.clear()
-                                                    cand_combo.setVisible(False)
-                                                finally:
-                                                    cand_combo.blockSignals(False)
-                                        except Exception:
-                                            pass
-                                        try:
-                                            btn_custom = getattr(self, "_btn_custom_hz", None)
-                                            if btn_custom is not None:
-                                                btn_custom.setVisible(True)
-                                        except Exception:
-                                            pass
-                                        try:
-                                            hz_edit = getattr(self, "_add_hz", None)
-                                            if hz_edit is not None:
-                                                hz_edit.setFocus()
-                                                hz_edit.selectAll()
-                                        except Exception:
-                                            pass
-
-                                    # After any change, refresh Save enabled/disabled state.
-                                    try:
-                                        if hasattr(self, "_update_save_enabled") and callable(
-                                                self._update_save_enabled):
-                                            self._update_save_enabled()
-                                    except Exception:
-                                        pass
-                                except Exception:
-                                    # Failsafe: if anything blows up, just refresh Save state.
-                                    try:
-                                        if hasattr(self, "_update_save_enabled") and callable(
-                                                self._update_save_enabled):
-                                            self._update_save_enabled()
-                                    except Exception:
-                                        pass
-
-                            # Schedule the fill on the event loop to keep the UI responsive.
-                            _CatTimer.singleShot(0, _post_cat_fill)
-                        else:
-                            # No lookup needed; just refresh Save state.
-                            if hasattr(self, "_update_save_enabled") and callable(self._update_save_enabled):
-                                self._update_save_enabled()
-
-                    except Exception:
-                        # Final failsafe: never crash the dialog; at least keep Save state sane.
-                        try:
-                            if hasattr(self, "_update_save_enabled") and callable(self._update_save_enabled):
-                                self._update_save_enabled()
-                        except Exception:
-                            pass
-
                 # Wire Enter/Return on the editable category line to the commit handler
                 try:
-                    le.returnPressed.connect(_on_add_cat_text_committed)
+                    le.returnPressed.connect(self._on_add_category_committed)
                 except Exception:
                     pass
                 # On focus-out, just refresh Save state; do not re-run the category commit logic.
@@ -629,89 +473,14 @@ class CategoryManagerDialog(QDialog):
         except TypeError:
             formHanzi.addRow(QLabel("Candidates:", groupHanzi), self._cand_combo)
 
-        # Selecting a candidate fills the read-only Hanzi field
-        def _on_candidate_chosen(text: str):
-            try:
-                self._add_hz.setText(text or "")
-            except Exception:
-                pass
-
-        def _on_candidate_index(i: int):
-            try:
-                # Prefer stored userData (raw Hanzi), else fall back to the displayed text
-                hz = self._cand_combo.itemData(i)
-                if not hz:
-                    hz = self._cand_combo.itemText(i)
-                # Skip if placeholder or empty
-                if not hz or hz.strip() == "" or self._cand_combo.itemText(i).strip().startswith("— choose"):
-                    return
-                self._add_hz.setText(hz or "")
-
-                # Derive glosses for this selection
-                glosses = []
-                try:
-                    if hasattr(self, "_get_meanings_for_hanzi") and callable(self._get_meanings_for_hanzi):
-                        glosses = self._get_meanings_for_hanzi(hz) or []
-                except Exception:
-                    glosses = []
-                # Ensure bracket/paren tags are removed before showing in Meanings
-                try:
-                    from utils import clean_glosses_for_display
-                    glosses = clean_glosses_for_display(glosses)
-                except Exception:
-                    pass
-                self._add_mn.setText(", ".join(glosses[:5]))
-                if not glosses:
-                    try:
-                        from utils import get_cccanto_glosses_for
-                        glosses = get_cccanto_glosses_for(hz) or []
-                    except Exception:
-                        glosses = []
-
-                try:
-                    if glosses and len(glosses) > 1:
-                        self._set_notes(
-                            "Selected Hanzi has multiple senses in this context.",
-                            source="chatgpt-style",
-                        )
-                    else:
-                        self._set_notes("", source="auto-default")
-                except Exception:
-                    pass
-
-                # Copy into Meanings (strip bracketed tags) and focus
-                try:
-                    if hasattr(self, "_clean_meanings_tags"):
-                        clean = self._clean_meanings_tags(glosses or [])
-                    else:
-                        import re as _re
-                        _tag = _re.compile(r"\s*[(\[].*?[)\]]\s*")
-                        clean = [_tag.sub("", str(g)).strip() for g in (glosses or []) if str(g).strip()]
-                    self._add_mn.setText(", ".join(clean) if clean else "")
-                except Exception:
-                    pass
-                try:
-                    if self._add_mn is not None:
-                        self._add_mn.setFocus()
-                        self._add_mn.selectAll()
-                except Exception:
-                    pass
-                try:
-                    if hasattr(self, "_update_save_enabled") and callable(self._update_save_enabled):
-                        self._update_save_enabled()
-                except Exception:
-                    pass
-            except Exception:
-                pass
-
         # Connect signals in a way that works across PySide6 variants
         try:
-            self._cand_combo.activated.connect(_on_candidate_index)  # type: ignore[attr-defined]
+            self._cand_combo.activated.connect(self._on_candidate_index_activated)  # type: ignore[attr-defined]
         except Exception:
             pass
         try:
             # Also keep text-based updates in sync
-            self._cand_combo.currentTextChanged.connect(_on_candidate_chosen)  # type: ignore[attr-defined]
+            self._cand_combo.currentTextChanged.connect(self._on_candidate_text_changed)  # type: ignore[attr-defined]
         except Exception:
             pass
 
@@ -871,88 +640,36 @@ class CategoryManagerDialog(QDialog):
         return self._reverse_jyut_map
 
     def _load_hanzi_style_map(self) -> dict:
-        """Lazy-load data/hanzi_style.yaml (Hanzi -> {style, source, notes})."""
+        """Lazy-load data/hanzi_style.yaml (Hanzi -> {style, source, notes}).
+
+        Back-compat wrapper around the internal _HanziStyleIndex.
+        """
         try:
-            if hasattr(self, "_hanzi_style_map") and isinstance(self._hanzi_style_map, dict) and self._hanzi_style_map:
-                return self._hanzi_style_map
+            return self._style_index.load()  # type: ignore[attr-defined]
         except Exception:
-            pass
-
-        self._hanzi_style_map = {}
-        try:
-            base_dir = os.path.dirname(os.path.abspath(__file__))
-            candidates = [
-                os.path.join(base_dir, "data", "hanzi_style.yaml"),
-                os.path.join(os.path.dirname(base_dir), "data", "hanzi_style.yaml"),
-            ]
-            path = next((p for p in candidates if os.path.exists(p)), None)
-            if not path:
-                return self._hanzi_style_map
-
-            with open(path, "r", encoding="utf-8") as fh:
-                raw = yaml.safe_load(fh) or {}
-
-            if isinstance(raw, dict):
-                cleaned = {}
-                for k, v in raw.items():
-                    hk = (str(k) or "").strip()
-                    if not hk:
-                        continue
-                    if isinstance(v, dict):
-                        cleaned[hk] = v
-                    else:
-                        cleaned[hk] = {"style": "unknown"}
-                self._hanzi_style_map = cleaned
-        except Exception:
-            self._hanzi_style_map = {}
-
-        return self._hanzi_style_map
+            return {}
 
     def _hanzi_style(self, hanzi: str) -> str:
+        """Back-compat wrapper for style lookup."""
         try:
-            m = self._load_hanzi_style_map()
-            v = m.get(hanzi)
-            if isinstance(v, dict):
-                return str(v.get("style") or "unknown").strip().lower()
+            return self._style_index.style_for(hanzi)  # type: ignore[attr-defined]
         except Exception:
-            pass
-        return "unknown"
+            return "unknown"
 
     def _is_colloquial_hanzi(self, hanzi: str) -> bool:
-        st = self._hanzi_style(hanzi)
-        # includes: colloquial-core, colloquial-casual, and “both colloquial and written”
-        return ("colloquial" in st)
+        """Back-compat wrapper for colloquial detection."""
+        try:
+            return self._style_index.is_colloquial(hanzi)  # type: ignore[attr-defined]
+        except Exception:
+            return False
 
     def _curate_top_hanzi_candidates(self, ranked: list[str]) -> list[str]:
-        if not ranked:
-            return []
+        """Back-compat wrapper to curate the top candidates for the UI."""
         try:
-            colloq = [hz for hz in ranked if self._is_colloquial_hanzi(hz)]
+            return self._candidate_curator.curate(ranked)  # type: ignore[attr-defined]
         except Exception:
-            colloq = []
-        chosen = colloq if colloq else ranked
-        return chosen[: self.MAX_HANZI_CANDIDATES]
+            return (ranked or [])[: self.MAX_HANZI_CANDIDATES]
 
-    def _abbr_for_source(self, src: str) -> str:
-        s = (src or "").strip().lower()
-        mapping = {
-            "cccanto": "CC",
-            "cedict": "CE",
-            "andys_list": "AN",
-            "builtin": "BL",
-            "hkcancor": "HK",
-            "subtitles": "SUB",
-            "pycantonese": "PY",
-            "reverse_manual": "RM",
-            "reverse_cache": "RC",
-            "tier2-char-ranked": "T2",
-            "tier2": "T2",
-        }
-        if s in mapping:
-            return mapping[s]
-        # generic fallback: take first 3 alnum chars uppercased
-        s3 = "".join(ch for ch in s if ch.isalnum())[:3].upper()
-        return s3 or "UNK"
 
     # ---- Add & Edit: Jyutping validation + reverse lookup wiring ----
     def _normalize_jy(self, s: str) -> str:
@@ -2029,7 +1746,7 @@ class CategoryManagerDialog(QDialog):
                                 pass
                         if not tag:
                             try:
-                                tag = self._abbr_for_source(src)
+                                tag = abbr_for_source(src)
                             except Exception:
                                 tag = "UNK"
 
@@ -2777,3 +2494,260 @@ class CategoryManagerDialog(QDialog):
         except Exception:
             pass
         return True
+
+
+    def _on_add_category_committed(self) -> None:
+        """Commit the category from the editable Add-panel combobox.
+
+        This is the handler for Enter/Return on the category line edit.
+        It normalises/creates categories and then triggers candidate lookup
+        if Jyutping is present and Hanzi is still empty.
+        """
+        text = (self._add_cat.currentText() or "").strip() if getattr(self, "_add_cat", None) is not None else ""
+
+        # Require explicit category choice
+        if not text:
+            QMessageBox.warning(
+                self,
+                "Category required",
+                "Please choose or type a category for this entry.\n"
+                "If you really cannot decide, you can use ‘unassigned’."
+            )
+            try:
+                if self._add_cat.isEditable() and self._add_cat.lineEdit():
+                    le_cat = self._add_cat.lineEdit()
+                    le_cat.setFocus()
+                    le_cat.selectAll()
+                else:
+                    self._add_cat.setFocus()
+            except Exception:
+                pass
+            return
+
+        # Normalise / reuse / create
+        try:
+            if hasattr(self, "_canon_cat_name") and hasattr(self, "_find_existing_canonical"):
+                canon = self._canon_cat_name(text)
+                existing = self._find_existing_canonical(canon)
+                if existing:
+                    self._add_cat.blockSignals(True)
+                    try:
+                        idx = self._add_cat.findText(existing)
+                        if idx >= 0:
+                            self._add_cat.setCurrentIndex(idx)
+                        else:
+                            self._add_cat.setCurrentText(existing)
+                    finally:
+                        self._add_cat.blockSignals(False)
+                else:
+                    if hasattr(self, "_is_reserved_cat") and self._is_reserved_cat(canon):
+                        QMessageBox.information(self, "Category", f"‘{canon}’ is a reserved name and cannot be used.")
+                        return
+
+                    resp = QMessageBox.question(
+                        self,
+                        "Add Category",
+                        f"Add new category ‘{canon}’?",
+                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                        QMessageBox.StandardButton.No,
+                    )
+                    if resp != QMessageBox.StandardButton.Yes:
+                        return
+
+                    if hasattr(self, "_add_new_category"):
+                        self._add_new_category(canon)
+                    else:
+                        # Inline creation fallback
+                        if canon not in self._cats:
+                            self._cats[canon] = []
+                            self._all_cats = sorted(set(self._cats.keys()), key=lambda s: s.lower())
+                            self._add_cat.blockSignals(True)
+                            try:
+                                self._add_cat.clear()
+                                self._add_cat.addItems(self._all_cats)
+                                idx = self._add_cat.findText(canon)
+                                if idx >= 0:
+                                    self._add_cat.setCurrentIndex(idx)
+                            finally:
+                                self._add_cat.blockSignals(False)
+        except Exception:
+            # Creation failures should never break the dialog
+            pass
+
+        # After commit, trigger lookup if needed
+        try:
+            jy_txt = (self._add_jy.text() or "").strip() if getattr(self, "_add_jy", None) is not None else ""
+            hz_txt = (self._add_hz.text() or "").strip() if getattr(self, "_add_hz", None) is not None else ""
+        except Exception:
+            jy_txt = ""
+            hz_txt = ""
+
+        if jy_txt and not hz_txt:
+            _CatTimer.singleShot(0, lambda: self._post_category_fill(jy_txt))
+        else:
+            try:
+                if hasattr(self, "_update_save_enabled") and callable(self._update_save_enabled):
+                    self._update_save_enabled()
+            except Exception:
+                pass
+
+    def _post_category_fill(self, jy_txt: str) -> None:
+        """Run reverse lookup after a category has been committed."""
+        try:
+            n = self._fill_hanzi_candidates(self._normalize_jy(jy_txt))
+        except Exception:
+            n = 0
+
+        cand_combo = getattr(self, "_cand_combo", None)
+        has_candidates = bool(n and n > 0)
+
+        try:
+            if has_candidates and cand_combo is not None:
+                try:
+                    cand_combo.setVisible(True)
+                    cand_combo.showPopup()
+                    cand_combo.setFocus()
+                except Exception:
+                    pass
+                try:
+                    btn_custom = getattr(self, "_btn_custom_hz", None)
+                    if btn_custom is not None:
+                        btn_custom.setVisible(False)
+                except Exception:
+                    pass
+            else:
+                try:
+                    if cand_combo is not None:
+                        cand_combo.blockSignals(True)
+                        try:
+                            cand_combo.clear()
+                            cand_combo.setVisible(False)
+                        finally:
+                            cand_combo.blockSignals(False)
+                except Exception:
+                    pass
+                try:
+                    btn_custom = getattr(self, "_btn_custom_hz", None)
+                    if btn_custom is not None:
+                        btn_custom.setVisible(True)
+                except Exception:
+                    pass
+                try:
+                    hz_edit = getattr(self, "_add_hz", None)
+                    if hz_edit is not None:
+                        hz_edit.setFocus()
+                        hz_edit.selectAll()
+                except Exception:
+                    pass
+        finally:
+            try:
+                if hasattr(self, "_update_save_enabled") and callable(self._update_save_enabled):
+                    self._update_save_enabled()
+            except Exception:
+                pass
+
+    def _on_candidate_text_changed(self, text: str) -> None:
+        """Keep the read-only Hanzi field in sync with the candidate combobox text."""
+        try:
+            if getattr(self, "_add_hz", None) is not None:
+                self._add_hz.setText(text or "")
+        except Exception:
+            pass
+
+    def _on_candidate_index_activated(self, i: int) -> None:
+        """Apply the chosen candidate (index) into Hanzi + meanings + notes."""
+        try:
+            hz = None
+            try:
+                hz = self._cand_combo.itemData(i) if getattr(self, "_cand_combo", None) is not None else None
+            except Exception:
+                hz = None
+            if not hz and getattr(self, "_cand_combo", None) is not None:
+                hz = self._cand_combo.itemText(i)
+
+            if not hz:
+                return
+
+            # Skip placeholder-ish entries
+            try:
+                if getattr(self, "_cand_combo", None) is not None:
+                    label = (self._cand_combo.itemText(i) or "").strip()
+                    if label.startswith("— choose"):
+                        return
+            except Exception:
+                pass
+
+            hz = (str(hz) or "").strip()
+            if not hz:
+                return
+
+            try:
+                self._add_hz.setText(hz)
+            except Exception:
+                pass
+
+            # Prefer CC-Canto glosses for display; avoid overwriting with fallback meanings.
+            glosses: list[str] = []
+            try:
+                if hasattr(self, "_get_meanings_for_hanzi") and callable(self._get_meanings_for_hanzi):
+                    glosses = self._get_meanings_for_hanzi(hz) or []
+            except Exception:
+                glosses = []
+
+            try:
+                from utils import clean_glosses_for_display
+                glosses = clean_glosses_for_display(glosses)
+            except Exception:
+                pass
+
+            # Only fall back if we truly have no glosses
+            if not glosses:
+                try:
+                    from utils import get_cccanto_glosses_for
+                    glosses = get_cccanto_glosses_for(hz) or []
+                except Exception:
+                    glosses = []
+
+            # Notes only when ambiguous (multi-sense)
+            try:
+                if glosses and len(glosses) > 1:
+                    self._set_notes(
+                        "Selected Hanzi has multiple senses in this context.",
+                        source="chatgpt-style",
+                    )
+                else:
+                    self._set_notes("", source="auto-default")
+            except Exception:
+                pass
+
+            # Clean bracketed tags before inserting into Meanings
+            try:
+                if hasattr(self, "_clean_meanings_tags"):
+                    clean = self._clean_meanings_tags(glosses or [])
+                else:
+                    import re as _re
+                    _tag = _re.compile(r"\s*[(\[].*?[)\]]\s*")
+                    clean = [_tag.sub("", str(g)).strip() for g in (glosses or []) if str(g).strip()]
+                self._add_mn.setText(", ".join(clean) if clean else "")
+            except Exception:
+                pass
+
+            try:
+                if getattr(self, "_add_mn", None) is not None:
+                    self._add_mn.setFocus()
+                    self._add_mn.selectAll()
+            except Exception:
+                pass
+
+            try:
+                if hasattr(self, "_update_save_enabled") and callable(self._update_save_enabled):
+                    self._update_save_enabled()
+            except Exception:
+                pass
+        except Exception:
+            # Never allow candidate selection to crash the dialog
+            try:
+                if hasattr(self, "_update_save_enabled") and callable(self._update_save_enabled):
+                    self._update_save_enabled()
+            except Exception:
+                pass
