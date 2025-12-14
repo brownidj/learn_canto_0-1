@@ -51,14 +51,14 @@ DEFAULT_FREQ_PATH = str(REPO_ROOT / "data" / "frequency" / "cantonese_wordfreq.p
 DEFAULT_STATE_PATH = str(REPO_ROOT / "data" / "frequency" / "category_expansion_state.json")
 
 # Stoplist of common function particles we do not want to add as content words
-STOPLIST = set([
-    "嘅", "咩", "吖", "啦", "喎", "咗", "嗎", "嗎", "嘛", "啫", "囉", "呀", "喇",
+STOPLIST = {
+    "嘅", "咩", "吖", "啦", "喎", "咗", "嗎", "嘛", "啫", "囉", "呀", "喇",
     "呀嘛", "哋", "嘞", "嗰", "咁", "喺", "哇", "啊", "么", "么呀"
-])
+}
 
 
 # Some categories we typically skip expansion for (user requested no examples for unassigned)
-SKIP_CATEGORIES = set(["unassigned"])
+SKIP_CATEGORIES = {"unassigned"}
 
 CJK_RANGE = re.compile(u"[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]")
 
@@ -83,37 +83,75 @@ def _read_subtitles(paths):
             continue
     return "\n".join(texts)
 
-# Simple per-category patterns to constrain candidates (heuristics; expand as needed)
-CATEGORY_PATTERNS = {
-    'animals': set(['狗', '貓', '鳥', '魚', '馬', '牛', '羊', '豬', '雞', '鴨', '虎', '豹', '熊', '狼', '鼠', '兔']),
-    'colors': set(['黑','白','紅','藍','綠','黃','紫','橙','灰','啡','金','銀']),
-    'communication': set(['講','話','問','答','電','話','訊','息','信','郵','聊','討','論','通','告','叫','叫做']),
-    'descriptions_adjectives': set(['靚','好','勁','難','易','快','慢','貴','平','高','矮','大','細','正','冇用','新','舊','長','短','深','淺']),
-    'direction': set(['上','下','左','右','入','出','前','後','返']),
-    'family': set(['媽','爸','阿','哥','姐','弟','妹','婆','爺','伯','叔','姨','舅','姑','媳','婿','奶']),
-    'food, eating, drinking': set(['食','飲','飯','水','茶','湯','餅','菜','肉','糖','鹽','辣','甜','苦','酸']),
-    'greetings': set(['你','好','早','晨','午','安','晚','拜','再','見','唔該','多謝','唔好意思','你好','拜拜']),
-    'health': set(['醫','院','藥','病','痛','傷','感冒','頭痛','肚痛','發燒']),
-    'household': set(['門','窗','椅','枱','床','櫃','燈','鏡','電','風','扇','雪','櫃','電視','電腦']),
-    'languages': set(['廣','東','話','粵','語','普','通','話','英','文','中','文','學','語']),
-    'measurements': set(['寸','尺','米','公','斤','克','升','毫','升','少','少','多','啲','幾','多']),
-    'money_shopping': set(['錢','買','賣','平','貴','折','單','收','據','找','續','價','還','卡','刷','現','金']),
-    'nature_air': set(['天','空','雲','風','氣','陽','光','雨','霧','雷','電']),
-    'nature_land': set(['地','山','石','沙','泥','樹','林','草','田','路','土','地震']),
-    'nature_ocean': set(['海','洋','潮','汐','灘','灣','浪','水','魚','船']),
-    'numbers': set(list('零一二三四五六七八九十百千萬億兩')),
-    'people': set(['人','男人','女人','男','女','仔','朋友','同事','老師','同學']),
-    'places': set(['國','家','城','市','鄉','村','港','臺','灣','中','國','香','港','街','道','路','站','店','學','校','醫','院']),
-    'pronouns_possessive': set(['我','你','佢','我哋','你哋','佢哋','我嘅','你嘅','佢嘅']),
-    'roles_titles': set(['阿','sir','老師','先生','太太','阿姨','伯伯','叔叔','哥哥','姐姐','阿婆','老闆','同事','校長','醫生']),
-    'school_tests': set(['學','校','課','堂','考','試','卷','分','數','作','業','功','課']),
-    'technology_media': set(['電','網','手','機','視','腦','郵','相','收','音','機','訊','息','充','電','平','板']),
-    'time_calendar': set(['年','月','日','時','分','秒','點','鐘','昨','今','明','週','期','星','期','春','夏','秋','冬']),
-    'vehicle': set(['車','巴','士','鐵','路','飛','機','船','單','車','電','單','車','的','士']),
-    'weather': set(['雨','風','雷','電','雪','雲','晴','陰','熱','凍','潮','濕']),
-    'weekdays': set(['星期','禮拜']),
-    'zodiac': set(['鼠','牛','虎','兔','龍','蛇','馬','羊','猴','雞','狗','豬']),
-}
+# Heuristics: derive lightweight per-category character roots from categories.yaml
+# so we don't have to hard-code CATEGORY_PATTERNS. This is rebuilt each run.
+CATEGORY_PATTERNS: Dict[str, set] = {}
+
+_DEF_NUMBER_CHARS = set("零一二三四五六七八九十百千萬亿兩零")
+_WEEKDAY_PREFIXES = ("星期", "禮拜")
+_ROLE_SUFFIXES = ("生", "師")
+_ROLE_PREFIXES = ("阿",)
+_ROLE_SUBSTRINGS = ("sir",)
+
+
+def _char_counts(items: List[str]) -> Dict[str, int]:
+    from collections import Counter
+    c = Counter()
+    for s in items or []:
+        s = str(s)
+        for ch in s:
+            if CJK_RANGE.match(ch):
+                c[ch] += 1
+    return dict(c)
+
+
+def _color_roots_from_items(items: List[str]) -> set:
+    roots = set()
+    for s in items or []:
+        s = str(s)
+        # single-char colors
+        if len(s) == 1 and CJK_RANGE.match(s):
+            roots.add(s)
+        # XX色 → treat XX before 色 as color root candidates (last CJK before 色)
+        if s.endswith("色") and len(s) >= 2:
+            prev = s[-2]
+            if CJK_RANGE.match(prev):
+                roots.add(prev)
+    return roots
+
+
+def build_category_patterns(items_map: Dict[str, List[str]]) -> Dict[str, set]:
+    patterns: Dict[str, set] = {}
+    for cat, items in (items_map or {}).items():
+        items = items or []
+        # defaults: frequent chars within this category (>=2 occurrences)
+        counts = _char_counts(items)
+        roots = {ch for ch, n in counts.items() if n >= 2}
+
+        # category-specific tweaks
+        if cat == 'numbers':
+            roots = set(_DEF_NUMBER_CHARS)
+        elif cat == 'weekdays':
+            # handled specially in basic_filters via startswith; keep empty
+            roots = set()
+        elif cat == 'colors':
+            # infer from items and any XX色 patterns
+            roots |= _color_roots_from_items(items)
+        elif cat == 'roles_titles':
+            # seed with known vocative/role markers
+            roots |= set(_ROLE_PREFIXES)
+            roots |= set(_ROLE_SUFFIXES)
+            # substrings like 'sir' will be checked in basic_filters
+        # keep as-is for others
+
+        patterns[cat] = roots
+
+    # Ensure required keys exist even if empty
+    patterns.setdefault('colors', set())
+    patterns.setdefault('numbers', set(_DEF_NUMBER_CHARS))
+    patterns.setdefault('weekdays', set())
+    patterns.setdefault('roles_titles', set(_ROLE_PREFIXES) | set(_ROLE_SUFFIXES))
+    return patterns
 
 # ----------------------------- YAML helpers ---------------------------------
 
@@ -130,28 +168,23 @@ def _yaml_save(path, data):
         yaml.dump(data, fh)
 
 
-def load_categories(path: str) -> Tuple[Dict[str, Any], Dict[str, List[str]]]:
-    """Return (raw_doc, items_map).
-    items_map maps category -> list of Hanzi items.
-    Accepts both styles:
-      - list of hanzi
-      - dict with 'items' and optional 'examples_en'
-    """
+def load_categories(path):
+    # Load YAML as a raw Python structure
     doc = _yaml_load(path)
-    items_map: Dict[str, List[str]] = {}
-    if not isinstance(doc, dict):
-        return doc, items_map
-    for cat, val in doc.items():
-        if isinstance(val, list):
-            items_map[cat] = [unicode_str(x) for x in val]
-        elif isinstance(val, dict):
-            items = val.get('items')
-            if isinstance(items, list):
-                items_map[cat] = [unicode_str(x) for x in items]
-            else:
-                items_map[cat] = []
+
+    # Normalize to: items_map[category] -> list of hanzi
+    # Works with both:
+    #   - legacy:   category: [ ... ]
+    #   - new:      category: { items: [ ... ], examples_en: [ ... ] }
+    items_map = {}
+    for cat, val in (doc or {}).items():
+        if isinstance(val, dict) and isinstance(val.get('items'), list):
+            items_map[cat] = list(val['items'])
+        elif isinstance(val, list):
+            items_map[cat] = list(val)
         else:
             items_map[cat] = []
+
     return doc, items_map
 
 def build_frequency_table(include_hkcancor, subtitles_glob, min_len, max_len):
@@ -225,18 +258,7 @@ def build_frequency_table(include_hkcancor, subtitles_glob, min_len, max_len):
 
     df = pd.DataFrame(rows)
     # Compute per-source ppm for transparency; combined weighting is applied later in main()
-    tokens_hkc = max(int(df['tokens_hkc'].iloc[0]) if len(df) else 0, 0)
-    tokens_sub = max(int(df['tokens_sub'].iloc[0]) if len(df) else 0, 0)
-    tokens_app = max(int(df['tokens_app'].iloc[0]) if len(df) else 0, 0)
-
-    def _ppm(col, denom):
-        denom = denom if denom > 0 else 1
-        return (1e6 * df[col].astype(float)) / float(denom)
-
-    df['ppm_hkc'] = _ppm('count_hkc', tokens_hkc)
-    df['ppm_sub'] = _ppm('count_sub', tokens_sub)
-    df['ppm_app'] = _ppm('count_app', tokens_app)
-    # Do not set a combined ppm here; we will apply weights later so CLI flags take effect
+    df = _attach_ppm_columns(df)
     return df
 
 def save_categories(path: str, raw_doc: Dict[str, Any], new_items: Dict[str, List[str]]) -> None:
@@ -265,6 +287,32 @@ def unicode_str(x) -> str:
         return unicode(x)  # type: ignore  # for Py2-styled fallback, unlikely used
     except Exception:
         return str(x)
+
+#
+# ----------------------------- PPM helper -----------------------------------
+
+def _attach_ppm_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Ensure per‑source ppm columns exist based on count_* and tokens_*.
+    Safe if columns are missing/empty; returns a copy.
+    """
+    df = df.copy()
+    # Ensure required columns exist
+    for c in ['count_hkc', 'count_sub', 'count_app', 'tokens_hkc', 'tokens_sub', 'tokens_app']:
+        if c not in df.columns:
+            df[c] = 0
+    # Read token denominators defensively
+    tokens_hkc = max(int(df['tokens_hkc'].iloc[0]) if len(df) else 0, 0)
+    tokens_sub = max(int(df['tokens_sub'].iloc[0]) if len(df) else 0, 0)
+    tokens_app = max(int(df['tokens_app'].iloc[0]) if len(df) else 0, 0)
+
+    def _ppm(col: str, denom: int) -> pd.Series:
+        denom = denom if denom > 0 else 1
+        return (1e6 * df[col].astype(float)) / float(denom)
+
+    df['ppm_hkc'] = _ppm('count_hkc', tokens_hkc)
+    df['ppm_sub'] = _ppm('count_sub', tokens_sub)
+    df['ppm_app'] = _ppm('count_app', tokens_app)
+    return df
 
 # ----------------------------- Frequency loading ----------------------------
 
@@ -307,17 +355,7 @@ def load_frequency_table(path: str) -> pd.DataFrame:
     for c in ['count_hkc', 'count_sub', 'count_app', 'tokens_hkc', 'tokens_sub', 'tokens_app']:
         df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0).astype(int)
     # Compute per-source ppm; combined weighting will be applied later using CLI flags
-    tokens_hkc = max(int(df['tokens_hkc'].iloc[0]) if len(df) else 0, 0)
-    tokens_sub = max(int(df['tokens_sub'].iloc[0]) if len(df) else 0, 0)
-    tokens_app = max(int(df['tokens_app'].iloc[0]) if len(df) else 0, 0)
-
-    def _ppm(col, denom):
-        denom = denom if denom > 0 else 1
-        return (1e6 * df[col].astype(float)) / float(denom)
-
-    df['ppm_hkc'] = _ppm('count_hkc', tokens_hkc)
-    df['ppm_sub'] = _ppm('count_sub', tokens_sub)
-    df['ppm_app'] = _ppm('count_app', tokens_app)
+    df = _attach_ppm_columns(df)
     # basic cleaning
     df['hanzi'] = df['hanzi'].astype(str)
     return df
@@ -475,7 +513,19 @@ def propose_for_category(cat: str,
         print("[ERROR] Source frequency table lacks 'hanzi' column; columns={}".format(list(df.columns)))
         return [], pd.DataFrame(), float(ppm_min)
 
-    pool = basic_filters(df, cat)
+    # Start from a minimal schema so we can optionally skip category filters
+    base_cols = [c for c in ['hanzi','ppm','freq_w','count_hkc','count_sub','count_app'] if c in df.columns]
+    if 'hanzi' not in base_cols and 'hanzi' in df.columns:
+        base_cols = ['hanzi'] + base_cols
+    pool_base = df.loc[:, base_cols].copy()
+    print(f"[DEBUG] {cat}: pool pre-filter = {len(pool_base)}")
+
+    if getattr(args, 'no_cat_filter', False):
+        pool = pool_base
+        print(f"[DEBUG] {cat}: skipping category filter (--no-cat-filter)")
+    else:
+        pool = basic_filters(df, cat)
+    print(f"[DEBUG] {cat}: pool post-filter = {len(pool)}")
 
     # Ensure we have a DataFrame with expected columns
     if not hasattr(pool, 'columns'):
@@ -508,8 +558,8 @@ def propose_for_category(cat: str,
         if 'ppm' in pool.columns:
             pool = pool[pool['ppm'] >= thr].copy()
 
-    # exclude existing
-    existing_set = set(existing)
+    # exclude existing (use the list passed in by caller)
+    existing_set = set(existing or [])
     if 'hanzi' not in pool.columns:
         print("[WARN] {}: missing 'hanzi' before excluding existing; columns={}".format(cat, list(pool.columns)))
         return [], pd.DataFrame(), float(thr)
@@ -554,11 +604,15 @@ def main(argv=None):
     ap.add_argument('--freq-file', default=DEFAULT_FREQ_PATH, help='Path to parquet/csv frequency table')
     ap.add_argument('--state-file', default=DEFAULT_STATE_PATH, help='Path to expansion state JSON')
     ap.add_argument('--only', default='', help='Comma-separated category subset to process')
+    ap.add_argument('--below', type=int, default=0,
+                    help='Only process categories whose item count is < N (0 = disabled)')
     ap.add_argument('--top-n', type=int, default=10, help='Number of new items per category')
     ap.add_argument('--pct', type=float, default=0.80,
                     help='Percentile cutoff for dynamic threshold (0–1 range; default=0.80)')
     ap.add_argument('--no-pct', action='store_true',
                     help='Disable percentile threshold and rely only on ppm-min and top-n')
+    ap.add_argument('--no-cat-filter', action='store_true',
+                    help='Skip category heuristics; select purely by frequency gates')
     ap.add_argument('--ppm-min', type=float, default=2.0, help='Minimum ppm hard gate (try 1.0..2.0)')
     ap.add_argument('--hkc-min', type=int, default=2, help='Minimum HKCanCor hits for presence gate')
     ap.add_argument('--sub-min', type=int, default=8, help='Minimum subtitles hits for presence gate')
@@ -715,9 +769,29 @@ def main(argv=None):
         return 0
 
     raw_doc, items_map = load_categories(cat_path)
+    # Build dynamic CATEGORY_PATTERNS from the current categories.yaml
+    global CATEGORY_PATTERNS
+    CATEGORY_PATTERNS = build_category_patterns(items_map)
+    try:
+        # Small debug peek
+        peek = {k: list(v)[:6] for k, v in list(CATEGORY_PATTERNS.items())[:4]}
+        print("[DEBUG] Derived CATEGORY_PATTERNS (peek): {}".format(peek))
+    except Exception:
+        pass
     if not isinstance(items_map, dict) or not items_map:
         print("[ERROR] Failed to read categories from {}".format(cat_path))
         return 2
+
+    # Helper to count items per category for --below filter
+    def _cat_size(cat_name: str) -> int:
+        val = raw_doc.get(cat_name)
+        if isinstance(val, dict) and isinstance(val.get('items'), list):
+            return len(val['items'])
+        if isinstance(val, list):
+            return len(val)
+        return 0
+
+    sizes = {c: _cat_size(c) for c in items_map.keys()}
 
     df = load_frequency_table(freq_path)
     # Apply source weights and expose a canonical 'ppm' for gating/sorting
@@ -744,6 +818,14 @@ def main(argv=None):
         chosen_cats = [c for c in chosen_cats if c in subset]
         if not chosen_cats:
             print("[WARN] --only specified but no categories matched. Exiting.")
+            return 0
+    if getattr(args, 'below', 0):
+        n = int(args.below)
+        before = len(chosen_cats)
+        chosen_cats = [c for c in chosen_cats if sizes.get(c, 0) < n]
+        print(f"[INFO] limiting to categories with < {n} items: {before} -> {len(chosen_cats)}")
+        if not chosen_cats:
+            print("[INFO] No categories under the requested size threshold. Nothing to do.")
             return 0
 
     state = load_state(state_path)
@@ -797,6 +879,8 @@ def main(argv=None):
 
     print("\n[COMMIT] Wrote {} categories; state updated at {}".format(len(proposed_adds), state_path))
     return 0
+
+    print("[REPORT] Expand completed – returning control to shell.")
 
 
 if __name__ == '__main__':

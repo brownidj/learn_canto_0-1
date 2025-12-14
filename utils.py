@@ -489,6 +489,24 @@ def get_cccanto_reverse_map() -> dict:
                     if hz not in bucket:
                         bucket.append(hz)
                         added += 1
+                    # Also populate meanings_map[hz] from the /.../ gloss block
+                    try:
+                        first = s.find("/")
+                        last = s.rfind("/")
+                        if first != -1 and last != -1 and last > first:
+                            raw_gloss = s[first+1:last].strip()
+                            if raw_gloss:
+                                parts = [p.strip() for p in re.split(r"[;/,]|，|；", raw_gloss) if p.strip()]
+                                if parts:
+                                    # accumulate and de-dup while preserving order
+                                    existing = meanings_map.get(hz, [])
+                                    for p in parts:
+                                        if p not in existing:
+                                            existing.append(p)
+                                    meanings_map[hz] = existing
+                    except Exception:
+                        # Non-fatal; carry on building the reverse map
+                        pass
             logger.debug("get_cccanto_reverse_map: built %d rows (keys=%d) from %s",
                          added, len(rev), os.path.basename(path))
     except Exception:
@@ -581,6 +599,157 @@ def get_cccanto_glosses_for(hz: str) -> list[str]:
     except Exception:
         return []
     return []
+
+# ----------------------------
+# Generic meanings providers (pluggable)
+# ----------------------------
+TAG_RE_BRACKETS = re.compile(r"\[[^\]]*\]")  # e.g. [char], [dialect]
+TAG_RE_PARENS = re.compile(r"\([^)]*\)")     # e.g. (Cant.), (slang)
+MULTI_SEP_RE = re.compile(r"[;/,]|，|；")
+
+def clean_gloss_for_display(s: str) -> str:
+    """Strip bracket/paren tags and tidy whitespace for UI display."""
+    if not s:
+        return ""
+    out = TAG_RE_BRACKETS.sub("", s)
+    out = TAG_RE_PARENS.sub("", out)
+    out = " ".join(out.strip(" -–—:;,. \t").split())
+    return out
+
+def clean_glosses_for_display(items: list[str]) -> list[str]:
+    seen, out = set(), []
+    for x in items or []:
+        c = clean_gloss_for_display(str(x))
+        if c and c not in seen:
+            out.append(c); seen.add(c)
+    return out
+
+def _read_lines(path: str):
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            for line in fh:
+                yield line.rstrip("\n")
+    except Exception:
+        return
+
+def get_cedict_glosses_for(hz: str, path: str = None) -> list[str]:
+    """Tiny CCEDICT reader: match Trad headword and extract /.../."""
+    if not hz:
+        return []
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    use_path = path or os.path.join(base_dir, "data", "cedict_ts.u8")
+    lines = list(_read_lines(use_path) or [])
+    if not lines:
+        return []
+    out = []
+    for s in lines:
+        if not s or s.startswith("#"):
+            continue
+        if not s.startswith(hz + " "):
+            continue
+        first, last = s.find("/"), s.rfind("/")
+        if first == -1 or last == -1 or last <= first:
+            continue
+        raw = s[first+1:last].strip()
+        out.extend([p.strip() for p in MULTI_SEP_RE.split(raw) if p.strip()])
+    return out[:5]
+
+def load_overrides_gloss_yaml(path: str = None) -> dict[str, list[str]]:
+    """Optional overrides: data/overrides_gloss.yaml mapping Hanzi -> [meanings]."""
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    use_path = path or os.path.join(base_dir, "data", "overrides_gloss.yaml")
+    try:
+        if not os.path.exists(use_path):
+            return {}
+        import yaml
+        with open(use_path, "r", encoding="utf-8") as fh:
+            data = yaml.safe_load(fh) or {}
+        out = {}
+        for k, v in (data.items() if isinstance(data, dict) else []):
+            hz = str(k).strip()
+            if not hz:
+                continue
+            if isinstance(v, list):
+                arr = [str(x).strip() for x in v if str(x).strip()]
+            elif isinstance(v, str):
+                arr = [v.strip()] if v.strip() else []
+            else:
+                arr = []
+            if arr:
+                out[hz] = arr
+        return out
+    except Exception:
+        return {}
+
+def get_meanings_sources(hanzi: str, max_per_source: int = 5) -> dict[str, list[str]]:
+    """
+    Return meanings grouped by source ID, in priority order:
+      OVR (local overrides) -> CC (CC-Canto) -> CE (CCEDICT) -> HK (reserved) -> WK (reserved) -> DER (derived from andys_list.yaml)
+    Values are un-cleaned; call clean_glosses_for_display() for UI.
+    """
+    hz = (hanzi or "").strip()
+    if not hz:
+        return {}
+    out: dict[str, list[str]] = {}
+
+    # OVR: local overrides first (if present)
+    ov = load_overrides_gloss_yaml().get(hz, [])
+    if ov:
+        out["OVR"] = ov[:max_per_source]
+
+    # CC: CC-Canto file already supported above
+    try:
+        cc = get_cccanto_glosses_for(hz) or []
+        if cc:
+            out["CC"] = cc[:max_per_source]
+    except Exception:
+        pass
+
+    # CE: CCEDICT fallback
+    ce = get_cedict_glosses_for(hz) or []
+    if ce:
+        out["CE"] = ce[:max_per_source]
+
+    # HK: reserved for HK colloquial dictionaries (wire later)
+    # out["HK"] = [...]
+
+    # WK: reserved for offline Wiktionary extracts (wire later)
+    # out["WK"] = [...]
+
+    # DER: derive from andys_list.yaml
+    try:
+        vocab = load_andys_list_yaml()
+        val = vocab.get(hz)
+        if isinstance(val, list) and len(val) >= 1 and isinstance(val[0], list):
+            der = [str(x).strip() for x in val[0] if str(x).strip()]
+            if der:
+                out["DER"] = der[:max_per_source]
+    except Exception:
+        pass
+
+    return out
+
+def get_meanings_merged(hanzi: str, max_total: int = 8) -> tuple[list[str], list[str]]:
+    """
+    Merge meanings across sources, preserving priority and order.
+    Returns (cleaned_meanings, source_order_used).
+    """
+    grouped = get_meanings_sources(hanzi)
+    order = ["OVR", "CC", "CE", "HK", "WK", "DER"]
+    merged, used, seen = [], [], set()
+    for src in order:
+        arr = grouped.get(src, [])
+        if not arr:
+            continue
+        used.append(src)
+        for g in arr:
+            cg = clean_gloss_for_display(g)
+            if cg and cg not in seen:
+                merged.append(cg); seen.add(cg)
+                if len(merged) >= max_total:
+                    return merged, used
+    return merged, used
+
 
 def load_reverse_manual_yaml(path: str = REVERSE_MANUAL_DEFAULT) -> dict:
     """Load reverse_manual.yaml mapping: jyut -> [hanzi, ...]. Missing file -> {}.
@@ -841,7 +1010,9 @@ def get_unihan_char_map(force_reload: bool = False) -> dict[str, list[str]]:
     return _CHAR_MAP_CACHE or {}
 
 
-def compose_candidates_from_chars(jy, char_map, cap_per_syl=30, cap_combos=100):
+ # Note: cap_per_syl increased to 200 and deterministic ordering added so common pairs
+ # like 伯伯 (baak3 baak3) are not pruned by early caps. cap_combos still limits total output.
+def compose_candidates_from_chars(jy, char_map, cap_per_syl=200, cap_combos=300):
     """Compose Hanzi candidates for a Jyutping phrase using a char->readings map.
 
     Strategy per syllable:
@@ -862,32 +1033,32 @@ def compose_candidates_from_chars(jy, char_map, cap_per_syl=30, cap_combos=100):
     def _match_syl(syl: str) -> list[str]:
         exact, relaxed = [], []
         base = _base(syl)
-        for ch, readings in (char_map or {}).items():
+        # collect all exact matches first (deterministic order)
+        for ch in sorted((char_map or {}).keys()):
             if not _is_cjk(ch):
                 continue
             try:
+                readings = char_map.get(ch) or []
                 if syl in readings:
                     exact.append(ch)
-                    if len(exact) >= cap_per_syl:
-                        break
             except Exception:
                 continue
         if exact:
-            return exact
-        # tone-relaxed fallback
-        for ch, readings in (char_map or {}).items():
+            # only slice here to respect cap_per_syl
+            return exact[:cap_per_syl]
+        # tone-relaxed fallback (deterministic order)
+        for ch in sorted((char_map or {}).keys()):
             if not _is_cjk(ch):
                 continue
             try:
-                for r in (readings or []):
+                readings = char_map.get(ch) or []
+                for r in readings:
                     if _base(r) == base:
                         relaxed.append(ch)
                         break
-                if len(relaxed) >= cap_per_syl:
-                    break
             except Exception:
                 continue
-        return relaxed
+        return relaxed[:cap_per_syl]
 
     per = []
     for syl in parts:
@@ -1428,32 +1599,22 @@ def shortlist_candidates(
         if hz in mj:
             score += 900
         score += int(fmap.get(hz, 0))
-        if len(hz) >= 2 and (len(set(hz)) < len(hz)) and hz != "爸爸":
-            score -= 5
+        rep = len(hz) >= 2 and (len(set(hz)) < len(hz))
+        if rep:
+            # slight penalty to avoid garbage repeats, then whitelist common kin/title reduplications
+            score -= 1
+            if hz in ("爸爸", "媽媽", "哥哥", "姐姐", "伯伯", "舅舅", "叔叔", "妹妹"):
+                score += 5
         ranked.append((hz, score))
     ranked.sort(key=lambda t: (-t[1], t[0]))
     return ranked[: max(1, int(top_n or 10))]
 
 
 '''
-Hanzi
-Jyutping
-Meaning
-Notes
-爸爸
-baa4 baa1
-father / dad
-most common and colloquial (spoken Cantonese)
-父親
-fu6 can1
-father (formal)
-written / formal
-阿爸
-aa3 baa1
-dad / daddy
-affectionate, very common in speech
-老豆
-lou5 dau6
-dad / old man
-informal slang
+    aa3 suk1
+	•	Father’s older brother: 伯伯 — baak3 baak3 (also 伯父 baak3 fu6)
+	•	Father’s younger brother: 叔叔 — suk1 suk1 (also 叔父 suk1 fu6)
+	•	Mother’s brother: 舅父 — kau5 fu2 (also 阿舅 aa3 kau5)
+	•	Father’s sister’s husband: 姑丈 — gu1 zoeng6
+	•	Mother’s sister’s husband: 姨丈 — ji4 zoeng6
 '''
