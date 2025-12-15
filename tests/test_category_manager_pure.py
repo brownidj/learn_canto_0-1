@@ -86,22 +86,6 @@ def test_candidate_limit_is_enforced():
 
 
 # ---------------------------------------------------------------------
-# Ambiguity handling
-# ---------------------------------------------------------------------
-
-def ambiguity_detected(candidates):
-    """
-    Ambiguity exists when multiple plausible candidates remain.
-    """
-    return len(candidates) > 1
-
-
-def test_ambiguity_detection():
-    assert ambiguity_detected(["啦", "喇"])
-    assert not ambiguity_detected(["啦"])
-
-
-# ---------------------------------------------------------------------
 # Notes policy
 # ---------------------------------------------------------------------
 

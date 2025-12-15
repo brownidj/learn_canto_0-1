@@ -12,7 +12,9 @@ It centralises:
 from __future__ import annotations
 
 from typing import Any, List
+import os
 
+import yaml
 
 # Public constant used by UI and tests
 CATEGORY_PLACEHOLDER_TEXT = "— choose category —"
@@ -86,6 +88,102 @@ def prefer_meanings(primary: Any, fallback: Any) -> List[str]:
         return [m.strip() for m in fallback if isinstance(m, str) and m.strip()]
 
     return []
+
+
+def detect_ambiguity(
+    *,
+    candidates: Any,
+    n_syllables: Any,
+    meanings_for_hanzi: Any = None,
+) -> bool:
+    """Return True when the current resolution should be treated as ambiguous.
+
+    This is intentionally UI-free and side-effect free so it can be unit-tested.
+
+    Rules (conservative):
+    - Multiple candidates -> ambiguous
+    - 2+ syllables with no candidates -> ambiguous (phrase likely needs manual confirmation)
+    - Single candidate with multiple senses (if meanings provider is available) -> ambiguous
+    """
+
+    # Normalise inputs defensively
+    try:
+        n = int(n_syllables)
+    except Exception:
+        n = 0
+
+    cands: list[Any] = []
+    if isinstance(candidates, list):
+        cands = candidates
+    elif candidates is None:
+        cands = []
+    else:
+        # Unknown type: treat as no candidates
+        cands = []
+
+    if len(cands) > 1:
+        return True
+
+    if n >= 2 and len(cands) == 0:
+        return True
+
+    if len(cands) == 1 and callable(meanings_for_hanzi):
+        try:
+            # Candidates may be strings or tuples; accept both.
+            only = cands[0]
+            hanzi = only[0] if isinstance(only, (tuple, list)) and only else only
+            glosses = meanings_for_hanzi(str(hanzi)) or []
+            if isinstance(glosses, list):
+                non_blank = [g for g in glosses if isinstance(g, str) and g.strip()]
+                if len(non_blank) > 1:
+                    return True
+        except Exception:
+            # If meanings lookup fails, do not force ambiguity.
+            pass
+
+    return False
+
+def ambiguity_note(jy_n: object, n_syllables: object, candidates: object, top_glosses: object = None) -> str:
+    """Return a non-empty note if the candidate set should be treated as ambiguous.
+
+    UI-free: the dialog can simply display the returned text.
+    """
+    try:
+        ns = int(n_syllables) if isinstance(n_syllables, int) or str(n_syllables).isdigit() else 0
+    except Exception:
+        ns = 0
+
+    cand_len = 0
+    try:
+        if isinstance(candidates, list):
+            cand_len = len(candidates)
+    except Exception:
+        cand_len = 0
+
+    ambiguous = False
+
+    # More than one candidate is always ambiguous
+    if cand_len > 1:
+        ambiguous = True
+
+    # Phrase inputs with no candidates are ambiguous
+    if (not ambiguous) and ns >= 2 and cand_len == 0:
+        ambiguous = True
+
+    # If top candidate has multiple meanings, prompt confirmation
+    if (not ambiguous) and isinstance(top_glosses, list):
+        try:
+            nonblank = [g for g in top_glosses if isinstance(g, str) and g.strip()]
+            if len(nonblank) > 1:
+                ambiguous = True
+        except Exception:
+            pass
+
+    if ambiguous:
+        return "Ambiguity detected. Please confirm Hanzi and meaning match your intended use."
+
+    return ""
+
 
 class HanziStyleIndex:
     """Lightweight loader for data/hanzi_style.yaml.
@@ -203,6 +301,7 @@ __all__ = [
     "save_enabled_gate",
     "should_show_custom_hanzi_button",
     "prefer_meanings",
+    "detect_ambiguity",
     "HanziStyleIndex",
     "CandidateCurator",
     "abbr_for_source",

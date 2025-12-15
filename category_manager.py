@@ -39,6 +39,7 @@ from domain.category_rules import (
     save_enabled_gate,
     should_show_custom_hanzi_button,
     prefer_meanings,
+    ambiguity_note,
     HanziStyleIndex,
     CandidateCurator,
     abbr_for_source,
@@ -100,7 +101,7 @@ class CategoryManagerDialog(QDialog):
       - The panel always writes to:
           - self._vocab        (hanzi -> [meanings, jyut])
           - self._cats         (category -> [hanzi])
-          - andys_list.yaml    (vocab content)
+          - data/andys_list.yaml    (vocab content)
           - categories.yaml    (category listing)
 
     Core workflows
@@ -122,7 +123,7 @@ class CategoryManagerDialog(QDialog):
          - Updates self._vocab[hanzi] = [meanings, jyut].
          - Updates category membership in self._cats (and removes from
            'unassigned' if needed).
-         - Persists to andys_list.yaml + categories.yaml.
+         - Persists to data/andys_list.yaml + categories.yaml.
          - Refreshes the table via _populate_rows().
 
     EDIT:
@@ -1266,6 +1267,545 @@ class CategoryManagerDialog(QDialog):
         scored.sort(reverse=True)
         return [item for _score, item in scored]
 
+    def _get_reverse_candidates(self, jy_n: str) -> list[tuple[str, str, int]]:
+        """Tier-1 reverse lookup: ask the dialog's reverse-candidate provider if present."""
+        cands: list[tuple[str, str, int]] = []
+        try:
+            if hasattr(self, "_reverse_candidates_for_jy") and callable(self._reverse_candidates_for_jy):
+                cands = self._reverse_candidates_for_jy(jy_n) or []
+        except Exception:
+            cands = []
+        return cands
+
+    def _maybe_tier2_fallback_single_syllable(
+        self,
+        jy_n: str,
+        n_syllables: int,
+        cands: list[tuple[str, str, int]],
+    ) -> list[tuple[str, str, int]]:
+        """Tier-2 fallback for single-syllable Jyutping only.
+
+        For multi-syllable phrases we intentionally avoid char-map heuristics.
+        """
+        if cands:
+            return cands
+        if n_syllables != 1:
+            return cands
+
+        try:
+            compose_fn = None
+            shortlist_fn = None
+            if hasattr(self, "_get_compose_and_rank") and callable(self._get_compose_and_rank):
+                try:
+                    compose_fn, shortlist_fn = self._get_compose_and_rank()
+                except Exception:
+                    compose_fn, shortlist_fn = None, None
+
+            # Prefer a proper composer if available
+            if callable(compose_fn) and isinstance(getattr(self, "_char_map", None), dict) and self._char_map:
+                try:
+                    # noinspection PyTypeChecker
+                    tier2 = compose_fn(jy_n, self._char_map) or []
+                except Exception:
+                    tier2 = []
+
+                try:
+                    if callable(shortlist_fn) and tier2:
+                        # noinspection PyTypeChecker
+                        tier2 = shortlist_fn(tier2) or tier2
+                except Exception:
+                    pass
+
+                # Expect tier2 as iterable of (hanzi, score) or (hanzi, score, src);
+                # normalise to (hanzi, "tier2", freq_like)
+                cands_tier2: list[tuple[str, str, int]] = []
+                for item in (tier2 or []):
+                    try:
+                        if not item:
+                            continue
+                        if len(item) >= 2:
+                            hz = item[0]
+                            score = item[1]
+                        else:
+                            continue
+                        freq_like = int(score) if isinstance(score, (int, float)) else 0
+                        cands_tier2.append((hz, "tier2", freq_like))
+                    except Exception:
+                        continue
+
+                if cands_tier2:
+                    cands = cands_tier2
+                    try:
+                        logger.debug(
+                            "revlookup tier2: composed %d candidates for '%s' via Unihan",
+                            len(cands),
+                            jy_n,
+                        )
+                    except Exception:
+                        pass
+
+            # Minimal fallback: if no composer, try single-character matches from the char map.
+            if (not cands) and isinstance(getattr(self, "_char_map", None), dict) and self._char_map:
+                matches: list[tuple[str, str, int]] = []
+                try:
+                    for ch, readings in self._char_map.items():
+                        try:
+                            for r in (readings or []):
+                                if self._normalize_jy(r) == jy_n:
+                                    matches.append((ch, "tier2-char", 1))
+                                    break
+                        except Exception:
+                            continue
+                except Exception:
+                    matches = []
+
+                if matches:
+                    cands = matches
+                    try:
+                        logger.debug(
+                            "revlookup tier2-char: %d single-character matches for '%s'",
+                            len(cands),
+                            jy_n,
+                        )
+                    except Exception:
+                        pass
+        except Exception:
+            # Any failure in tier-2 fallback should be silent from the user's perspective.
+            pass
+
+        return cands
+
+    def _maybe_reverse_jyut_phrase_fallback(
+        self,
+        jy_n: str,
+        n_syllables: int,
+        cands: list[tuple[str, str, int]],
+    ) -> list[tuple[str, str, int]]:
+        """Phrase fallback via reverse_jyut.yaml for 2+ syllables when no candidates exist."""
+        if cands:
+            return cands
+        if n_syllables < 2:
+            return cands
+
+        try:
+            rev = self._load_reverse_jyut_map() if hasattr(self, "_load_reverse_jyut_map") else {}
+            hits = (rev.get(jy_n) or []) if isinstance(rev, dict) else []
+            if hits:
+                # Give earlier hits a slightly higher pseudo-frequency
+                cands = [(hz, "reverse_jyut", max(1, len(hits) - i)) for i, hz in enumerate(hits)]
+                try:
+                    logger.debug("revlookup reverse_jyut: %d candidate(s) for '%s'", len(cands), jy_n)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        return cands
+
+    def _postprocess_candidates(
+        self,
+        cands: list[tuple[str, str, int]],
+        n_syllables: int,
+    ) -> list[tuple[str, str, int]]:
+        """Rerank, curate, phrase-filter, and dedupe candidates without UI side-effects."""
+        # Re-rank to prefer items with glosses and colloquial forms
+        try:
+            cands = self._rerank_candidates_with_meanings(cands)
+        except Exception:
+            pass
+
+        # Optional: debug after ranking
+        try:
+            logger.debug("rank: clean-first order -> %s", [c[0] for c in cands])
+        except Exception:
+            pass
+
+        # Restrict to top N, preferring colloquial entries when available
+        try:
+            ranked_hz = self._curate_top_hanzi_candidates([hz for (hz, _, _) in cands])
+            cands = [c for c in cands if c[0] in ranked_hz]
+        except Exception:
+            cands = cands[: self.MAX_HANZI_CANDIDATES]
+
+        # In phrase mode (multi-syllable Jyutping), drop single-character candidates
+        try:
+            if isinstance(cands, list) and cands and n_syllables >= 2:
+                filtered: list[tuple[str, str, int]] = []
+                for hz, src, freq in cands:
+                    try:
+                        if isinstance(hz, str) and len(hz) == 1:
+                            continue
+                    except Exception:
+                        pass
+                    filtered.append((hz, src, freq))
+                if filtered:
+                    cands = filtered
+        except Exception:
+            pass
+
+        # Deduplicate candidates by Hanzi after ranking so the combobox does not show repeats
+        try:
+            if isinstance(cands, list) and len(cands) > 1:
+                seen_hz: set[str] = set()
+                deduped: list[tuple[str, str, int]] = []
+                for hz, src, freq in cands:
+                    if hz in seen_hz:
+                        continue
+                    seen_hz.add(hz)
+                    deduped.append((hz, src, freq))
+                cands = deduped
+        except Exception:
+            pass
+
+        return cands
+
+    def _get_all_hanzi_candidates(self, jy_n: str, n_syllables: int) -> list[tuple[str, str, int]]:
+        """Acquire raw Hanzi candidates via tiered reverse lookup (no UI side-effects)."""
+        cands = self._get_reverse_candidates(jy_n)
+        cands = self._maybe_tier2_fallback_single_syllable(jy_n, n_syllables, cands)
+        cands = self._maybe_reverse_jyut_phrase_fallback(jy_n, n_syllables, cands)
+        return cands
+
+    def _prefill_candidate_gloss_cache(self, cands: list[tuple[str, str, int]]) -> None:
+        """Preload a small CC‑Canto gloss cache for current candidates (best-effort)."""
+        try:
+            from utils import get_cccanto_meanings_map
+            meanings_map = get_cccanto_meanings_map() or {}
+        except Exception:
+            meanings_map = {}
+
+        if not hasattr(self, "_cand_gloss_cache") or not isinstance(self._cand_gloss_cache, dict):
+            self._cand_gloss_cache = {}
+
+        def _hz_variants(hz: str) -> list[str]:
+            out = []
+            if not hz:
+                return out
+            out.append(hz)
+            try:
+                if hasattr(self, "_normalize_hz_variant") and callable(self._normalize_hz_variant):
+                    hz_norm = self._normalize_hz_variant(hz)
+                    if hz_norm and hz_norm not in out:
+                        out.append(hz_norm)
+            except Exception:
+                pass
+            try:
+                first, rest = hz[0], hz[1:]
+                for alt in ("阿", "亞", "亚", "吖", "呀"):
+                    if alt != first:
+                        out.append(alt + rest)
+            except Exception:
+                pass
+            return out
+
+        prefilled = 0
+        for hz, _src, _freq in cands:
+            if not hz or hz in self._cand_gloss_cache:
+                continue
+            for v in _hz_variants(hz):
+                try:
+                    glosses = meanings_map.get(v)
+                    if glosses:
+                        self._cand_gloss_cache[hz] = list(glosses)[:3]
+                        prefilled += 1
+                        break
+                except Exception:
+                    continue
+
+        if prefilled:
+            try:
+                logger.debug("prefill: cached glosses for %d/%d candidates via CC‑Canto", prefilled, len(cands))
+            except Exception:
+                pass
+
+    def _populate_candidate_combobox(
+        self,
+        cands: list[tuple[str, str, int]],
+        preferred_hz: str | None,
+    ) -> None:
+        """Populate the Hanzi candidates combobox with labels and meanings."""
+        try:
+            self._cand_combo.blockSignals(True)
+            self._cand_combo.clear()
+        except Exception:
+            return
+
+        if not cands:
+            try:
+                self._cand_combo.setVisible(False)
+            except Exception:
+                pass
+            return
+
+        items: list[tuple[str, str]] = []
+
+        for hz, src, freq in cands:
+            glosses = []
+            tag_hint = None
+
+            try:
+                glosses = self._cand_gloss_cache.get(hz, [])
+                if glosses:
+                    tag_hint = "CC"
+            except Exception:
+                pass
+
+            if not glosses:
+                try:
+                    glosses = self._get_meanings_for_hanzi(hz) or []
+                except Exception:
+                    glosses = []
+
+            if not glosses:
+                continue
+
+            try:
+                from utils import clean_glosses_for_display
+                glosses = clean_glosses_for_display(glosses)
+            except Exception:
+                pass
+
+            clean = [g for g in glosses if "[" not in g and "(" not in g]
+            shown = clean[:2] if clean else glosses[:2]
+
+            tag = tag_hint
+            if not tag:
+                try:
+                    tag = abbr_for_source(src)
+                except Exception:
+                    tag = "UNK"
+
+            label = f"{hz} — {', '.join(shown)} ({tag})"
+            if hz == preferred_hz:
+                label = f"✓ {label}"
+
+            items.append((label, hz))
+
+        try:
+            self._cand_combo.clear()
+            placeholder = "— choose a Hanzi —"
+            self._cand_combo.addItem(placeholder)
+            try:
+                m = self._cand_combo.model()
+                if m is not None:
+                    from PySide6.QtCore import Qt as _Qt_
+                    m.setData(m.index(0, 0), 0, int(_Qt_.ItemDataRole.UserRole) - 1)
+            except Exception:
+                pass
+
+            for text, data in items:
+                self._cand_combo.addItem(text, userData=data)
+
+            self._cand_combo.setCurrentIndex(0)
+            self._cand_combo.setVisible(True)
+        except Exception:
+            pass
+        finally:
+            try:
+                self._cand_combo.blockSignals(False)
+            except Exception:
+                pass
+
+    def _handle_no_hanzi_candidates(self) -> int:
+        """UI path when no candidates exist: expose manual Hanzi entry and disable candidate UI."""
+        try:
+            self._manual_hanzi_mode = False
+            for btn_name in ("btn_custom_hanzi", "btn_enter_hanzi", "btn_hanzi_custom"):
+                btn = getattr(self, btn_name, None)
+                if btn is not None:
+                    btn.setVisible(True)
+                    break
+        except Exception:
+            pass
+
+        try:
+            logger.debug("AddItem: no candidates; showing custom Hanzi entry option")
+        except Exception:
+            pass
+
+        try:
+            if getattr(self, "_add_hz", None) is not None:
+                self._add_hz.setReadOnly(False)
+                try:
+                    self._add_hz.setPlaceholderText("Type Hanzi (or paste)")
+                except Exception:
+                    pass
+                self._add_hz.clear()
+                self._add_hz.setFocus()
+        except Exception:
+            pass
+
+        try:
+            if getattr(self, "_cand_combo", None) is not None:
+                self._cand_combo.setVisible(False)
+        except Exception:
+            pass
+
+        try:
+            if hasattr(self, "_update_save_enabled") and callable(self._update_save_enabled):
+                self._update_save_enabled()
+        except Exception:
+            pass
+
+        return 0
+
+    def _set_hanzi_top_candidate(self, cands: list[tuple[str, str, int]]) -> str | None:
+        """Set Hanzi edit to the top candidate and return the preferred Hanzi."""
+        preferred_hz = None
+        try:
+            preferred_hz = cands[0][0] if isinstance(cands, list) and cands else None
+        except Exception:
+            preferred_hz = None
+
+        if preferred_hz:
+            try:
+                if getattr(self, "_add_hz", None) is not None:
+                    self._add_hz.setText(preferred_hz)
+            except Exception:
+                pass
+
+        return preferred_hz
+
+    def _clear_candidate_view_highlight(self) -> None:
+        try:
+            v = self._cand_combo.view()
+            if v is not None:
+                from PySide6.QtCore import QModelIndex
+                v.setCurrentIndex(QModelIndex())
+        except Exception:
+            pass
+
+    def _maybe_autofill_single_candidate_meanings(self, cands: list[tuple[str, str, int]]) -> None:
+        """If there is exactly one candidate, populate meanings (best-effort) and focus meanings."""
+        try:
+            if not (isinstance(cands, list) and len(cands) == 1):
+                return
+        except Exception:
+            return
+
+        single_hz = None
+        try:
+            single_hz = cands[0][0]
+        except Exception:
+            single_hz = None
+
+        if not single_hz:
+            return
+
+        try:
+            if getattr(self, "_add_hz", None) is not None:
+                self._add_hz.setText(single_hz)
+        except Exception:
+            pass
+
+        glosses_single = []
+        try:
+            if hasattr(self, "_get_meanings_for_hanzi") and callable(self._get_meanings_for_hanzi):
+                glosses_single = self._get_meanings_for_hanzi(single_hz) or []
+        except Exception:
+            glosses_single = []
+
+        if not glosses_single:
+            try:
+                from utils import get_cccanto_meanings_map
+                _mn_single = get_cccanto_meanings_map() or {}
+                glosses_single = list(_mn_single.get(single_hz, []))
+                if (not glosses_single) and hasattr(self, "_normalize_hz_variant") and callable(self._normalize_hz_variant):
+                    hz_norm = self._normalize_hz_variant(single_hz)
+                    if hz_norm and hz_norm != single_hz:
+                        glosses_single = list(_mn_single.get(hz_norm, []))
+            except Exception:
+                pass
+
+        if not glosses_single:
+            try:
+                from utils import get_cccanto_glosses_for
+                glosses_single = get_cccanto_glosses_for(single_hz) or []
+            except Exception:
+                glosses_single = []
+
+        try:
+            if getattr(self, "_add_mn", None) is not None:
+                clean = self._clean_meanings_tags(glosses_single) if hasattr(self, "_clean_meanings_tags") else list(glosses_single or [])
+                self._add_mn.setText(", ".join(clean) if clean else "")
+        except Exception:
+            pass
+
+        try:
+            if getattr(self, "_add_mn", None) is not None:
+                self._add_mn.setFocus()
+                self._add_mn.selectAll()
+        except Exception:
+            pass
+
+        try:
+            if hasattr(self, "_update_save_enabled") and callable(self._update_save_enabled):
+                self._update_save_enabled()
+        except Exception:
+            pass
+
+        try:
+            logger.debug("AddItem: auto-filled meanings for single candidate '%s' -> %r", single_hz, (glosses_single[:3] if glosses_single else []))
+        except Exception:
+            pass
+
+    def _apply_ambiguity_notes(self, jy_n: str, n_syllables: int, cands: list[tuple[str, str, int]]) -> None:
+        """Set notes based on domain ambiguity rules (UI-free logic lives in domain.category_rules)."""
+        try:
+            top_glosses = None
+            try:
+                if isinstance(cands, list) and cands:
+                    top_hz = cands[0][0]
+                    if top_hz and hasattr(self, "_get_meanings_for_hanzi") and callable(self._get_meanings_for_hanzi):
+                        top_glosses = self._get_meanings_for_hanzi(top_hz) or []
+            except Exception:
+                top_glosses = None
+
+            note = ambiguity_note(jy_n, n_syllables, cands, top_glosses)
+            if note:
+                self._set_notes(note, source="domain")
+            else:
+                self._set_notes("", source="domain")
+        except Exception:
+            # Notes are non-critical; never break the UI.
+            try:
+                self._set_notes("", source="domain")
+            except Exception:
+                pass
+
+    def _update_hanzi_tooltip_preview(self, cands: list[tuple[str, str, int]]) -> None:
+        """Tooltip preview on the Hanzi field for quick glance."""
+        try:
+            if not getattr(self, "_add_hz", None):
+                return
+        except Exception:
+            return
+
+        try:
+            if cands:
+                preview_parts = []
+                for (hz, src, freq) in cands[:6]:
+                    try:
+                        ms = []
+                        if hasattr(self, "_get_meanings_for_hanzi") and callable(self._get_meanings_for_hanzi):
+                            ms = self._get_meanings_for_hanzi(hz) or []
+                        try:
+                            from utils import clean_glosses_for_display
+                            ms = clean_glosses_for_display(ms)
+                        except Exception:
+                            pass
+                        if ms:
+                            preview_parts.append(f"{hz} — {', '.join(ms[:2])}")
+                        else:
+                            preview_parts.append(hz)
+                    except Exception:
+                        preview_parts.append(hz)
+                self._add_hz.setToolTip(", ".join(preview_parts))
+            else:
+                self._add_hz.setToolTip("No candidates found")
+        except Exception:
+            pass
+
     def _fill_hanzi_candidates(self, jy: str):
         try:
             jy_n = self._normalize_jy(jy)
@@ -1279,670 +1819,37 @@ class CategoryManagerDialog(QDialog):
             # Split normalised Jyutping into syllables so we can distinguish single-syllable vs phrase cases.
             syllables = jy_n.split()
             n_syllables = len(syllables) if syllables else 0
-            # Call the tiered reverse lookup to get candidates as (hanzi, source, freq)
-            cands = []
-            try:
-                if hasattr(self, "_reverse_candidates_for_jy") and callable(self._reverse_candidates_for_jy):
-                    cands = self._reverse_candidates_for_jy(jy_n) or []
-            except Exception:
-                cands = []
 
-            # Tier‑2 fallback is only used for single‑syllable Jyutping. For phrases (2+ syllables)
-            # we rely on phrase‑level sources (manual reverse index, CC‑Canto, CEDICT, existing vocab)
-            # and avoid Unihan char‑map heuristics to prevent bogus one‑character suggestions.
-            if (not cands) and n_syllables == 1:
-                try:
-                    compose_fn = None
-                    shortlist_fn = None
-                    if hasattr(self, "_get_compose_and_rank") and callable(self._get_compose_and_rank):
-                        try:
-                            compose_fn, shortlist_fn = self._get_compose_and_rank()
-                        except Exception:
-                            compose_fn, shortlist_fn = None, None
-
-                    # Prefer a proper composer if available
-                    if callable(compose_fn) and isinstance(getattr(self, "_char_map", None), dict) and self._char_map:
-                        try:
-                            # noinspection PyTypeChecker
-                            tier2 = compose_fn(jy_n, self._char_map) or []
-                        except Exception:
-                            tier2 = []
-                        try:
-                            if callable(shortlist_fn) and tier2:
-                                # noinspection PyTypeChecker
-                                tier2 = shortlist_fn(tier2) or tier2
-                        except Exception:
-                            pass
-                        # Expect tier2 as iterable of (hanzi, score) or (hanzi, score, src);
-                        # normalise to (hanzi, "tier2", freq_like)
-                        cands_tier2 = []
-                        for item in (tier2 or []):
-                            try:
-                                if not item:
-                                    continue
-                                if len(item) >= 2:
-                                    hz = item[0]
-                                    score = item[1]
-                                else:
-                                    continue
-                                freq_like = int(score) if isinstance(score, (int, float)) else 0
-                                cands_tier2.append((hz, "tier2", freq_like))
-                            except Exception:
-                                continue
-                        if cands_tier2:
-                            cands = cands_tier2
-                            try:
-                                logger.debug(
-                                    f"revlookup tier2: composed {len(cands)} candidates for '{jy_n}' via Unihan")
-                            except Exception:
-                                pass
-                    # Minimal fallback: if no composer, try single‑character matches from the char map.
-                    if not cands and isinstance(getattr(self, "_char_map", None), dict) and self._char_map:
-                        matches = []
-                        try:
-                            for ch, readings in self._char_map.items():
-                                try:
-                                    for r in (readings or []):
-                                        if self._normalize_jy(r) == jy_n:
-                                            matches.append((ch, "tier2-char", 1))
-                                            break
-                                except Exception:
-                                    continue
-                        except Exception:
-                            matches = []
-                        if matches:
-                            cands = matches
-                            try:
-                                logger.debug(
-                                    f"revlookup tier2-char: {len(cands)} single‑character matches for '{jy_n}'")
-                            except Exception:
-                                pass
-                except Exception:
-                    # Any failure in tier‑2 fallback should be silent from the user's perspective.
-                    pass
-
-            # Phrase fallback: if we have multiple syllables and no candidates yet, consult reverse_jyut.yaml.
-            if (not cands) and n_syllables >= 2:
-                try:
-                    rev = self._load_reverse_jyut_map() if hasattr(self, "_load_reverse_jyut_map") else {}
-                    hits = (rev.get(jy_n) or []) if isinstance(rev, dict) else []
-                    if hits:
-                        # Give earlier hits a slightly higher pseudo-frequency
-                        cands = [(hz, "reverse_jyut", max(1, len(hits) - i)) for i, hz in enumerate(hits)]
-                        logger.debug("revlookup reverse_jyut: %d candidate(s) for '%s'", len(cands), jy_n)
-                except Exception:
-                    pass
-
-            # Re-rank to prefer items with glosses and colloquial forms
-            try:
-                cands = self._rerank_candidates_with_meanings(cands)
-            except Exception:
-                pass
-            # Optional: debug after ranking
-            try:
-                logger.debug("rank: clean-first order -> %s", [c[0] for c in cands])
-            except Exception:
-                pass
-            # Restrict to top 10, preferring colloquial entries when available
-            try:
-                ranked_hz = self._curate_top_hanzi_candidates([hz for (hz, _, _) in cands])
-                cands = [c for c in cands if c[0] in ranked_hz]
-            except Exception:
-                cands = cands[: self.MAX_HANZI_CANDIDATES]
-
-            # In phrase mode (multi‑syllable Jyutping), drop single‑character candidates that
-            # typically come from char‑level heuristics. This avoids cases like 'mai5 sik1'
-            # suggesting 色 or 'mai5' → 米 only when the user clearly entered a phrase.
-            try:
-                if isinstance(cands, list) and cands and n_syllables >= 2:
-                    filtered = []
-                    for hz, src, freq in cands:
-                        try:
-                            if isinstance(hz, str) and len(hz) == 1:
-                                # Skip single‑character suggestions in phrase mode
-                                continue
-                        except Exception:
-                            pass
-                        filtered.append((hz, src, freq))
-                    # Only replace if we still have something left; otherwise keep original list
-                    # so the UI can show "no good matches" rather than silently hiding everything.
-                    if filtered:
-                        cands = filtered
-            except Exception:
-                # Any failure here should not break the dialog; we simply fall back to the raw list.
-                pass
-
-            # Deduplicate candidates by Hanzi after ranking so the combobox does not show repeats
-            try:
-                if isinstance(cands, list) and len(cands) > 1:
-                    seen_hz = set()
-                    deduped = []
-                    for hz, src, freq in cands:
-                        if hz in seen_hz:
-                            continue
-                        seen_hz.add(hz)
-                        deduped.append((hz, src, freq))
-                    cands = deduped
-            except Exception:
-                pass
+            # Use helper to get all candidates (tiered lookup)
+            cands = self._get_all_hanzi_candidates(jy_n, n_syllables)
+            # Post-process: rerank, curate, phrase-filter, and dedupe
+            cands = self._postprocess_candidates(cands, n_syllables)
 
             # If still no candidates, switch to "manual Hanzi" affordance: show the button (if present)
             # and put focus into the Hanzi field so the user can type/paste.
             if not cands:
-                # Try a few possible attribute names for the custom button (keep this tolerant).
-                try:
-                    self._manual_hanzi_mode = False
-                    for btn_name in ("btn_custom_hanzi", "btn_enter_hanzi", "btn_hanzi_custom"):
-                        btn = getattr(self, btn_name, None)
-                        if btn is not None:
-                            btn.setVisible(True)
-                            break
-                except Exception:
-                    pass
+                return self._handle_no_hanzi_candidates()
 
-                try:
-                    logger.debug("AddItem: no candidates; showing custom Hanzi entry option")
-                except Exception:
-                    pass
+            # Set the Hanzi field to the top candidate and get the preferred Hanzi
+            preferred_hz = self._set_hanzi_top_candidate(cands)
 
-                try:
-                    if getattr(self, "_add_hz", None) is not None:
-                        self._add_hz.setReadOnly(False)
-                        try:
-                            self._add_hz.setPlaceholderText("Type Hanzi (or paste)")
-                        except Exception:
-                            pass
-                        self._add_hz.clear()
-                        self._add_hz.setFocus()
-                except Exception:
-                    pass
-
-                try:
-                    # Hide the candidates combobox if it exists.
-                    if getattr(self, "_cand_combo", None) is not None:
-                        self._cand_combo.setVisible(False)
-                except Exception:
-                    pass
-
-                try:
-                    if hasattr(self, "_update_save_enabled") and callable(self._update_save_enabled):
-                        self._update_save_enabled()
-                except Exception:
-                    pass
-
-                return 0
-
-            # Update the Hanzi field with the top candidate (after re-ranking), but
-            # do not clobber any user-entered Hanzi when there are no candidates.
-            top_text = cands[0][0] if cands else None
-            if cands and top_text:
-                try:
-                    self._add_hz.setText(top_text)
-                except Exception:
-                    pass
-
-            # Define preferred Hanzi candidate for tick mark
-            preferred_hz = cands[0][0] if isinstance(cands, list) and cands else None
-
-            # Preload a small cache of glosses for current candidates using CC-Canto + variant swaps
-            try:
-                from utils import get_cccanto_meanings_map  # lazy import (may fail harmlessly)
-                _mn = get_cccanto_meanings_map() or {}
-            except Exception:
-                _mn = {}
-
-            try:
-                if not hasattr(self, "_cand_gloss_cache") or not isinstance(self._cand_gloss_cache, dict):
-                    self._cand_gloss_cache = {}
-            except Exception:
-                self._cand_gloss_cache = {}
-
-
-
-            def _hz_variants(_hz: str):
-                out = []
-                try:
-                    if _hz:
-                        out.append(_hz)
-                        # normalised variant (e.g., 亞/亚 → 阿…)
-                        try:
-                            if hasattr(self, "_normalize_hz_variant") and callable(self._normalize_hz_variant):
-                                hz_norm = self._normalize_hz_variant(_hz)
-                                if hz_norm and hz_norm not in out:
-                                    out.append(hz_norm)
-                        except Exception:
-                            pass
-                        # brute-force first-char swaps commonly seen in vocatives
-                        first, rest = _hz[0], _hz[1:]
-                        for alt in ("阿", "亞", "亚", "吖", "呀"):
-                            if alt == first:
-                                continue
-                            cand = alt + rest
-                            if cand not in out:
-                                out.append(cand)
-                except Exception:
-                    pass
-                return out
-
-            pre_enriched = 0
-            if isinstance(cands, list) and cands and _mn:
-                for (hz_s, src_s, _freq_s) in cands:
-                    try:
-                        if not hz_s or (hasattr(self, "_cand_gloss_cache") and hz_s in self._cand_gloss_cache):
-                            continue
-                        g = []
-                        for v in _hz_variants(hz_s):
-                            gg = _mn.get(v)
-                            if gg:
-                                g = list(gg)
-                                break
-                        if g:
-                            # keep up to 3 to keep labels short
-                            self._cand_gloss_cache[hz_s] = g[:3]
-                            pre_enriched += 1
-                    except Exception:
-                        continue
-                try:
-                    if pre_enriched:
-                        logger.debug("prefill: cached glosses for %d/%d candidates via CC-Canto", pre_enriched,
-                                     len(cands))
-                except Exception:
-                    pass
-
-            # Reorder candidates to prioritize entries that have clean glosses, then any glosses
-            try:
-                if isinstance(cands, list) and len(cands) > 1:
-                    def _gloss_tier(hz_chk: str) -> tuple[int, int]:
-                        # (has_clean, has_any)
-                        try:
-                            gs = []
-                            if hasattr(self, "_cand_gloss_cache") and isinstance(self._cand_gloss_cache, dict):
-                                gs = list(self._cand_gloss_cache.get(hz_chk) or [])
-                            if not gs and hasattr(self, "_get_meanings_for_hanzi") and callable(
-                                    self._get_meanings_for_hanzi):
-                                gs = self._get_meanings_for_hanzi(hz_chk) or []
-                        except Exception:
-                            gs = []
-                        has_any = 1 if gs else 0
-                        has_clean = 0
-                        for g in gs:
-                            s = str(g)
-                            if not (("[" in s and "]" in s) or ("(" in s and ")" in s)):
-                                has_clean = 1
-                                break
-                        return (has_clean, has_any)
-
-                    # Sort key: clean first, then any, then preserve prior order
-                    cands = sorted(cands, key=lambda t: (-_gloss_tier(t[0])[0], -_gloss_tier(t[0])[1]))
-                    if cands:
-                        try:
-                            self._add_hz.setText(cands[0][0])
-                        except Exception:
-                            pass
-            except Exception:
-                pass
+            # Preload a small cache of glosses for current candidates using CC‑Canto + variant swaps
+            self._prefill_candidate_gloss_cache(cands)
 
             # Populate candidates combobox with inline meanings when possible
-            try:
-                self._cand_combo.blockSignals(True)
-                self._cand_combo.clear()
-
-                if cands:
-                    # We'll collect all candidate labels and userData for later insertion after placeholder
-                    _cand_items = []
-                    for (hz, src, freq) in cands:
-                        # 1) Start from any cached CC-Canto glosses collected earlier
-                        glosses = []
-                        tag_hint = None  # prefer this if we can infer the gloss source (CC or CE)
-
-                        # Try cache populated by Tier-2 gloss-fill first
-                        try:
-                            if hasattr(self, "_cand_gloss_cache") and isinstance(self._cand_gloss_cache, dict):
-                                g0 = self._cand_gloss_cache.get(hz)
-                                if g0:
-                                    glosses = list(g0)
-                                    tag_hint = "CC"  # cache was filled from CC-Canto earlier
-                                    logger.debug("Using cached glosses for '%s': %r", hz, glosses[:3])
-                        except Exception:
-                            pass
-
-                        # Then proceed with normal fallback gloss retrieval
-                        try:
-                            if (not glosses) and hasattr(self, "_get_meanings_for_hanzi") and callable(
-                                    self._get_meanings_for_hanzi):
-                                glosses = self._get_meanings_for_hanzi(hz) or []
-                        except Exception:
-                            pass
-
-                        # 2) Enrich with CC-Canto meanings if source is CC-Canto OR still empty
-                        extra = []
-                        extra_src = None
-                        if (src == "cccanto") or (not glosses):
-                            try:
-                                from utils import get_cccanto_meanings_map  # lazy import
-                                _mn = get_cccanto_meanings_map() or {}
-
-                                # Debug: report key presence for common variants
-                                try:
-                                    has_exact = hz in _mn
-                                    hz_norm = self._normalize_hz_variant(hz) if hasattr(self,
-                                                                                        "_normalize_hz_variant") and callable(
-                                        self._normalize_hz_variant) else hz
-                                    has_norm = hz_norm in _mn
-                                    # brute-force first-char swap
-                                    swaps = []
-                                    if hz:
-                                        first, rest = hz[0], hz[1:]
-                                        for alt in ("阿", "亞", "亚"):
-                                            if alt == first:
-                                                continue
-                                            cand = alt + rest
-                                            swaps.append((cand, cand in _mn))
-                                    logger.debug("CCCanto meanings map: exact=%s norm(%s)=%s swaps=%s",
-                                                 has_exact, hz_norm, has_norm, swaps)
-                                except Exception:
-                                    pass
-
-                                # a) exact match
-                                if hz in _mn:
-                                    extra = list(_mn.get(hz, []))
-                                    if extra:
-                                        extra_src = "exact"
-                                # b) normalised variant (e.g., 亞/亚 -> 阿…)
-                                if (not extra) and hasattr(self, "_normalize_hz_variant") and callable(
-                                        self._normalize_hz_variant):
-                                    hz_norm = self._normalize_hz_variant(hz)
-                                    if hz_norm and hz_norm != hz:
-                                        extra = list(_mn.get(hz_norm, []))
-                                        if extra:
-                                            extra_src = f"norm:{hz_norm}"
-                                # c) final fallback: brute-force swap first char among 阿/亞/亚
-                                if (not extra) and hz:
-                                    first, rest = hz[0], hz[1:]
-                                    for alt in ("阿", "亞", "亚"):
-                                        if alt == first:
-                                            continue
-                                        cand = alt + rest
-                                        tmp = _mn.get(cand, [])
-                                        if tmp:
-                                            extra = list(tmp)
-                                            extra_src = f"swap:{cand}"
-                                            break
-                            except Exception:
-                                logger.debug("CCCanto meanings: cache enrich failed for '%s'", hz)
-                                extra = []
-
-                        # d) last resort: scan the CC-Canto file directly
-                        if (not extra):
-                            try:
-                                from utils import get_cccanto_glosses_for
-                                extra = get_cccanto_glosses_for(hz) or []
-                                if extra:
-                                    extra_src = "scan"
-                            except Exception:
-                                extra = []
-
-                        # Merge extras if any and log the outcome
-                        if extra:
-                            seen_m = set(glosses)
-                            for g in extra:
-                                if g not in seen_m:
-                                    glosses.append(g)
-                                    seen_m.add(g)
-                            tag_hint = "CC"  # CC-Canto contributed
-                            try:
-                                logger.debug("CCCanto meanings: merged %d from %s for '%s' -> glosses=%r",
-                                             len(extra), extra_src, hz, glosses[:3])
-                            except Exception:
-                                pass
-                        else:
-                            try:
-                                logger.debug("CCCanto meanings: none found for '%s' (src=%s)", hz, src)
-                            except Exception:
-                                pass
-
-                        # Filter: skip candidate if no glosses found after all enrichment
-                        if not glosses:
-                            try:
-                                logger.debug("Skipping '%s' — no glosses found", hz)
-                            except Exception:
-                                pass
-                            continue
-
-                        # Normalize/clean glosses for display (remove bracket/paren tags)
-                        try:
-                            from utils import clean_glosses_for_display
-                            glosses = clean_glosses_for_display(glosses)
-                        except Exception:
-                            pass
-                        # 3) Build label: prefer clean glosses (no tags) for display
-                        def _split_clean_for_label(gs: list[str]):
-                            clean, tagged = [], []
-                            for g in (gs or []):
-                                s = str(g)
-                                if ("[" in s and "]" in s) or ("(" in s and ")" in s):
-                                    tagged.append(s)
-                                else:
-                                    clean.append(s)
-                            return clean, tagged
-
-                        _clean, _tagged = _split_clean_for_label(glosses)
-                        shown = _clean[:2] if _clean else glosses[:2]
-
-                        # Determine best-effort source tag:
-                        tag = None
-                        try:
-                            if tag_hint:
-                                tag = tag_hint
-                        except Exception:
-                            tag = None
-                        if not tag:
-                            try:
-                                # If our CEDICT index exists and contains this phrase, prefer CE
-                                idx_ce = getattr(self, "_cedict", None)
-                                if isinstance(idx_ce, dict) and hz in idx_ce:
-                                    tag = "CE"
-                            except Exception:
-                                pass
-                        if not tag:
-                            try:
-                                tag = abbr_for_source(src)
-                            except Exception:
-                                tag = "UNK"
-
-                        label = f"{hz} — {', '.join(shown)} ({tag})"
-                        # Prepend tick mark for the preferred candidate
-                        if hz == preferred_hz:
-                            label = f"✓ {label}"
-                        try:
-                            logger.debug("AddItem: label='%s' (src_declared=%s, tag_hint=%s)", label, src,
-                                         tag_hint)
-                            logger.debug("AddItem: candidate='%s' src=%s glosses=%d", hz, src, len(glosses))
-                        except Exception:
-                            pass
-
-                        _cand_items.append((label, hz))
-
-                    # Insert disabled placeholder and reset selection
-                    try:
-                        existing = list(_cand_items)
-                        self._cand_combo.clear()
-                        placeholder = "— choose a Hanzi —"
-                        self._cand_combo.addItem(placeholder)
-                        try:
-                            m = self._cand_combo.model()
-                            if m is not None:
-                                from PySide6.QtCore import Qt as _Qt_
-                                m.setData(m.index(0, 0), 0, int(_Qt_.ItemDataRole.UserRole) - 1)
-                        except Exception:
-                            pass
-                        for text, data in existing:
-                            self._cand_combo.addItem(text, userData=data)
-                        self._cand_combo.setCurrentIndex(0)
-                    except Exception:
-                        pass
-
-                    # make sure the dropdown is visible if we added any items
-                    try:
-                        self._cand_combo.setVisible(self._cand_combo.count() > 0)
-                    except Exception:
-                        pass
-                else:
-                    try:
-                        self._cand_combo.setVisible(False)
-                    except Exception:
-                        pass
-            except Exception:
-                # Defensive cleanup on unexpected errors in the UI fill
-                try:
-                    self._cand_combo.clear()
-                    self._cand_combo.setVisible(False)
-                except Exception:
-                    pass
-            finally:
-                try:
-                    self._cand_combo.blockSignals(False)
-                except Exception:
-                    pass
+            self._populate_candidate_combobox(cands, preferred_hz)
 
             # Clear any pre-highlight in combobox view
-            try:
-                v = self._cand_combo.view()
-                if v is not None:
-                    from PySide6.QtCore import QModelIndex
-                    v.setCurrentIndex(QModelIndex())
-            except Exception:
-                pass
+            self._clear_candidate_view_highlight()
 
             # If exactly one candidate, auto-copy its glosses into Meanings and focus there
-            try:
-                if isinstance(cands, list) and len(cands) == 1:
-                    single_hz = cands[0][0]
-                    try:
-                        if getattr(self, "_add_hz", None) is not None:
-                            self._add_hz.setText(single_hz)
-                    except Exception:
-                        pass
-                    # Re-derive glosses using the same sources used for labels
-                    glosses_single = []
-                    try:
-                        if hasattr(self, "_get_meanings_for_hanzi") and callable(self._get_meanings_for_hanzi):
-                            glosses_single = self._get_meanings_for_hanzi(single_hz) or []
-                    except Exception:
-                        glosses_single = []
+            self._maybe_autofill_single_candidate_meanings(cands)
 
-                    if not glosses_single:
-                        try:
-                            from utils import get_cccanto_meanings_map
-                            _mn_single = get_cccanto_meanings_map() or {}
-                            glosses_single = list(_mn_single.get(single_hz, []))
-                            if (not glosses_single) and hasattr(self, "_normalize_hz_variant") and callable(
-                                    self._normalize_hz_variant):
-                                hz_norm = self._normalize_hz_variant(single_hz)
-                                if hz_norm and hz_norm != single_hz:
-                                    glosses_single = list(_mn_single.get(hz_norm, []))
-                        except Exception:
-                            pass
-
-                    if not glosses_single:
-                        try:
-                            from utils import get_cccanto_glosses_for
-                            glosses_single = get_cccanto_glosses_for(single_hz) or []
-                        except Exception:
-                            glosses_single = []
-
-                    try:
-                        clean = self._clean_meanings_tags(glosses_single) if hasattr(self,
-                                                                                     "_clean_meanings_tags") else list(
-                            glosses_single or [])
-                        self._add_mn.setText(", ".join(clean) if clean else "")
-                    except Exception:
-                        pass
-                    try:
-                        if self._add_mn is not None:
-                            self._add_mn.setFocus()
-                            self._add_mn.selectAll()
-                    except Exception:
-                        pass
-                    try:
-                        if hasattr(self, "_update_save_enabled") and callable(self._update_save_enabled):
-                            self._update_save_enabled()
-                    except Exception:
-                        pass
-                    try:
-                        logger.debug("AddItem: auto-filled meanings for single candidate '%s' -> %r",
-                                     single_hz, (glosses_single[:3] if glosses_single else []))
-                    except Exception:
-                        pass
-            except Exception:
-                pass
-
-            #            # --- Ambiguity → notes (deterministic; do not persist for auto-default) ---
-            try:
-                ambiguous = False
-
-                # 1) Multiple candidates is inherently ambiguous.
-                if isinstance(cands, list) and len(cands) > 1:
-                    ambiguous = True
-
-                # 2) Multi-syllable Jyutping with no candidates is ambiguous (likely phrase not captured).
-                if n_syllables >= 2 and (not cands):
-                    ambiguous = True
-
-                # 3) If we have a top candidate, check if it has multiple senses.
-                top_hz = None
-                try:
-                    if isinstance(cands, list) and cands:
-                        top_hz = cands[0][0]
-                except Exception:
-                    top_hz = None
-
-                if top_hz:
-                    top_glosses = []
-                    try:
-                        if hasattr(self, "_get_meanings_for_hanzi") and callable(self._get_meanings_for_hanzi):
-                            top_glosses = self._get_meanings_for_hanzi(top_hz) or []
-                    except Exception:
-                        top_glosses = []
-                    if isinstance(top_glosses, list) and len(top_glosses) > 1:
-                        ambiguous = True
-
-                if ambiguous:
-                    self._set_notes(
-                        "Ambiguity detected. Please confirm Hanzi and meaning match your intended use.",
-                        source="chatgpt-style",
-                    )
-                else:
-                    self._set_notes("", source="auto-default")
-            except Exception:
-                pass
+            # Ambiguity → notes (deterministic; do not persist for auto-default)
+            self._apply_ambiguity_notes(jy_n, n_syllables, cands)
 
             # Tooltip preview on the Hanzi field for quick glance
-            try:
-                if cands:
-                    preview_parts = []
-                    for (hz, src, freq) in cands[:6]:
-                        try:
-                            ms = []
-                            if hasattr(self, "_get_meanings_for_hanzi") and callable(
-                                    self._get_meanings_for_hanzi):
-                                ms = self._get_meanings_for_hanzi(hz) or []
-                            try:
-                                from utils import clean_glosses_for_display
-                                ms = clean_glosses_for_display(ms)
-                            except Exception:
-                                pass
-                            if ms:
-                                preview_parts.append(f"{hz} — {', '.join(ms[:2])}")
-                            else:
-                                preview_parts.append(hz)
-                        except Exception:
-                            preview_parts.append(hz)
-                    self._add_hz.setToolTip(", ".join(preview_parts))
-                else:
-                    self._add_hz.setToolTip("No candidates found")
-            except Exception:
-                pass
+            self._update_hanzi_tooltip_preview(cands)
 
             # Nudge UI to update immediately
             try:

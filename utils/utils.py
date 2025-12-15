@@ -199,7 +199,7 @@ def find_same_english_across_keys_canonical(data):
 # ----------------------------
 # YAML loading for ANDYS_LIST
 # ----------------------------
-def load_andys_list_yaml(path="andys_list.yaml"):
+def load_andys_list_yaml(path="data/andys_list.yaml"):
     """Load and validate the canonical mapping from a YAML file.
 
     Expected YAML structure:
