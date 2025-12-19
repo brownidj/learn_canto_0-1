@@ -1,12 +1,9 @@
-import csv
-import json
 import logging
 import os
+import re
 import shlex
 import sys
 import tempfile
-import re
-from functools import partial
 
 import yaml
 
@@ -16,12 +13,12 @@ from PySide6.QtWidgets import (
     QApplication, QWidget, QLabel, QPushButton,
     QVBoxLayout, QHBoxLayout, QGroupBox, QLineEdit,
     QTextEdit, QComboBox, QToolButton, QSlider, QDialog, QMessageBox,
-    QTableWidgetItem, QSizePolicy,
-    QListView, QLayout,
+    QSizePolicy,
+    QLayout,
 )
 from PySide6.QtUiTools import QUiLoader
-from PySide6.QtCore import QFile, QIODevice, Qt, QTimer, QProcess, QEvent, Signal, QObject
-from PySide6.QtGui import QFontMetrics, QStandardItemModel, QStandardItem
+from PySide6.QtCore import QFile, QIODevice, Qt, QTimer, QProcess, QEvent, QObject
+from PySide6.QtGui import QFontMetrics
 
 from settings import load_all, save_one, reset_all, bounds
 from category_manager import CategoryManagerDialog
@@ -46,7 +43,7 @@ def _load_vocab_from_unified_yaml():
     categories_map: {category: [hanzi, ...]}
     """
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    path = os.path.join(base_dir,"data", "vocab.yaml")
+    path = os.path.join(base_dir, "data", "vocab.yaml")
     if not os.path.exists(path):
         logger.warning("vocab.yaml not found at: %s", path)
         return {}, {}
@@ -123,24 +120,25 @@ def _load_vocab_from_unified_yaml():
 
 # === Reverse lookup helpers (Tier 1 & 2) ===
 try:
-    # Tier 1: reverse index from andys_list.yaml + reverse_manual.yaml + frequencies
-    # Tier 2: Unihan char map composition
-    from utils.utils import (
-        load_andys_list_yaml,
-        load_unihan_char_map,
+    from infra.hanzi_composition import (
         compose_candidates_from_chars,
-        build_reverse_index,
-        get_unihan_char_map,
         shortlist_candidates,
-        get_cccanto_reverse_map, _norm_jy_key
     )
-except Exception:  # keep app running even if utils missing
-    load_andys_list_yaml = None
-    load_unihan_char_map = None
+except Exception:
     compose_candidates_from_chars = None
-    build_reverse_index = None
-    get_unihan_char_map = None
     shortlist_candidates = None
+
+
+# Tier 1 reverse index files + Unihan JSON loading are infrastructure concerns.
+try:
+    from infra.reverse_index import load_reverse_index_files
+except Exception:
+    load_reverse_index_files = None
+
+try:
+    from infra.unihan import load_unihan_char_map
+except Exception:
+    load_unihan_char_map = None
 
 
 # ===== DEBUG: add_item.ui layout introspection =====
@@ -820,7 +818,6 @@ if __name__ == "__main__":
         if label_hanzi is not None:
             # from PySide6.QtCore import QObject
 
-
             class _HanziSizer(QObject):
                 def eventFilter(self, obj, event):
                     if obj is label_hanzi and event.type() == QEvent.Resize:
@@ -1068,126 +1065,38 @@ if __name__ == "__main__":
         _default_voice = _pick_cantonese_voice()
         logger.debug("Detected voices: %d, default=%s", len(_available_voices), _default_voice)
 
-        # Ensure a shared Unihan char map is available as a dict (not a callable)
-        try:
-            _get_map_fn = get_unihan_char_map  # may be None if utils import failed
-        except NameError:
-            _get_map_fn = None
+        # Ensure a shared Unihan char map is available as a dict.
         try:
             cmap = {}
-            # Prefer a previously cached dict if present
             prev = getattr(window, "_char_map", None)
             if isinstance(prev, dict) and prev:
                 cmap = prev
             else:
-                if callable(_get_map_fn):
-                    try:
-                        cmap = _get_map_fn()
-                    except Exception:
-                        cmap = {}
-                # If still empty, try a direct JSON load as a fallback
-                if not isinstance(cmap, dict) or not cmap:
+                base_dir = os.path.dirname(os.path.abspath(__file__))
+                if callable(load_unihan_char_map):
+                    cmap = load_unihan_char_map(base_dir) or {}
+                else:
+                    cmap = {}
 
-                    base_dir = os.path.dirname(os.path.abspath(__file__))
-                    json_path = os.path.join(base_dir, "data", "Unihan", "unihan_cantonese_chars.json")
-                    if os.path.exists(json_path):
-                        try:
-                            with open(json_path, "r", encoding="utf-8") as fh:
-                                raw = json.load(fh)
-                            norm = {}
-                            if isinstance(raw, dict):
-                                for ch, vals in raw.items():
-                                    if ch and isinstance(ch, str) and len(ch) == 1:
-                                        if isinstance(vals, str):
-                                            norm[ch] = [vals]
-                                        elif isinstance(vals, (list, tuple, set)):
-                                            norm[ch] = [str(v) for v in vals if v is not None]
-                                        else:
-                                            norm[ch] = [str(vals)]
-                            cmap = norm
-                        except Exception:
-                            cmap = {}
             setattr(window, "_char_map", cmap if isinstance(cmap, dict) else {})
-            logger.debug("Unihan char_map ready: %d entries (shared)", len(getattr(window, "_char_map", {}) or {}))
-
+            logger.debug(
+                "Unihan char_map ready: %d entries (shared)",
+                len(getattr(window, "_char_map", {}) or {}),
+            )
         except Exception as _e:
             setattr(window, "_char_map", {})
             logger.debug("Unihan shared map not available: %r", _e)
 
 
-        # -----------------------------
-        # Reverse index (Tier 1) loader + Tier 2 fallback
-        # -----------------------------
-        def _load_reverse_index_files() -> dict:
-            """Load auto-generated reverse indices.
-            Accepts two optional files:
-              - data/reverse_manual.yaml (authoritative, multi-candidate per jyut)
-              - data/reverse_cache.yaml  (memoized fallback from previous runs)
-            Returns {jyut -> [(hanzi, source, score_int), ...]}
-            """
-            base_dir = os.path.dirname(os.path.abspath(__file__))
-            out: dict[str, list[tuple[str, str, int]]] = {}
-
-            def _merge_from_yaml(path: str, tag: str):
-                if not os.path.exists(path):
-                    return
-                try:
-                    with open(path, "r", encoding="utf-8") as fh:
-                        raw = yaml.safe_load(fh) or {}
-                except Exception as e:
-                    logger.debug("reverse index load failed for %s: %s", path, e)
-                    return
-                if not isinstance(raw, dict):
-                    return
-                added, keys = 0, 0
-                for jy, items in raw.items():
-                    keys += 1
-                    try:
-                        jy_n = " ".join(str(jy).strip().lower().split())
-                        if not jy_n:
-                            continue
-                        lst = out.setdefault(jy_n, [])
-                        if isinstance(items, list):
-                            for it in items:
-                                if isinstance(it, dict):
-                                    hz = str(it.get("hanzi", "")).strip()
-                                    if not hz:
-                                        continue
-                                    src = str(it.get("source", tag)).strip() or tag
-                                    sc = it.get("score", 0)
-                                    try:
-                                        sc_i = int(round(float(sc)))
-                                    except Exception:
-                                        sc_i = 0
-                                    tup = (hz, src, sc_i)
-                                    if tup not in lst:
-                                        lst.append(tup)
-                                        added += 1
-                        # Also accept simple list[str] form
-                        elif isinstance(items, (tuple, set)):
-                            for hz in items:
-                                s = str(hz).strip()
-                                if s and (s, tag, 0) not in lst:
-                                    lst.append((s, tag, 0))
-                                    added += 1
-                    except Exception:
-                        continue
-                logger.debug("reverse index loaded from %s: %d keys, %d candidates", path, keys, added)
-
-            # Prefer project-relative data files
-            _merge_from_yaml(os.path.join(base_dir, "data", "reverse_manual.yaml"), tag="reverse_manual")
-            _merge_from_yaml(os.path.join(base_dir, "data", "reverse_cache.yaml"), tag="reverse_cache")
-            # Also accept root-level files if present
-            _merge_from_yaml(os.path.join(base_dir, "reverse_manual.yaml"), tag="reverse_manual")
-            _merge_from_yaml(os.path.join(base_dir, "reverse_cache.yaml"), tag="reverse_cache")
-
-            logger.debug("reverse index total keys: %d", len(out))
-            return out
 
 
         # Attach a reverse index onto the main window
         try:
-            window._reverse_index = _load_reverse_index_files()
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            if callable(load_reverse_index_files):
+                window._reverse_index = load_reverse_index_files(base_dir)
+            else:
+                window._reverse_index = {}
         except Exception:
             window._reverse_index = {}
 
@@ -1212,12 +1121,6 @@ if __name__ == "__main__":
                         logger.debug("revlookup tier1: %d candidates for '%s'", len(hits), jy_n)
                         return list(hits)
             except Exception:
-                pass
-            try:
-                _ccc_rev = get_cccanto_reverse_map()
-                window._ccc_rev = _ccc_rev
-                logger.debug("reverse index (CC-Canto) size: %d jy-keys", len(_ccc_rev))
-            except:
                 pass
 
             # Tier 2: compose from Unihan and rank via utils
@@ -1264,6 +1167,7 @@ if __name__ == "__main__":
 
             logger.debug("revlookup tier2: compose function or char_map unavailable for '%s'", jy_n)
             return []
+
 
         def _commit_vocab_entry_from_dialog(entry: dict):
             """
@@ -1497,6 +1401,7 @@ if __name__ == "__main__":
                 current_cat = "All"
             controller.apply_category_filter(current_cat)
 
+
         # (MultiCategoryCombo class definition removed)
 
         def _load_add_item_dialog(parent):
@@ -1519,6 +1424,7 @@ if __name__ == "__main__":
                 return dlg
             finally:
                 file.close()
+
 
         # Tones & Radicals toggle: show/hide both groups together
         btn_tr = window.findChild(QToolButton, "btnTonesAndRadicalsToggle")

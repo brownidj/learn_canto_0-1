@@ -2041,27 +2041,21 @@ class CategoryManagerDialog(QDialog):
     def _get_compose_and_rank(self):
         """Return (compose_fn, shortlist_fn) for tier-2 Hanzi candidate generation.
 
-        Keeps domain.hanzi_candidate_pipeline free of utils imports.
+        This dialog stays orchestration-only. Tier-2 composition/shortlisting is an
+        infrastructure concern and lives in `infra.hanzi_composition`.
         """
         compose_fn = None
         shortlist_fn = None
 
-        # Use dynamic imports to avoid hard dependencies and to keep this module free of
-        # static utils imports (architecture boundary).
         try:
-            import importlib
-
-            _u = importlib.import_module("utils.utils")
-            compose_fn = getattr(_u, "compose_candidates_from_chars", None)
+            from infra.hanzi_composition import compose_candidates_from_chars as _compose
+            compose_fn = _compose
         except Exception:
             compose_fn = None
 
-        # shortlist is optional; absence preserves behaviour (no shortlisting)
         try:
-            import importlib
-
-            _u = importlib.import_module("utils.utils")
-            shortlist_fn = getattr(_u, "shortlist_candidates", None)
+            from infra.hanzi_composition import shortlist_candidates as _shortlist
+            shortlist_fn = _shortlist
         except Exception:
             shortlist_fn = None
 
