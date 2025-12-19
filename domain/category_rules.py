@@ -11,8 +11,9 @@ It centralises:
 
 from __future__ import annotations
 
-from typing import Any, List
 import os
+import re
+from typing import Callable, Optional, Any, List
 
 import yaml
 
@@ -91,10 +92,10 @@ def prefer_meanings(primary: Any, fallback: Any) -> List[str]:
 
 
 def detect_ambiguity(
-    *,
-    candidates: Any,
-    n_syllables: Any,
-    meanings_for_hanzi: Any = None,
+        *,
+        candidates: Any,
+        n_syllables: Any,
+        meanings_for_hanzi: Any = None,
 ) -> bool:
     """Return True when the current resolution should be treated as ambiguous.
 
@@ -142,6 +143,7 @@ def detect_ambiguity(
             pass
 
     return False
+
 
 def ambiguity_note(jy_n: object, n_syllables: object, candidates: object, top_glosses: object = None) -> str:
     """Return a non-empty note if the candidate set should be treated as ambiguous.
@@ -295,6 +297,54 @@ def abbr_for_source(src: str) -> str:
     return s3 or "UNK"
 
 
+def normalize_jyutping(s: str) -> str:
+    """Normalise Jyutping input for consistent comparisons."""
+    try:
+        return " ".join((s or "").strip().lower().split())
+    except Exception:
+        return (s or "").strip().lower()
+
+
+def validate_jyut_syllables(jy: str) -> bool:
+    """Structural validator: each syllable must end with a tone digit 1–6.
+
+    Accepts 'm' and 'ng' as whole-syllable nuclei (with tone), e.g., m4, ng5.
+    """
+    jy_n = normalize_jyutping(jy)
+    if not jy_n:
+        return False
+
+    parts = [p for p in jy_n.split(" ") if p]
+    if not parts:
+        return False
+
+    syl_pat = re.compile(r"^(?:m|ng|[a-z]+)[1-6]$")
+    for syl in parts:
+        if not syl_pat.match(syl):
+            return False
+    return True
+
+
+def attested_or_structural_ok(
+        jy: str,
+        *,
+        is_attested_phrase: Optional[Callable[[str], bool]] = None,
+) -> bool:
+    """Prefer attestation when available, otherwise fall back to structural validity."""
+    jy_n = normalize_jyutping(jy)
+    if not jy_n:
+        return False
+
+    if callable(is_attested_phrase):
+        try:
+            if is_attested_phrase(jy_n):
+                return True
+        except Exception:
+            pass
+
+    return validate_jyut_syllables(jy_n)
+
+
 __all__ = [
     "CATEGORY_PLACEHOLDER_TEXT",
     "is_category_placeholder",
@@ -305,4 +355,8 @@ __all__ = [
     "HanziStyleIndex",
     "CandidateCurator",
     "abbr_for_source",
+    "ambiguity_note",
+    "normalize_jyutping",
+    "validate_jyut_syllables",
+    "attested_or_structural_ok",
 ]

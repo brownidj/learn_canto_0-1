@@ -15,14 +15,12 @@ Notes
 - All helpers are pure and have no side effects (no file I/O).
 """
 
-import io, re, csv
-import logging
-import math
+import io, csv, os, logging, math, re, json
+import yaml
 # --- add (or keep) these imports near the top ---
-import os
 from statistics import mean, pstdev
 from functools import lru_cache
-
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 # Cache for CC-Canto meanings by Hanzi (filled by get_cccanto_reverse_map)
@@ -199,19 +197,27 @@ def find_same_english_across_keys_canonical(data):
 # ----------------------------
 # YAML loading for ANDYS_LIST
 # ----------------------------
-def load_andys_list_yaml(path="data/andys_list.yaml"):
+def load_andys_list_yaml(path: str | None = None) -> dict:
     """Load and validate the canonical mapping from a YAML file.
 
     Expected YAML structure:
         Hanzi: [[english...], jyutping]
+
+    If `path` is None, uses the standard project path from
+    `domain.storage_paths.andys_list_yaml_path()`.
+
     Returns: { hanzi: [[english...], jyutping] }
     """
-    if not os.path.exists(path):
-        raise IOError("andys_list.yaml not found at: {}".format(os.path.abspath(path)))
-    with io.open(path, 'r', encoding='utf-8') as fh:
-        data = yaml.safe_load(fh.read()) or {}
+    if path:
+        p = Path(path)
+    else:
+        from domain.storage_paths import andys_list_yaml_path
+        p = andys_list_yaml_path()
 
-    out = {}
+    with p.open("r", encoding="utf-8") as fh:
+        data = yaml.safe_load(fh) or {}
+
+    out: dict[str, list] = {}
 
     for hanzi, val in data.items():
         if isinstance(val, list) and len(val) == 2 and isinstance(val[0], list) and isinstance(val[1], str):
@@ -227,6 +233,7 @@ def load_andys_list_yaml(path="data/andys_list.yaml"):
             meanings = [str(val)]
             jyut = ""
         out[str(hanzi)] = [meanings, jyut]
+
     return out
 
 
@@ -436,8 +443,7 @@ UNIHAN_CHARMAP_DEFAULT = os.path.join("../data", "Unihan", "unihan_cantonese_cha
 
 
 # utils.py
-import os, csv, re, logging
-logger = logging.getLogger(__name__)
+# logger = logging.getLogger(__name__)
 
 def _norm_jy_key(s: str) -> str:
     return " ".join((s or "").strip().lower().split())
@@ -725,7 +731,6 @@ def load_overrides_gloss_yaml(path: str = None) -> dict[str, list[str]]:
     try:
         if not os.path.exists(use_path):
             return {}
-        import yaml
         with open(use_path, "r", encoding="utf-8") as fh:
             data = yaml.safe_load(fh) or {}
         out = {}
@@ -845,7 +850,6 @@ def load_reverse_manual_yaml(path: str = REVERSE_MANUAL_DEFAULT) -> dict:
 #       - ./cccanto.txt
 #     Returns: dict[jy_norm] -> list[{"hanzi": ..., "meanings": [...]}]
 #     """
-#     import os, re
 #     candidates = [
 #         os.path.join("data", "cccanto.txt"),
 #         "cccanto.txt",
@@ -971,7 +975,6 @@ def reverse_candidates(jy: str, reverse_index: dict, top_n: int = 10) -> list[tu
 # ----------------------------
 
 # utils.py — robust Unihan loader + composer
-import os, json
 from itertools import product
 
 
@@ -1328,7 +1331,6 @@ def export_categories_overview_md(andys_path: str = "andys_list.yaml",
                                   categories_path: str = "categories.yaml",
                                   out_path: str = "categories_overview.md") -> str:
     """Write a readable Markdown overview: per-category lists + a global index table."""
-    from utils import load_andys_list_yaml  # reuse your existing loader
     vocab = _normalise_vocab(load_andys_list_yaml(andys_path))
     cats = load_categories_yaml(categories_path)
     idx = _build_category_index(cats)
@@ -1367,7 +1369,6 @@ def export_categories_csv(andys_path: str = "andys_list.yaml",
                           categories_path: str = "categories.yaml",
                           out_path: str = "categories_export.csv") -> str:
     """Write CSV: Hanzi,Jyutping,Meanings,Categories (multi-values are '; ' joined)."""
-    from utils import load_andys_list_yaml
     vocab = _normalise_vocab(load_andys_list_yaml(andys_path))
     cats = load_categories_yaml(categories_path)
     idx = _build_category_index(cats)
@@ -1387,7 +1388,6 @@ def validate_categories_md(andys_path: str = "andys_list.yaml",
                            categories_path: str = "categories.yaml",
                            out_path: str = "categories_validation.md") -> str:
     """Write a validation report (Markdown) and return its absolute path."""
-    from utils import load_andys_list_yaml
     vocab = _normalise_vocab(load_andys_list_yaml(andys_path))
     cats = load_categories_yaml(categories_path)
     idx = _build_category_index(cats)
@@ -1510,7 +1510,6 @@ if __name__ == "__main__":
             print("ERROR:", e)
 
 from typing import Iterable, Dict, List, Tuple, Optional
-import os, csv, yaml
 
 COMMON_CJK_MIN = 0x4E00
 COMMON_CJK_MAX = 0x9FFF

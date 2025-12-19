@@ -126,3 +126,4 @@ def test_particles_do_not_inherit_noun_meanings():
     """
     meanings = ["now", "for now"]
     assert "sound of singing" not in meanings
+

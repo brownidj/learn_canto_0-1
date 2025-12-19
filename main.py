@@ -124,7 +124,7 @@ def _load_vocab_from_unified_yaml():
 try:
     # Tier 1: reverse index from andys_list.yaml + reverse_manual.yaml + frequencies
     # Tier 2: Unihan char map composition
-    from utils import (
+    from utils.utils import (
         load_andys_list_yaml,
         load_unihan_char_map,
         compose_candidates_from_chars,
