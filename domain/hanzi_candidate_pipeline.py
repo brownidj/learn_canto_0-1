@@ -492,7 +492,7 @@ def build_pipeline_from_category_manager(dialog: object) -> HanziCandidatePipeli
     if not isinstance(char_map, dict):
         char_map = {}
 
-    # Meaning providers + display-cleaning: ONLY via dialog-provided callables.
+    # Meaning providers: ONLY via dialog-provided callables.
     cc_glosses_for = getattr(dialog, "get_cccanto_glosses_for", None)
     if not callable(cc_glosses_for):
         cc_glosses_for = getattr(dialog, "_cc_glosses_for", None)
@@ -501,9 +501,11 @@ def build_pipeline_from_category_manager(dialog: object) -> HanziCandidatePipeli
     if not callable(cedict_for):
         cedict_for = getattr(dialog, "_cedict_meanings_for", None)
 
-    gloss_cleaner = getattr(dialog, "clean_glosses_for_display", None)
-    if not callable(gloss_cleaner):
-        gloss_cleaner = getattr(dialog, "_gloss_cleaner", None)
+    # Gloss cleaning is a domain concern for this pipeline; do not accept UI-provided cleaners.
+    try:
+        from domain.meaning_sources import clean_glosses_for_display as gloss_cleaner
+    except Exception:
+        gloss_cleaner = None
 
     curate = None
     curator = getattr(dialog, "_candidate_curator", None)

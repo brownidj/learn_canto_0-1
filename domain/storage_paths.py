@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+
 from typing import Iterable, Optional
 
 
@@ -74,7 +75,90 @@ def resolve_data_file(
     return ordered[0]
 
 
+# --- Generic helper for multiple candidate files ---
+from typing import Iterable
+def resolve_first_existing_data_file(
+    filenames: Iterable[str],
+    *,
+    project_dir: Optional[Path] = None,
+    prefer_data_dir: bool = True,
+) -> Optional[Path]:
+    """Return the first existing data file among multiple candidate filenames.
+
+    This is used when historical projects may have different canonical filenames
+    for the same logical dataset.
+
+    Unlike `resolve_data_file`, this returns None when nothing exists.
+    """
+    paths = get_project_paths(project_dir)
+
+    def _ordered_paths(name: str) -> tuple[Path, Path]:
+        in_data = paths.data_dir / name
+        in_root = paths.project_dir / name
+        return (in_data, in_root) if prefer_data_dir else (in_root, in_data)
+
+    for name in filenames:
+        try:
+            n = str(name).strip()
+        except Exception:
+            continue
+        if not n:
+            continue
+
+        p1, p2 = _ordered_paths(n)
+        for p in (p1, p2):
+            try:
+                if p.exists() and p.is_file():
+                    return p
+            except Exception:
+                continue
+
+    return None
+
+
 # --- Specific well-known files ---
+
+# --- Meaning source datasets ---
+
+def cccanto_meanings_map_path(*, project_dir: Optional[Path] = None) -> Optional[Path]:
+    """Best-effort location of the CC-Canto meanings map.
+
+    Supports legacy root-level files while preferring `data/`.
+    """
+    return resolve_first_existing_data_file(
+        [
+            "cccanto_meanings_map.yaml",
+            "cccanto_meanings.yaml",
+            "cccanto_meanings.yml",
+        ],
+        project_dir=project_dir,
+        prefer_data_dir=True,
+    )
+
+
+def cedict_meanings_map_json_path(*, project_dir: Optional[Path] = None) -> Optional[Path]:
+    """Best-effort location of a JSON CEDICT meanings map."""
+    return resolve_first_existing_data_file(
+        [
+            "cedict_meanings_map.json",
+            "cedict_meanings.json",
+        ],
+        project_dir=project_dir,
+        prefer_data_dir=True,
+    )
+
+
+def cedict_meanings_map_yaml_path(*, project_dir: Optional[Path] = None) -> Optional[Path]:
+    """Best-effort location of a YAML CEDICT meanings map."""
+    return resolve_first_existing_data_file(
+        [
+            "cedict_meanings_map.yaml",
+            "cedict_meanings.yaml",
+            "cedict_meanings.yml",
+        ],
+        project_dir=project_dir,
+        prefer_data_dir=True,
+    )
 
 def categories_yaml_path(*, project_dir: Optional[Path] = None) -> Path:
     return resolve_data_file("categories.yaml", project_dir=project_dir, prefer_data_dir=True)

@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
 )
 
+from domain.attestation import is_attested_phrase
 # ----------------------------------------
 # Domain imports
 # ----------------------------------------
@@ -40,10 +41,9 @@ from domain.category_rules import (
     attested_or_structural_ok,
 )
 from domain.hanzi_candidate_pipeline import HanziCandidatePipeline, build_pipeline_from_category_manager
+from domain.jyutping_validation import validate_jyut_syllables
 from domain.meaning_sources import MeaningFacade, default_facade, clean_glosses_for_display  # type: ignore
 from domain.storage_paths import categories_yaml_path
-from domain.jyutping_validation import validate_jyut_syllables
-from domain.attestation import is_attested_phrase
 
 logger = logging.getLogger(__name__)
 
@@ -222,7 +222,8 @@ class CategoryManagerDialog(QDialog):
             self._hanzi_pipeline = HanziCandidatePipeline(normalize_jyutping=self._normalize_jy)
         except Exception:
             # Last-ditch: keep attribute present even if something is badly wrong.
-            self._hanzi_pipeline = HanziCandidatePipeline(normalize_jyutping=lambda s: " ".join((s or "").strip().lower().split()))
+            self._hanzi_pipeline = HanziCandidatePipeline(
+                normalize_jyutping=lambda s: " ".join((s or "").strip().lower().split()))
 
     def _init_meaning_resolver(self) -> None:
         """Initialise the meaning resolver (optional)."""
@@ -681,7 +682,6 @@ class CategoryManagerDialog(QDialog):
             return " ".join((s or "").strip().lower().split())
         except Exception:
             return (s or "").strip().lower()
-
 
     def _update_save_enabled(self):
         """
@@ -1713,6 +1713,14 @@ class CategoryManagerDialog(QDialog):
         except Exception:
             pass
 
+    def _validate_jyut_syllables(self, jy: str) -> tuple[bool, str | None]:
+        """Back-compat helper for regression tests.
+
+        This method must contain no validation heuristics; it delegates to the
+        module-level `validate_jyut_syllables`, imported from
+        `domain.jyutping_validation`.
+        """
+        return validate_jyut_syllables(jy)
 
     def _has_valid_inputs(self) -> bool:
         """
@@ -2060,41 +2068,70 @@ class CategoryManagerDialog(QDialog):
         return compose_fn, shortlist_fn
 
     def get_cccanto_glosses_for(self, hanzi: str):
-        """UI shim: provide CC-Canto glosses for a Hanzi candidate (if available)."""
-        try:
-            import importlib
+        """Best-effort CC-Canto glosses for a Hanzi candidate.
 
-            _u = importlib.import_module("utils.utils")
-            _cc_for = getattr(_u, "get_cccanto_glosses_for", None)
-            if callable(_cc_for):
-                return list(_cc_for(hanzi) or [])
+        Domain owns meaning sources; the dialog should not reach into `utils`.
+        """
+        hz = (str(hanzi) or "").strip()
+        if not hz:
             return []
+
+        # Prefer the resolver attached to the dialog/facade (if present).
+        try:
+            resolver = getattr(self, "_meaning_resolver", None)
+            cc_for = getattr(resolver, "cc_glosses_for", None) if resolver is not None else None
+            if callable(cc_for):
+                out = cc_for(hz)
+                return [str(x).strip() for x in (out or []) if str(x).strip()]
+        except Exception:
+            pass
+
+        # Fallback: use the default domain resolver.
+        try:
+            from domain.meaning_sources import default_resolver
+
+            out = default_resolver().cc_glosses_for(hz)
+            return [str(x).strip() for x in (out or []) if str(x).strip()]
         except Exception:
             return []
 
     def get_cedict_meanings_for(self, hanzi: str):
-        """UI shim: provide CEDICT meanings for a Hanzi candidate (if available)."""
-        try:
-            import importlib
+        """Best-effort CEDICT meanings for a Hanzi candidate.
 
-            _u = importlib.import_module("utils.utils")
-            _ced_for = getattr(_u, "get_cedict_meanings_for", None)
-            if callable(_ced_for):
-                return list(_ced_for(hanzi) or [])
+        Domain owns meaning sources; the dialog should not reach into `utils`.
+        """
+        hz = (str(hanzi) or "").strip()
+        if not hz:
             return []
+
+        # Prefer the resolver attached to the dialog/facade (if present).
+        try:
+            resolver = getattr(self, "_meaning_resolver", None)
+            ce_for = getattr(resolver, "cedict_meanings_for", None) if resolver is not None else None
+            if callable(ce_for):
+                out = ce_for(hz)
+                return [str(x).strip() for x in (out or []) if str(x).strip()]
+        except Exception:
+            pass
+
+        # Fallback: use the default domain resolver.
+        try:
+            from domain.meaning_sources import default_resolver
+
+            out = default_resolver().cedict_meanings_for(hz)
+            return [str(x).strip() for x in (out or []) if str(x).strip()]
         except Exception:
             return []
 
     def clean_glosses_for_display(self, glosses):
-        """UI shim: clean gloss strings for display (if a cleaner exists)."""
+        """Back-compat UI shim: delegate gloss cleaning to the domain conservative cleaner."""
         try:
-            import importlib
+            from domain.meaning_sources import clean_glosses_for_display as _clean
 
-            _u = importlib.import_module("utils.utils")
-            _cleaner = getattr(_u, "clean_glosses_for_display", None)
-            if callable(_cleaner):
-                cleaned = _cleaner(list(glosses or []))
-                return list(cleaned or [])
-            return list(glosses or [])
+            return list(_clean(glosses) or [])
         except Exception:
-            return list(glosses or [])
+            try:
+                seq = glosses if isinstance(glosses, (list, tuple)) else []
+                return [str(x).strip() for x in seq if str(x).strip()]
+            except Exception:
+                return []

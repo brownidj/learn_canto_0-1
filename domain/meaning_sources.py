@@ -1,5 +1,3 @@
-
-
 """Meaning sources and gloss cleaning.
 
 This module centralises the logic for resolving meanings for a Hanzi string.
@@ -15,9 +13,18 @@ If a backing source is unavailable, the resolver degrades gracefully.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
-from typing import Callable, Optional, Sequence, List, Iterable
+from pathlib import Path
+from typing import Callable, Optional, Sequence, List
 
+import yaml
+
+from domain.storage_paths import (
+    cccanto_meanings_map_path,
+    cedict_meanings_map_json_path,
+    cedict_meanings_map_yaml_path,
+)
 
 GlossList = List[str]
 
@@ -37,19 +44,9 @@ def _clean_list(xs: object) -> GlossList:
 def _best_effort_clean_glosses(glosses: Sequence[str] | object) -> GlossList:
     """Best-effort gloss cleaning suitable for UI labels/tooltips.
 
-    This is intentionally tolerant: if the project's historical cleaning helper exists,
-    we use it; otherwise we fall back to minimal string stripping.
+    Domain policy: keep this module UI-free and independent of `utils`.
+    We apply conservative, deterministic cleaning only.
     """
-    # Prefer the existing canonical cleaning helper if present.
-    try:
-        from utils.utils import clean_glosses_for_display as _clean  # type: ignore
-
-        cleaned = _clean(glosses)  # may return list[str]
-        return _clean_list(cleaned)
-    except Exception:
-        pass
-
-    # Fallback: minimal cleaning.
     if isinstance(glosses, (list, tuple)):
         return _clean_list(list(glosses))
     return []
@@ -63,12 +60,14 @@ def clean_glosses_for_display(glosses: Sequence[str] | object) -> GlossList:
     """
     return _best_effort_clean_glosses(glosses)
 
+
 @dataclass(frozen=True)
 class SelectedCandidate:
     hanzi: str
     source: str
     meanings: list[str]
     label: str
+
 
 @dataclass(frozen=True)
 class MeaningResolver:
@@ -295,48 +294,115 @@ def default_facade() -> MeaningFacade:
     return MeaningFacade(resolver=resolver, cleaner=cleaner)
 
 
+# ---------------------------
+# Lazy, file-backed sources
+# ---------------------------
+
+_CC_CANTO_MEANINGS_MAP: dict[str, list[str]] | None = None
+_CEDICT_MEANINGS_MAP: dict[str, list[str]] | None = None
+
+
+def _project_root() -> Path:
+    """Best-effort project root: assumes `domain/` lives directly under root."""
+    try:
+        return Path(__file__).resolve().parents[1]
+    except Exception:
+        return Path(".")
+
+
+def _first_existing_path(candidates: list[Path]) -> Path | None:
+    for p in candidates:
+        try:
+            if p.exists() and p.is_file():
+                return p
+        except Exception:
+            pass
+    return None
+
+
+def _load_yaml_dict(path: Path) -> dict[str, list[str]]:
+    if yaml is None:
+        return {}
+    try:
+        obj = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    if not isinstance(obj, dict):
+        return {}
+    out: dict[str, list[str]] = {}
+    for k, v in obj.items():
+        if not isinstance(k, str):
+            continue
+        if isinstance(v, list):
+            out[k] = [str(x).strip() for x in v if str(x).strip()]
+        elif isinstance(v, str) and v.strip():
+            out[k] = [v.strip()]
+    return out
+
+
+def _load_json_dict(path: Path) -> dict[str, list[str]]:
+    try:
+        obj = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    if not isinstance(obj, dict):
+        return {}
+    out: dict[str, list[str]] = {}
+    for k, v in obj.items():
+        if not isinstance(k, str):
+            continue
+        if isinstance(v, list):
+            out[k] = [str(x).strip() for x in v if str(x).strip()]
+        elif isinstance(v, str) and v.strip():
+            out[k] = [v.strip()]
+    return out
+
+
+def _get_cc_canto_meanings_map() -> dict[str, list[str]]:
+    global _CC_CANTO_MEANINGS_MAP
+    if isinstance(_CC_CANTO_MEANINGS_MAP, dict):
+        return _CC_CANTO_MEANINGS_MAP
+
+    p = cccanto_meanings_map_path()
+    _CC_CANTO_MEANINGS_MAP = _load_yaml_dict(p) if p is not None else {}
+    return _CC_CANTO_MEANINGS_MAP
+
+
+def _get_cedict_meanings_map() -> dict[str, list[str]]:
+    global _CEDICT_MEANINGS_MAP
+    if isinstance(_CEDICT_MEANINGS_MAP, dict):
+        return _CEDICT_MEANINGS_MAP
+
+    pj = cedict_meanings_map_json_path()
+    if pj is not None:
+        _CEDICT_MEANINGS_MAP = _load_json_dict(pj)
+        return _CEDICT_MEANINGS_MAP
+
+    py = cedict_meanings_map_yaml_path()
+    _CEDICT_MEANINGS_MAP = _load_yaml_dict(py) if py is not None else {}
+    return _CEDICT_MEANINGS_MAP
+
+
+def _cc_glosses_for(hz: str) -> Sequence[str]:
+    mp = _get_cc_canto_meanings_map()
+    try:
+        val = mp.get(hz)
+        return val if isinstance(val, list) else []
+    except Exception:
+        return []
+
+
+def _cedict_meanings_for(hz: str) -> Sequence[str]:
+    mp = _get_cedict_meanings_map()
+    try:
+        val = mp.get(hz)
+        return val if isinstance(val, list) else []
+    except Exception:
+        return []
+
+
 def default_resolver() -> MeaningResolver:
     """Construct a resolver wired to the project's available sources (lazy)."""
-
-    def _cc_glosses_for(hz: str) -> Sequence[str]:
-        # Prefer a direct glosses accessor if present.
-        try:
-            from utils.utils import get_cccanto_glosses_for as _cc  # type: ignore
-
-            out = _cc(hz)
-            if isinstance(out, list):
-                return out
-        except Exception:
-            pass
-
-        # Fallback: if a meanings map exists, use it.
-        try:
-            from utils.utils import get_cccanto_meanings_map as _m  # type: ignore
-
-            mp = _m()
-            if isinstance(mp, dict):
-                val = mp.get(hz)
-                if isinstance(val, list):
-                    return val
-        except Exception:
-            pass
-
-        return []
-
-    def _cedict_meanings_for(hz: str) -> Sequence[str]:
-        # The project has historically used a private `_cedict` cache inside the dialog.
-        # Here we provide a best-effort accessor if the utils layer exposes one.
-        try:
-            from utils.utils import get_cedict_meanings_for as _ce  # type: ignore
-
-            out = _ce(hz)
-            if isinstance(out, list):
-                return out
-        except Exception:
-            pass
-
-        return []
-
     return MeaningResolver(cc_glosses_for=_cc_glosses_for, cedict_meanings_for=_cedict_meanings_for)
 
 

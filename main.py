@@ -5,6 +5,7 @@ import os
 import shlex
 import sys
 import tempfile
+import re
 from functools import partial
 
 import yaml
@@ -19,7 +20,7 @@ from PySide6.QtWidgets import (
     QListView, QLayout,
 )
 from PySide6.QtUiTools import QUiLoader
-from PySide6.QtCore import QFile, QIODevice, Qt, QTimer, QProcess, QEvent, Signal
+from PySide6.QtCore import QFile, QIODevice, Qt, QTimer, QProcess, QEvent, Signal, QObject
 from PySide6.QtGui import QFontMetrics, QStandardItemModel, QStandardItem
 
 from settings import load_all, save_one, reset_all, bounds
@@ -675,7 +676,7 @@ if __name__ == "__main__":
         def _apply_hanzi_pt_stylesheet(w, pt):
             """Apply font-size via stylesheet, removing any prior font-size so QFontMetrics matches render."""
             try:
-                import re
+                # import re
                 base = getattr(window, "_hanzi_base_stylesheet", w.styleSheet() or "")
                 # remove all font-size decls
                 cleaned = re.sub(r"font-size\s*:\s*\d+\s*pt\s*;?", "", base, flags=re.IGNORECASE)
@@ -692,7 +693,7 @@ if __name__ == "__main__":
 
         def _parse_base_point_size_from_stylesheet(w):
             try:
-                import re
+                # import re
                 ss = w.styleSheet() or ""
                 m = re.search(r"font-size:\s*(\d+)pt", ss)
                 if m:
@@ -817,7 +818,7 @@ if __name__ == "__main__":
 
         # Update font when label is resized
         if label_hanzi is not None:
-            from PySide6.QtCore import QObject
+            # from PySide6.QtCore import QObject
 
 
             class _HanziSizer(QObject):
@@ -1086,7 +1087,6 @@ if __name__ == "__main__":
                         cmap = {}
                 # If still empty, try a direct JSON load as a fallback
                 if not isinstance(cmap, dict) or not cmap:
-                    # import os, json
 
                     base_dir = os.path.dirname(os.path.abspath(__file__))
                     json_path = os.path.join(base_dir, "data", "Unihan", "unihan_cantonese_chars.json")
@@ -1505,13 +1505,11 @@ if __name__ == "__main__":
             ui_path = os.path.join(base_dir, "ui", "add_item.ui")
 
             if not os.path.exists(ui_path):
-                from PySide6.QtWidgets import QMessageBox
                 QMessageBox.warning(parent, "Add Item", "UI not found at:\n{}".format(ui_path))
                 return None
 
             file = QFile(ui_path)
             if not file.open(QFile.ReadOnly):
-                from PySide6.QtWidgets import QMessageBox
                 QMessageBox.warning(parent, "Add Item", "Unable to open UI file:\n{}".format(ui_path))
                 return None
 
