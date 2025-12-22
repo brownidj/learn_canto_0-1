@@ -49,3 +49,28 @@ def test_category_manager_dialog_uses_domain_validate_jyut_syllables(monkeypatch
 
     dlg.close()
     app.processEvents()
+
+
+@pytest.mark.pure
+def test_category_manager_does_not_compute_paths_from___file__():
+    """Regression guard: CategoryManager / main must not compute paths via __file__.
+
+    All path resolution must go through infra.paths helpers to avoid silent
+    mis-rooting (e.g. reverse index not loading, Tier-1 misses like 'ngan4'→銀).
+    """
+    import inspect
+    import category_manager
+    import main
+
+    offenders = []
+
+    for mod in (category_manager, main):
+        try:
+            src = inspect.getsource(mod)
+        except Exception:
+            continue
+
+        if "__file__" in src and "infra.paths" not in src:
+            offenders.append(mod.__name__)
+
+    assert not offenders, f"Direct __file__ path usage detected in: {offenders}"

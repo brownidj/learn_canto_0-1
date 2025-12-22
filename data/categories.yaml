@@ -13,7 +13,15 @@ animals:
 - 馬
 - 鯊魚
 - 鼠
-colors: []
+body_parts:
+  - 口
+  - 手
+  - 頭
+colors:
+  - 紅
+  - 藍
+  - 黑
+  - 白
 communication:
 - 今日係
 - 你好 我係 好高興認識你
@@ -275,3 +283,32 @@ zodiac:
 - 馬
 - 鼠
 - 龍
+basic_verbs:
+- =D230
+- =D232
+- =D233
+- =D241
+- =D243
+abstract_nouns:
+- =D209
+- =D237
+- =D247
+- =D249
+- =D250
+grammatical_particles:
+- =D19
+- =D55
+- =D79
+- =D93
+- =D114
+verbs_actions:
+- =D40
+- =D41
+- =D76
+- =D138
+- =D142
+pronouns_quantifiers:
+- =D159
+- =D175
+- =D177
+- =D227

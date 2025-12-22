@@ -19,3 +19,5 @@ wcwidth==0.2.14
 wordseg==0.0.2
 pandas>=2.3.3,<3
 pyarrow>=14,<20
+ruamel.yaml
+reportlab

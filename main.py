@@ -4,10 +4,39 @@ import re
 import shlex
 import sys
 import tempfile
+import time
+from typing import Any, cast
 
 import yaml
+from infra.paths import project_root, data_dir, ui_dir, data_path, ui_path
+
 
 logger = logging.getLogger(__name__)
+
+
+def _perf_start(name: str) -> float:
+    try:
+        t0 = time.perf_counter()
+        try:
+            logger.debug("PERF start: %s", name)
+        except Exception:
+            pass
+        return t0
+    except Exception:
+        return 0.0
+
+
+def _perf_end(name: str, t0: float) -> None:
+    try:
+        if not t0:
+            return
+        dt_ms = (time.perf_counter() - float(t0)) * 1000.0
+        try:
+            logger.debug("PERF end: %s (%.1f ms)", name, dt_ms)
+        except Exception:
+            pass
+    except Exception:
+        pass
 
 from PySide6.QtWidgets import (
     QApplication, QWidget, QLabel, QPushButton,
@@ -42,8 +71,7 @@ def _load_vocab_from_unified_yaml():
     vocab: {hanzi: [meanings_list, jyutping_str]}
     categories_map: {category: [hanzi, ...]}
     """
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    path = os.path.join(base_dir, "data", "vocab.yaml")
+    path = data_path("vocab.yaml")
     if not os.path.exists(path):
         logger.warning("vocab.yaml not found at: %s", path)
         return {}, {}
@@ -179,26 +207,131 @@ def _dump_layout_tree(widget: QWidget, indent=0):
                     if subitem and subitem.widget():
                         _dump_layout_tree(subitem.widget(), indent + 3)
     else:
-        # if no layout, list children widgets
-        for ch in widget.findChildren(QWidget, options=Qt.FindDirectChildrenOnly):
-            _dump_layout_tree(ch, indent + 1)
+        # PySide6: find-child options live under Qt.FindChildOption in many versions/stubs.
+        # If unavailable, fall back to the default recursive behaviour by omitting `options=`.
+        _opts = None
+        try:
+            from PySide6.QtCore import Qt as _Qt
+            _opt = getattr(_Qt, "FindChildOption", None)
+            if _opt is not None:
+                _opts = getattr(_opt, "FindDirectChildrenOnly", None)
+                if _opts is None:
+                    _opts = getattr(_opt, "FindChildrenRecursively", None)
+        except Exception:
+            _opts = None
+
+        if _opts is None:
+            for ch in widget.findChildren(QWidget):
+                _dump_layout_tree(ch, indent + 1)
+        else:
+            for ch in widget.findChildren(QWidget, options=_opts):
+                _dump_layout_tree(ch, indent + 1)
 
 
 def _load_add_item_ui(parent=None) -> QDialog | None:
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    ui_path = os.path.join(base_dir, "ui", "add_item.ui")
-    file = QFile(ui_path)
+    path = ui_path("add_item.ui")
+    file = QFile(path)
     if not file.exists():
-        logger.error("add_item.ui not found at %s", ui_path)
+        logger.error("add_item.ui not found at %s", path)
         return None
-    if not file.open(QFile.ReadOnly):
-        logger.error("Cannot open add_item.ui at %s", ui_path)
+    if not file.open(QIODevice.OpenModeFlag.ReadOnly):
+        logger.error("Cannot open add_item.ui at %s", path)
         return None
     try:
         dlg = QUiLoader().load(file, parent)
+        # QUiLoader.load() is typed as QWidget; enforce that this UI is actually a QDialog.
+        if not isinstance(dlg, QDialog):
+            logger.error("add_item.ui root is not a QDialog; got %r", type(dlg))
+            return None
         if dlg is None:
             logger.error("QUiLoader returned None for add_item.ui")
             return None
+
+        # --- Geometry contract: portrait screen dimensions, but in landscape ---
+        # Prefer settings.bounds() if it provides a canonical portrait size; otherwise fall back to parent/suggested sizes.
+        portrait_w = None
+        portrait_h = None
+        try:
+            b = bounds()
+        except Exception:
+            b = None
+
+        # Common patterns: bounds()["window"] or bounds()["screen"] as (w, h, step) or (w, h)
+        try:
+            if isinstance(b, dict):
+                if "window" in b and isinstance(b.get("window"), (list, tuple)):
+                    tup = b.get("window")
+                    if len(tup) >= 2:
+                        portrait_w = int(tup[0])
+                        portrait_h = int(tup[1])
+                if (portrait_w is None or portrait_h is None) and "screen" in b and isinstance(b.get("screen"), (list, tuple)):
+                    tup = b.get("screen")
+                    if len(tup) >= 2:
+                        portrait_w = int(tup[0])
+                        portrait_h = int(tup[1])
+        except Exception:
+            portrait_w = None
+            portrait_h = None
+
+        # Fallback: use parent geometry if supplied
+        if portrait_w is None or portrait_h is None:
+            try:
+                if parent is not None:
+                    portrait_w = int(parent.width())
+                    portrait_h = int(parent.height())
+            except Exception:
+                portrait_w = None
+                portrait_h = None
+
+        # Final fallback: use the dialog's size hint
+        if portrait_w is None or portrait_h is None:
+            try:
+                sh = dlg.sizeHint()
+                portrait_w = int(sh.width())
+                portrait_h = int(sh.height())
+            except Exception:
+                portrait_w = 600
+                portrait_h = 900
+
+        # Swap portrait dims to get a landscape dialog.
+        # Force landscape regardless of what bounds()/sizeHint returned.
+        try:
+            # Hard contract: Add/Edit dialog is the portrait baseline (720x1280) swapped into landscape.
+            # Do not derive from bounds() or sizeHint() here; offscreen/test sizing and Qt sizeHints can be misleading.
+            land_w = 1280
+            land_h = 720
+        except Exception:
+            land_w = 900
+            land_h = 600
+
+        # Enforce a fixed dialog size so UI is consistent regardless of layout tweaks.
+        # Enforce a fixed dialog size so UI is consistent regardless of layout tweaks.
+        def _apply_fixed_add_item_size():
+            try:
+                # setFixedSize is the strongest contract; keep min/max in sync for safety.
+                dlg.setFixedSize(land_w, land_h)
+                dlg.setMinimumSize(land_w, land_h)
+                dlg.setMaximumSize(land_w, land_h)
+                dlg.resize(land_w, land_h)
+                try:
+                    dlg.updateGeometry()
+                except Exception:
+                    pass
+                logger.debug(
+                    "add_item dialog fixed size -> %dx%d (from portrait %dx%d)",
+                    land_w,
+                    land_h,
+                    int(portrait_w),
+                    int(portrait_h),
+                )
+            except Exception as _e:
+                logger.debug("add_item dialog sizing failed: %r", _e)
+
+        # Apply immediately, then re-apply after the first layout pass.
+        _apply_fixed_add_item_size()
+        QTimer.singleShot(0, _apply_fixed_add_item_size)
+        QTimer.singleShot(50, _apply_fixed_add_item_size)
+
         # Attach resize logger
         _orig_resize = dlg.resizeEvent
 
@@ -228,7 +361,7 @@ def _load_add_item_ui(parent=None) -> QDialog | None:
                          dlg.minimumWidth(), dlg.minimumHeight())
 
         QTimer.singleShot(50, _after_show)
-        return dlg
+        return dlg  # type: ignore[return-value]
     finally:
         file.close()
 
@@ -247,7 +380,7 @@ def load_ui(path: str):
     # Convert relative path to absolute path
     abs_path = os.path.abspath(path)
     ui_file = QFile(abs_path)
-    if not ui_file.open(QIODevice.ReadOnly):
+    if not ui_file.open(QIODevice.OpenModeFlag.ReadOnly):
         raise FileNotFoundError("Cannot open UI file: {}".format(abs_path))
     try:
         loader = QUiLoader()
@@ -601,7 +734,7 @@ if __name__ == "__main__":
 
     # Load the Qt Designer form. Use absolute or relative-to-absolute path conversion.
     try:
-        window = load_ui("./ui/form.ui")
+        window = cast(Any, load_ui("./ui/form.ui"))
         # Load bounds once so they are available to handlers like _on_tortoise_toggled
         b = bounds()
 
@@ -624,8 +757,8 @@ if __name__ == "__main__":
         # Ensure single-line, no wrapping, and apply padding
         if label_hanzi is not None:
             label_hanzi.setWordWrap(False)
-            # Center text horizontally and vertically to avoid apparent edge clipping
-            label_hanzi.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
+            # Qt6 / PySide6: use AlignmentFlag (stubs may not expose legacy Qt.Align* names)
+            label_hanzi.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
             # zero margins (preferred)
             try:
                 label_hanzi.setContentsMargins(0, 0, 0, 0)
@@ -636,8 +769,8 @@ if __name__ == "__main__":
                     ss = ss.replace("padding-left:", "/*padding-left:*/")
                     ss = ss.replace("padding-right:", "/*padding-right:*/")
                 label_hanzi.setStyleSheet(ss)
-            # Let the label expand within its layout, but we'll cap *measured* width
-            label_hanzi.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+            # Qt6 / PySide6: use QSizePolicy.Policy (stubs may not expose legacy QSizePolicy.* names)
+            label_hanzi.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
             logger.debug("labelHanzi sizePolicy set to Ignored/Preferred to avoid window width jump")
             # Capture base stylesheet so we can override font-size reliably (stylesheets override QFont)
             window._hanzi_base_stylesheet = label_hanzi.styleSheet() or ""
@@ -820,7 +953,7 @@ if __name__ == "__main__":
 
             class _HanziSizer(QObject):
                 def eventFilter(self, obj, event):
-                    if obj is label_hanzi and event.type() == QEvent.Resize:
+                    if obj is label_hanzi and event.type() == QEvent.Type.Resize:
                         # allow baseline to shrink but never grow
                         try:
                             cw = max(0, label_hanzi.contentsRect().width())
@@ -876,7 +1009,9 @@ if __name__ == "__main__":
         window._tts_armed = False
 
         # Load vocabulary and categories from unified vocab.yaml
+        _t_vocab = _perf_start("load vocab.yaml")
         vocab, categories_map = _load_vocab_from_unified_yaml()
+        _perf_end("load vocab.yaml", _t_vocab)
         logger.debug(
             "Loaded unified vocab.yaml: %d hanzi entries, %d categories",
             len(vocab),
@@ -1025,10 +1160,14 @@ if __name__ == "__main__":
                 proc = QProcess(window)
                 proc.setProgram("/usr/bin/say")
                 proc.setArguments(["-v", "?"])
-                proc.setProcessChannelMode(QProcess.MergedChannels)
+                proc.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
                 proc.start()
                 proc.waitForFinished(3000)
-                out = bytes(proc.readAllStandardOutput()).decode("utf-8", "ignore")
+                qba = proc.readAllStandardOutput()
+                try:
+                    out = qba.data().decode("utf-8", "ignore")
+                except Exception:
+                    out = bytes(qba).decode("utf-8", "ignore")
                 voices = []
                 for line in out.splitlines():
                     # Example line: "  Sin-ji              zh_HK    # Cantonese (Hong Kong)"
@@ -1066,37 +1205,152 @@ if __name__ == "__main__":
         logger.debug("Detected voices: %d, default=%s", len(_available_voices), _default_voice)
 
         # Ensure a shared Unihan char map is available as a dict.
+        _t_cmap = 0.0
         try:
             cmap = {}
             prev = getattr(window, "_char_map", None)
+            _t_cmap = _perf_start("load_unihan_char_map")
+            _cmap_src = "empty"
             if isinstance(prev, dict) and prev:
                 cmap = prev
+                _cmap_src = "cache"
             else:
-                base_dir = os.path.dirname(os.path.abspath(__file__))
+                _cmap_src = "disk" if callable(load_unihan_char_map) else "unavailable"
                 if callable(load_unihan_char_map):
-                    cmap = load_unihan_char_map(base_dir) or {}
+                    cmap = load_unihan_char_map(project_root()) or {}
                 else:
                     cmap = {}
 
             setattr(window, "_char_map", cmap if isinstance(cmap, dict) else {})
+            _perf_end("load_unihan_char_map", _t_cmap)
+            try:
+                logger.debug("CacheAudit: char_map source=%s size=%d", _cmap_src, len(getattr(window, "_char_map", {}) or {}))
+            except Exception:
+                pass
             logger.debug(
                 "Unihan char_map ready: %d entries (shared)",
                 len(getattr(window, "_char_map", {}) or {}),
             )
         except Exception as _e:
+            _perf_end("load_unihan_char_map", _t_cmap)
             setattr(window, "_char_map", {})
             logger.debug("Unihan shared map not available: %r", _e)
 
 
 
 
+        def _normalize_reverse_index(obj):
+            """Normalize reverse-index payloads to the expected shape.
+
+            Expected shape:
+              {"jyutping": [("漢字", "src", 123), ...], ...}
+
+            Some loaders may return a wrapper dict of size 1 (e.g., {"reverse": {...}})
+            or a dict mapping jyutping -> ["漢字", ...]. We coerce these into the
+            canonical form used by _reverse_candidates_for_jy().
+            """
+            # Unwrap common one-key wrapper dicts
+            if isinstance(obj, dict) and len(obj) == 1:
+                try:
+                    only_val = next(iter(obj.values()))
+                    if isinstance(only_val, dict):
+                        obj = only_val
+                except Exception:
+                    pass
+
+            if not isinstance(obj, dict) or not obj:
+                return {}
+
+            out = {}
+            for k, v in obj.items():
+                if not isinstance(k, str):
+                    continue
+                if not v:
+                    continue
+
+                # Already canonical: list of triples
+                if isinstance(v, list) and v and isinstance(v[0], (tuple, list)):
+                    triples = []
+                    ok = True
+                    for item in v:
+                        try:
+                            hz = str(item[0]).strip()
+                            src = str(item[1]).strip() if len(item) > 1 else "tier1"
+                            score = int(item[2]) if len(item) > 2 else 100
+                        except Exception:
+                            ok = False
+                            break
+                        if hz:
+                            triples.append((hz, src or "tier1", score))
+                    if ok and triples:
+                        out[k] = triples
+                        continue
+
+                # Coerce: list of strings -> list of triples
+                if isinstance(v, list) and v and isinstance(v[0], str):
+                    triples = []
+                    for hz in v:
+                        hz_s = str(hz).strip()
+                        if hz_s:
+                            triples.append((hz_s, "tier1", 100))
+                    if triples:
+                        out[k] = triples
+                        continue
+
+                # Coerce: single string -> one triple
+                if isinstance(v, str):
+                    hz_s = v.strip()
+                    if hz_s:
+                        out[k] = [(hz_s, "tier1", 100)]
+                    continue
+
+            return out
+
         # Attach a reverse index onto the main window
         try:
-            base_dir = os.path.dirname(os.path.abspath(__file__))
-            if callable(load_reverse_index_files):
-                window._reverse_index = load_reverse_index_files(base_dir)
+            prev_idx = getattr(window, "_reverse_index", None)
+        except Exception:
+            prev_idx = None
+
+        try:
+            if isinstance(prev_idx, dict) and prev_idx:
+                window._reverse_index = _normalize_reverse_index(prev_idx)
+                try:
+                    logger.debug(
+                        "CacheAudit: reverse_index source=cache size=%d",
+                        len(getattr(window, "_reverse_index", {}) or {}),
+                    )
+                except Exception:
+                    pass
             else:
-                window._reverse_index = {}
+                _t_rev = _perf_start("load_reverse_index_files")
+                try:
+                    if callable(load_reverse_index_files):
+                        window._reverse_index = _normalize_reverse_index(load_reverse_index_files(project_root()))
+                        src = "disk"
+                    else:
+                        window._reverse_index = {}
+                        src = "unavailable"
+                except Exception:
+                    window._reverse_index = {}
+                    src = "error"
+                _perf_end("load_reverse_index_files", _t_rev)
+                try:
+                    logger.debug("CacheAudit: reverse_index source=%s size=%d", src, len(getattr(window, "_reverse_index", {}) or {}))
+                    try:
+                        _sz = len(getattr(window, "_reverse_index", {}) or {})
+                        if src == "disk" and _sz <= 3:
+                            # Common symptom: loader returned a wrapper dict; normalization should prevent this.
+                            logger.debug("Reverse index looks unusually small (size=%d); check data file path and loader output shape", _sz)
+                            try:
+                                _keys = list((getattr(window, "_reverse_index", {}) or {}).keys())
+                                logger.debug("Reverse index sample keys (up to 8): %r", _keys[:8])
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+                except Exception:
+                    pass
         except Exception:
             window._reverse_index = {}
 
@@ -1136,34 +1390,33 @@ if __name__ == "__main__":
                 shortlist_fn = None
 
             if callable(compose_fn) and callable(shortlist_fn):
+                combos = []  # ensure defined for all paths
                 try:
                     cmap = getattr(window, "_char_map", {}) or {}
                     if not isinstance(cmap, dict) or not cmap:
                         logger.debug("revlookup tier2: no char_map available for '%s'", jy_n)
                         return []
+
                     logger.debug("revlookup tier2: composing from Unihan for '%s'", jy_n)
                     combos = compose_fn(jy_n, cmap) or []
-                    # shortlist expects (jyut, combos, top_n)
+
                     ranked_pairs = shortlist_fn(jyut=jy_n, combos=combos, top_n=10) or []
-                    out = []
-                    for hz, score in ranked_pairs:
-                        out.append((hz, "tier2-char-ranked", int(score)))
+                    out = [(hz, "tier2-char-ranked", int(score)) for hz, score in ranked_pairs]
                     logger.debug("revlookup tier2: ranked shortlist size=%d for '%s'", len(out), jy_n)
                     return out
+
                 except TypeError:
                     # Older shortlist signature
                     try:
                         ranked_pairs = shortlist_fn(jy_n, combos, 10) or []
-                        out = []
-                        for hz, score in ranked_pairs:
-                            out.append((hz, "tier2-char-ranked", int(score)))
-                        logger.debug("revlookup tier2: ranked shortlist(size=%d) [fallback signature] for '%s'",
-                                     len(out), jy_n)
+                        out = [(hz, "tier2-char-ranked", int(score)) for hz, score in ranked_pairs]
+                        logger.debug(
+                            "revlookup tier2: ranked shortlist(size=%d) [fallback signature] for '%s'",
+                            len(out), jy_n
+                        )
                         return out
                     except Exception:
                         pass
-                except Exception:
-                    pass
 
             logger.debug("revlookup tier2: compose function or char_map unavailable for '%s'", jy_n)
             return []
@@ -1237,8 +1490,7 @@ if __name__ == "__main__":
 
             # ---- Persist changes back to vocab.yaml ----
             try:
-                base_dir = os.path.dirname(os.path.abspath(__file__))
-                vocab_path = os.path.join(base_dir, "data", "vocab.yaml")
+                vocab_path = data_path("vocab.yaml")
                 if not os.path.exists(vocab_path):
                     logger.warning("Cannot persist new entry: vocab.yaml not found at %s", vocab_path)
                     return
@@ -1363,7 +1615,52 @@ if __name__ == "__main__":
 
             logger.debug("_open_category_manager: categories ready -> %d keys", len(cats or {}))
 
+            _t_dlg = _perf_start("CategoryManagerDialog(create)")
             dlg = CategoryManagerDialog(window, vocab_dict, cats)
+            _perf_end("CategoryManagerDialog(create)", _t_dlg)
+
+            # --- DEBUG: log actual Add/Edit dialog sizing ---
+            try:
+                geo = dlg.geometry()
+                logger.debug(
+                    "Add/Edit dlg initial: size=%dx%d min=%dx%d max=%dx%d geo=%dx%d@%d,%d hint=%dx%d",
+                    int(dlg.width()),
+                    int(dlg.height()),
+                    int(dlg.minimumWidth()),
+                    int(dlg.minimumHeight()),
+                    int(dlg.maximumWidth()),
+                    int(dlg.maximumHeight()),
+                    int(geo.width()),
+                    int(geo.height()),
+                    int(geo.x()),
+                    int(geo.y()),
+                    int(dlg.sizeHint().width()),
+                    int(dlg.sizeHint().height()),
+                )
+            except Exception as _e:
+                logger.debug("Add/Edit dlg initial sizing log failed: %r", _e)
+
+            def _log_dlg_after_exec():
+                try:
+                    geo2 = dlg.geometry()
+                    logger.debug(
+                        "Add/Edit dlg after-exec: size=%dx%d min=%dx%d max=%dx%d geo=%dx%d@%d,%d",
+                        int(dlg.width()),
+                        int(dlg.height()),
+                        int(dlg.minimumWidth()),
+                        int(dlg.minimumHeight()),
+                        int(dlg.maximumWidth()),
+                        int(dlg.maximumHeight()),
+                        int(geo2.width()),
+                        int(geo2.height()),
+                        int(geo2.x()),
+                        int(geo2.y()),
+                    )
+                except Exception as _e2:
+                    logger.debug("Add/Edit dlg after-exec sizing log failed: %r", _e2)
+
+            QTimer.singleShot(0, _log_dlg_after_exec)
+            QTimer.singleShot(50, _log_dlg_after_exec)
 
             # Provide a commit callback so Save in the dialog can update vocab and persist to YAML
             try:
@@ -1391,7 +1688,9 @@ if __name__ == "__main__":
                 except Exception:
                     pass
 
+            _t_exec = _perf_start("CategoryManagerDialog.exec")
             dlg.exec()
+            _perf_end("CategoryManagerDialog.exec", _t_exec)
 
             # After the dialog closes, refresh the current category view so any new items appear.
             try:
@@ -1405,17 +1704,16 @@ if __name__ == "__main__":
         # (MultiCategoryCombo class definition removed)
 
         def _load_add_item_dialog(parent):
-            # Resolve absolute path relative to this file, not the working directory
-            base_dir = os.path.dirname(os.path.abspath(__file__))
-            ui_path = os.path.join(base_dir, "ui", "add_item.ui")
+            # Resolve absolute path using ui_path helper
+            path = ui_path("add_item.ui")
 
-            if not os.path.exists(ui_path):
-                QMessageBox.warning(parent, "Add Item", "UI not found at:\n{}".format(ui_path))
+            if not os.path.exists(path):
+                QMessageBox.warning(parent, "Add Item", "UI not found at:\n{}".format(path))
                 return None
 
-            file = QFile(ui_path)
-            if not file.open(QFile.ReadOnly):
-                QMessageBox.warning(parent, "Add Item", "Unable to open UI file:\n{}".format(ui_path))
+            file = QFile(path)
+            if not file.open(QIODevice.OpenModeFlag.ReadOnly):
+                QMessageBox.warning(parent, "Add Item", "Unable to open UI file:\n{}".format(path))
                 return None
 
             try:
@@ -1551,7 +1849,7 @@ if __name__ == "__main__":
                 proc_say = QProcess(window)
                 proc_say.setProgram(say_path)
                 proc_say.setArguments(args)
-                proc_say.setProcessChannelMode(QProcess.MergedChannels)
+                proc_say.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
                 proc_say.start()
                 if not proc_say.waitForFinished(10000):
                     logger.warning("say did not finish in time")
@@ -1561,7 +1859,7 @@ if __name__ == "__main__":
                 proc_play = QProcess(window)
                 proc_play.setProgram(afplay)
                 proc_play.setArguments([tmp_path])
-                proc_play.setProcessChannelMode(QProcess.MergedChannels)
+                proc_play.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
                 proc_play.start()
                 logger.debug("Playing synthesized file: %s", tmp_path)
             except Exception as e:
@@ -1605,7 +1903,7 @@ if __name__ == "__main__":
                 proc_say = QProcess(window)
                 proc_say.setProgram(say_path)
                 proc_say.setArguments(args)
-                proc_say.setProcessChannelMode(QProcess.MergedChannels)
+                proc_say.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
 
                 def _after_synth(code, status):
                     logger.debug("say finished code=%s status=%s", code, status)
@@ -1613,7 +1911,7 @@ if __name__ == "__main__":
                     proc_play = QProcess(window)
                     proc_play.setProgram(afplay)
                     proc_play.setArguments([tmp_path])
-                    proc_play.setProcessChannelMode(QProcess.MergedChannels)
+                    proc_play.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
 
                     def _after_play(pcode, pstatus):
                         logger.debug("afplay finished code=%s status=%s (file=%s)", pcode, pstatus, tmp_path)

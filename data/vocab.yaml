@@ -169,6 +169,13 @@ entries:
       gloss: autumn
       hanzi: 秋
       register: both
+  ceng1:
+    jyutping: ceng1
+    senses:
+    - categories:
+      - colors
+      gloss: cyan
+      hanzi: 青
   ceon1:
     headword: 春
     jyutping: ceon1
@@ -323,6 +330,13 @@ entries:
       gloss: rooster; chicken
       hanzi: 雞
       register: both
+  gam1:
+    jyutping: gam1
+    senses:
+    - categories:
+      - colors
+      gloss: golden colour
+      hanzi: 金
   gam1 jat6 hai6:
     headword: 今日係
     jyutping: gam1 jat6 hai6
@@ -728,6 +742,13 @@ entries:
       - colors
       gloss: surname Lan
       hanzi: 藍
+  leot6 sik1:
+    jyutping: leot6 sik1
+    senses:
+    - categories:
+      - colors
+      gloss: maroon, chestnut brown
+      hanzi: 栗色
   ling4:
     headword: 零
     jyutping: ling4
@@ -1010,6 +1031,13 @@ entries:
       gloss: good afternoon
       hanzi: 午安
       register: colloquial
+  ngan4:
+    jyutping: ngan4
+    senses:
+    - categories:
+      - colors
+      gloss: silvery colour
+      hanzi: 銀
   ngau4:
     headword: 牛
     jyutping: ngau4

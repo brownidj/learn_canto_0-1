@@ -4,6 +4,7 @@
 import logging
 import os
 import re
+import time
 
 # ----------------------------------------
 # Third-party imports
@@ -13,6 +14,7 @@ import yaml
 # PySide6 imports
 # ----------------------------------------
 from PySide6.QtCore import Qt, QModelIndex, QTimer as _CatTimer
+from PySide6.QtGui import (QFont)
 from PySide6.QtWidgets import (
     QDialog,
     QVBoxLayout,
@@ -44,6 +46,7 @@ from domain.hanzi_candidate_pipeline import HanziCandidatePipeline, build_pipeli
 from domain.jyutping_validation import validate_jyut_syllables
 from domain.meaning_sources import MeaningFacade, default_facade, clean_glosses_for_display  # type: ignore
 from domain.storage_paths import categories_yaml_path
+from infra.paths import project_root
 
 logger = logging.getLogger(__name__)
 
@@ -98,9 +101,10 @@ class CategoryManagerDialog(QDialog):
     def _init_style_and_curator(self) -> None:
         """Initialise UI-free helpers used for style and candidate curation."""
         try:
-            _project_dir = os.path.dirname(os.path.abspath(__file__))
+            _project_dir = str(project_root())
         except Exception:
             _project_dir = os.getcwd()
+
         self._style_index = HanziStyleIndex(_project_dir)
         self._candidate_curator = CandidateCurator(self._style_index, self.MAX_HANZI_CANDIDATES)
 
@@ -174,6 +178,29 @@ class CategoryManagerDialog(QDialog):
             self._all_cats.append("unassigned")
             self._all_cats = sorted(set(self._all_cats), key=lambda s: s.lower())
 
+    def _perf_start(self, name: str) -> float:
+        try:
+            t0 = time.perf_counter()
+            try:
+                logger.debug("PERF start: %s", name)
+            except Exception:
+                pass
+            return t0
+        except Exception:
+            return 0.0
+
+    def _perf_end(self, name: str, t0: float) -> None:
+        try:
+            if not t0:
+                return
+            dt_ms = (time.perf_counter() - float(t0)) * 1000.0
+            try:
+                logger.debug("PERF end: %s (%.1f ms)", name, dt_ms)
+            except Exception:
+                pass
+        except Exception:
+            pass
+
     def _init_reverse_lookup_caches(self) -> None:
         """Initialise reverse-lookup sources (reverse index + Unihan map)."""
 
@@ -181,6 +208,11 @@ class CategoryManagerDialog(QDialog):
         # Reuse any prebuilt caches from the main window when present
         try:
             self._reverse_index = getattr(self._parent, "_reverse_index", None)
+            try:
+                src = "parent" if isinstance(getattr(self._parent, "_reverse_index", None), dict) else "empty"
+                logger.debug("CacheAudit: reverse_index source=%s size=%d", src, len(self._reverse_index))
+            except Exception:
+                pass
             if not isinstance(self._reverse_index, dict):
                 self._reverse_index = {}
         except Exception:
@@ -324,6 +356,10 @@ class CategoryManagerDialog(QDialog):
           can optionally jump focus to the next unassigned row.
     """
     MAX_HANZI_CANDIDATES = 10
+    # Typography deltas for the Add/Edit panel (dialog-local; do not affect the rest of the app)
+    _LABEL_FONT_DELTA_PT = 4
+    _INPUT_FONT_DELTA_PT = 3
+    _FORM_VERTICAL_SPACING_PX = 12
 
     def __init__(self, parent, vocab_items: dict, categories_map: dict):
         super().__init__(parent)
@@ -332,9 +368,32 @@ class CategoryManagerDialog(QDialog):
 
         self.setWindowTitle("Add & Edit Items")
         logger.debug("CategoryManagerDialog: init start (building UI and wiring)")
+        _t_init = self._perf_start("CategoryManagerDialog.__init__")
 
-        # Wide enough to keep Entry/Hanzi side-by-side
-        self.resize(720, 540)
+        # Size policy: derive Add/Edit dialog size from the parent "vertical" window, but in landscape.
+        # This keeps sizing future-proof if the app's baseline portrait size changes.
+        try:
+            pw = int(parent.width()) if parent is not None else 0
+            ph = int(parent.height()) if parent is not None else 0
+        except Exception:
+            pw = 0
+            ph = 0
+
+        # If parent dimensions are available, force landscape by taking max/min.
+        # Otherwise fall back to the intended baseline (720x1280 swapped -> 1280x720).
+        if pw > 0 and ph > 0:
+            dlg_w = max(pw, ph)
+            dlg_h = min(pw, ph)
+        else:
+            dlg_w = 1280
+            dlg_h = 720
+
+        try:
+            self.setMinimumSize(dlg_w, dlg_h)
+            self.resize(dlg_w, dlg_h)
+            logger.debug("CategoryManagerDialog: sized to %dx%d (parent=%dx%d)", dlg_w, dlg_h, pw, ph)
+        except Exception:
+            pass
 
         # ---------- Data / caches ----------
         self._init_style_and_curator()
@@ -368,8 +427,8 @@ class CategoryManagerDialog(QDialog):
         row = QHBoxLayout()
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(12)
-        row.setStretch(0, 4)
-        row.setStretch(1, 2)
+        row.setStretch(0, 1)
+        row.setStretch(1, 1)
 
         # --- Add Item header with Save button ---
         header_row = QHBoxLayout()
@@ -484,6 +543,7 @@ class CategoryManagerDialog(QDialog):
             pass
 
         formEntry.addRow("Category:", self._add_cat)
+
         # ---- Back-compat aliases for legacy code paths ----
         self.editJyut = self._add_jy
         self.editMeanings = self._add_mn
@@ -499,7 +559,6 @@ class CategoryManagerDialog(QDialog):
         self._add_hz.setReadOnly(True)
         self._add_hz.setPlaceholderText("Auto, after reverse lookup")
         self._add_hz.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
-        self._add_hz.setMaximumWidth(260)
         try:
             formHanzi.addRow(self._add_hz)  # span field column (no label)
         except TypeError:
@@ -519,6 +578,7 @@ class CategoryManagerDialog(QDialog):
         self._cand_combo.setMaximumWidth(320)
         try:
             formHanzi.addRow("Candidates:", self._cand_combo)
+
             # Allow the user to reject all suggestions and type their own Hanzi
             self._btn_custom_hz = QPushButton("Enter my own Hanzi", self)
             self._btn_custom_hz.setObjectName("btnCustomHanzi")
@@ -552,22 +612,30 @@ class CategoryManagerDialog(QDialog):
             pass
 
         # Apply size policies to prevent vertical stacking
-        groupEntry.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.Preferred)
-        groupEntry.setMinimumWidth(360)
-        groupHanzi.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
-        groupHanzi.setMinimumWidth(300)
-        groupHanzi.setMaximumWidth(360)
+        groupEntry.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        groupHanzi.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+
+        # Typography + spacing (labels already exist at this point)
+        try:
+            self._apply_add_edit_typography(
+                group_entry=groupEntry,
+                form_entry=formEntry,
+                group_hanzi=groupHanzi,
+                form_hanzi=formHanzi,
+            )
+        except Exception:
+            pass
 
         # Assemble the side-by-side row
         row.addWidget(groupEntry)
         row.addWidget(groupHanzi)
         self._root.addLayout(row)
         try:
-            # Favor the entry group, keep Hanzi reasonably narrow
-            row.setStretch(0, 3)
-            row.setStretch(1, 2)
+            row.setStretch(0, 1)
+            row.setStretch(1, 1)
             # Ensure enough horizontal space so the two groups don’t stack
-            self.setMinimumWidth(700)
+            # (min width now handled by setMinimumSize at dialog level)
+            pass
         except Exception:
             pass
 
@@ -644,6 +712,81 @@ class CategoryManagerDialog(QDialog):
 
         # Done: dialog is fully constructed and safe even if some helpers are missing
         logger.debug("CategoryManagerDialog: init complete")
+        self._perf_end("CategoryManagerDialog.__init__", _t_init)
+
+    def _apply_add_edit_typography(
+            self,
+            *,
+            group_entry: QGroupBox,
+            form_entry: QFormLayout,
+            group_hanzi: QGroupBox,
+            form_hanzi: QFormLayout,
+    ) -> None:
+        """
+        Apply Add/Edit panel typography in one place.
+
+        - Labels: +_LABEL_FONT_DELTA_PT
+        - Input fields (Jyutping, Meanings, Hanzi): +_INPUT_FONT_DELTA_PT
+        - Form vertical spacing: _FORM_VERTICAL_SPACING_PX
+        """
+        try:
+            # Spacing first
+            try:
+                form_entry.setVerticalSpacing(int(self._FORM_VERTICAL_SPACING_PX))
+            except Exception:
+                pass
+            try:
+                form_hanzi.setVerticalSpacing(int(self._FORM_VERTICAL_SPACING_PX))
+            except Exception:
+                pass
+
+            base_entry = group_entry.font()
+            base_hanzi = group_hanzi.font()
+
+            label_entry = QFont(base_entry)
+            label_entry.setPointSize(label_entry.pointSize() + int(self._LABEL_FONT_DELTA_PT))
+
+            label_hanzi = QFont(base_hanzi)
+            label_hanzi.setPointSize(label_hanzi.pointSize() + int(self._LABEL_FONT_DELTA_PT))
+
+            input_entry = QFont(base_entry)
+            input_entry.setPointSize(input_entry.pointSize() + int(self._INPUT_FONT_DELTA_PT))
+
+            input_hanzi = QFont(base_hanzi)
+            input_hanzi.setPointSize(input_hanzi.pointSize() + int(self._INPUT_FONT_DELTA_PT))
+
+            # Apply label fonts via the QFormLayout label column
+            for _r in range(form_entry.rowCount()):
+                _it = form_entry.itemAt(_r, QFormLayout.ItemRole.LabelRole)
+                _w = _it.widget() if _it is not None else None
+                if isinstance(_w, QLabel):
+                    _w.setFont(label_entry)
+
+            for _r in range(form_hanzi.rowCount()):
+                _it = form_hanzi.itemAt(_r, QFormLayout.ItemRole.LabelRole)
+                _w = _it.widget() if _it is not None else None
+                if isinstance(_w, QLabel):
+                    _w.setFont(label_hanzi)
+
+            # Apply input font bumps ONLY to the requested Add/Edit inputs
+            try:
+                if getattr(self, "_add_jy", None) is not None:
+                    self._add_jy.setFont(input_entry)
+            except Exception:
+                pass
+            try:
+                if getattr(self, "_add_mn", None) is not None:
+                    self._add_mn.setFont(input_entry)
+            except Exception:
+                pass
+            try:
+                if getattr(self, "_add_hz", None) is not None:
+                    self._add_hz.setFont(input_hanzi)
+            except Exception:
+                pass
+
+        except Exception:
+            pass
 
     def _load_hanzi_style_map(self) -> dict:
         """Lazy-load data/hanzi_style.yaml (Hanzi -> {style, source, notes}).
@@ -775,9 +918,12 @@ class CategoryManagerDialog(QDialog):
             return []
 
         try:
+            _t_m = self._perf_start("MeaningFacade.meanings_for_display")
             out = facade.meanings_for_display(hz)
+            self._perf_end("MeaningFacade.meanings_for_display", _t_m)
             return [str(x) for x in (out or []) if str(x).strip()]
         except Exception:
+            self._perf_end("MeaningFacade.meanings_for_display", _t_m)
             return []
 
     def _build_category_profiles(self) -> None:
@@ -833,6 +979,47 @@ class CategoryManagerDialog(QDialog):
             except Exception:
                 pass
 
+    def _meaning_preview_for_hz(self, hz: str, max_items: int = 1) -> str:
+        """Return a short, UI-safe meaning preview for a Hanzi (comma-separated).
+
+        Used only for compact candidate labels; does not change domain logic.
+        """
+        try:
+            hz_s = (hz or "").strip()
+        except Exception:
+            hz_s = ""
+        if not hz_s:
+            return ""
+
+        try:
+            glosses = self._meanings_for_hanzi(hz_s) or []
+        except Exception:
+            glosses = []
+
+        try:
+            out = [str(g).strip() for g in glosses if str(g).strip()]
+        except Exception:
+            out = []
+
+        if not out:
+            return ""
+
+        try:
+            n = int(max_items or 1)
+        except Exception:
+            n = 1
+        if n < 1:
+            n = 1
+
+        try:
+            # Prefer semicolon separation; strip any excessive whitespace.
+            return "; ".join([s.strip() for s in out[:n] if s.strip()])
+        except Exception:
+            try:
+                return str(out[0])
+            except Exception:
+                return ""
+
     def _populate_candidate_combobox(
             self,
             cands: list[tuple[str, str, int]],
@@ -870,6 +1057,15 @@ class CategoryManagerDialog(QDialog):
                 m = self._cand_combo.model()
                 if m is not None:
                     m.setData(m.index(0, 0), 0, int(Qt.ItemDataRole.UserRole) - 1)
+            except Exception:
+                pass
+
+            # Debug: confirm incoming candidate shape before we populate UI
+            try:
+                _sample_in = []
+                for _i, (_hz, _src, _sc) in enumerate((cands or [])[:5], start=1):
+                    _sample_in.append((_i, str(_hz), str(_src), int(round(float(_sc or 0.0)))))
+                logger.debug("PopulateComboAudit: sample_in=%r", _sample_in)
             except Exception:
                 pass
 
@@ -918,12 +1114,46 @@ class CategoryManagerDialog(QDialog):
                         tag = abbr_for_source(src)
                     except Exception:
                         tag = "UNK"
-                    label = f"{hz_s} ({tag})"
+                    label = "{} ({})".format(hz_s, tag)
                     if preferred:
-                        label = f"✓ {label}"
+                        label = "✓ {}".format(label)
+
+                # Append a compact meaning preview when available (keep labels short).
+                try:
+                    # Show up to two glosses for better disambiguation, but keep the label compact.
+                    preview = self._meaning_preview_for_hz(hz_s, max_items=2)
+                except Exception:
+                    preview = ""
+
+                # Hard cap preview length to prevent the combobox from becoming unreadable.
+                try:
+                    if isinstance(preview, str) and len(preview) > 80:
+                        preview = preview[:77].rstrip() + "…"
+                except Exception:
+                    pass
+
+                if preview:
+                    # Avoid duplicating if the label already contains a preview separator.
+                    try:
+                        if " — " not in label:
+                            label = "{} — {}".format(label, preview)
+                    except Exception:
+                        pass
 
                 # Store (hz, src) so selection handler has source context if needed later
                 self._cand_combo.addItem(label, userData=(hz_s, src))
+
+                # Debug: verify userData shape being stored
+                try:
+                    if self._cand_combo.count() <= 4:  # only log the first few to avoid noise
+                        logger.debug(
+                            "PopulateComboAudit: row=%d label=%r userData=%r",
+                            self._cand_combo.count() - 1,
+                            label,
+                            (hz_s, src),
+                        )
+                except Exception:
+                    pass
 
             self._cand_combo.setCurrentIndex(0)
             self._cand_combo.setVisible(True)
@@ -981,10 +1211,17 @@ class CategoryManagerDialog(QDialog):
     def _set_hanzi_top_candidate(self, cands: list[tuple[str, str, int]]) -> str | None:
         """Set Hanzi edit to the top candidate and return the preferred Hanzi."""
         preferred_hz = None
+        preferred_src = ""
         try:
-            preferred_hz = cands[0][0] if isinstance(cands, list) and cands else None
+            if isinstance(cands, list) and cands:
+                preferred_hz = cands[0][0]
+                try:
+                    preferred_src = str(cands[0][1] or "").strip()
+                except Exception:
+                    preferred_src = ""
         except Exception:
             preferred_hz = None
+            preferred_src = ""
 
         if preferred_hz:
             try:
@@ -992,6 +1229,44 @@ class CategoryManagerDialog(QDialog):
                     self._add_hz.setText(preferred_hz)
             except Exception:
                 pass
+
+            # If meanings are empty, try to auto-fill from the resolved Hanzi.
+            try:
+                mn_edit = getattr(self, "_add_mn", None)
+            except Exception:
+                mn_edit = None
+
+            try:
+                mn_existing = (mn_edit.text() or "").strip() if mn_edit is not None else ""
+            except Exception:
+                mn_existing = ""
+
+            if mn_edit is not None and not mn_existing:
+                meanings: list[str] = []
+                try:
+                    facade = getattr(self, "_meaning_facade", None)
+                except Exception:
+                    facade = None
+
+                if facade is not None and hasattr(facade, "select_candidate"):
+                    try:
+                        selected = facade.select_candidate(preferred_hz, preferred_src, preferred=True, max_items=2)
+                        meanings = [str(x) for x in (getattr(selected, "meanings", []) or []) if str(x).strip()]
+                    except Exception:
+                        meanings = []
+                if not meanings:
+                    try:
+                        meanings = [str(x) for x in (self._meanings_for_hanzi(preferred_hz) or []) if str(x).strip()]
+                    except Exception:
+                        meanings = []
+
+                try:
+                    if meanings:
+                        mn_edit.setText(", ".join(meanings))
+                    else:
+                        mn_edit.setPlaceholderText("Enter English meaning")
+                except Exception:
+                    pass
 
         return preferred_hz
 
@@ -1077,9 +1352,23 @@ class CategoryManagerDialog(QDialog):
         except Exception:
             data = None
 
+        # Debug: what exactly did the combobox store?
+        try:
+            logger.debug(
+                "CandidateSelectAudit: idx=%d text=%r itemData_type=%s itemData=%r",
+                idx,
+                combo.currentText(),
+                type(data).__name__,
+                data,
+            )
+        except Exception:
+            pass
+
         hz = ""
         src = ""
-        if isinstance(data, tuple) and len(data) >= 2:
+
+        # Expected shape: (hanzi, source) stored as tuple (preferred) or list (legacy).
+        if isinstance(data, (tuple, list)) and len(data) >= 2:
             try:
                 hz = str(data[0] or "").strip()
             except Exception:
@@ -1088,12 +1377,17 @@ class CategoryManagerDialog(QDialog):
                 src = str(data[1] or "").strip()
             except Exception:
                 src = ""
-        else:
-            # Back-compat if older builds stored only hz
+
+        # Back-compat: some older builds stored only a plain string Hanzi.
+        elif isinstance(data, str):
             try:
                 hz = str(data or "").strip()
             except Exception:
                 hz = ""
+
+        else:
+            hz = ""
+            src = ""
 
         if not hz:
             return
@@ -1148,7 +1442,11 @@ class CategoryManagerDialog(QDialog):
 
         if mn_edit is not None:
             try:
-                mn_edit.setText(", ".join(meanings) if meanings else "")
+                if meanings:
+                    mn_edit.setText(", ".join(meanings))
+                else:
+                    mn_edit.setText("")
+                    mn_edit.setPlaceholderText("Enter English meaning")
             except Exception:
                 pass
 
@@ -1225,6 +1523,26 @@ class CategoryManagerDialog(QDialog):
         jy_n = ""
         try:
             jy_n = self._normalize_jy(jy)
+            # --- Reverse-index diagnostics (Tier-1) ---
+            try:
+                _ri = getattr(self, "_reverse_index", None)
+                _ri_sz = len(_ri) if isinstance(_ri, dict) else -1
+                _has_key = bool(isinstance(_ri, dict) and jy_n in _ri)
+                _sample = []
+                if _has_key:
+                    try:
+                        _sample = list((_ri.get(jy_n) or [])[:5])
+                    except Exception:
+                        _sample = []
+                logger.debug(
+                    "ReverseIndexAudit: jy=%r present=%s size=%s sample=%r",
+                    jy_n,
+                    _has_key,
+                    _ri_sz,
+                    _sample,
+                )
+            except Exception:
+                pass
 
             # If the user has opted to type their own Hanzi, do not overwrite or re-suggest.
             if bool(getattr(self, "_manual_hanzi_mode", False)):
@@ -1234,21 +1552,109 @@ class CategoryManagerDialog(QDialog):
                     pass
                 return 0
 
-            # Single source of truth: candidate pipeline
-            pipeline = getattr(self, "_hanzi_pipeline", None)
-            cands: list[tuple[str, str, float]] = []
+            # Tier-1: reverse index is authoritative when present.
+            tier1: list[tuple[str, str, float]] = []
+            try:
+                _ri = getattr(self, "_reverse_index", None)
+                if isinstance(_ri, dict):
+                    for _hz, _src, _sc in (_ri.get(jy_n) or []):
+                        hz_s = (str(_hz) or "").strip()
+                        if not hz_s:
+                            continue
+                        try:
+                            sc_f = float(_sc)
+                        except Exception:
+                            sc_f = 0.0
+                        src_s = (str(_src) or "").strip() or "reverse"
+                        tier1.append((hz_s, src_s, sc_f))
+            except Exception:
+                tier1 = []
 
+            # Tier-2: pipeline can augment Tier-1, but must never displace it.
+            pipeline = getattr(self, "_hanzi_pipeline", None)
+            tier2: list[tuple[str, str, float]] = []
+
+            _t_run = self._perf_start("HanziCandidatePipeline.run")
             if pipeline is not None:
                 try:
                     raw = pipeline.run(jy_n) or []
-                    # Normalise to (hanzi, source, freq: float)
-                    cands = [(hz, src, float(freq or 0.0)) for (hz, src, freq) in list(raw)]
+                    tier2 = [(str(hz or "").strip(), str(src or "").strip(), float(freq or 0.0)) for (hz, src, freq) in list(raw)]
+                    tier2 = [(hz, src or "tier2", sc) for (hz, src, sc) in tier2 if hz]
                 except Exception as e:
                     try:
                         logger.warning("Hanzi pipeline failed for %r: %s", jy_n, e)
                     except Exception:
                         pass
-                    cands = []
+                    tier2 = []
+            self._perf_end("HanziCandidatePipeline.run", _t_run)
+
+            # Merge (dedupe by hanzi) with Tier-1 priority.
+            # If a Hanzi exists in Tier-1, keep the Tier-1 source and the higher score.
+            merged: dict[str, tuple[str, float, int]] = {}
+            # order index preserves stable ordering when scores tie
+            _order = 0
+            for (hz, src, sc) in (tier1 or []):
+                _order += 1
+                prev = merged.get(hz)
+                if prev is None:
+                    merged[hz] = (src, float(sc or 0.0), _order)
+                else:
+                    p_src, p_sc, p_ord = prev
+                    merged[hz] = (src, max(float(sc or 0.0), float(p_sc or 0.0)), min(p_ord, _order))
+
+            for (hz, src, sc) in (tier2 or []):
+                if not hz:
+                    continue
+                _order += 1
+                prev = merged.get(hz)
+                if prev is None:
+                    merged[hz] = (src, float(sc or 0.0), _order)
+                else:
+                    # If Tier-1 already supplied this Hanzi, do not replace its source.
+                    p_src, p_sc, p_ord = prev
+                    keep_src = p_src
+                    merged[hz] = (keep_src, max(float(sc or 0.0), float(p_sc or 0.0)), min(p_ord, _order))
+
+            cands = [(hz, merged[hz][0], merged[hz][1]) for hz in merged.keys()]
+            # Sort: score desc, then stable insertion order.
+            try:
+                cands.sort(key=lambda t: (-float(t[2] or 0.0), int(merged.get(t[0], ("", 0.0, 0))[2])))
+            except Exception:
+                pass
+
+            # Cap to a sane UI maximum
+            try:
+                max_n = int(getattr(self, "MAX_HANZI_CANDIDATES", 10) or 10)
+            except Exception:
+                max_n = 10
+            if isinstance(cands, list) and max_n > 0:
+                cands = cands[:max_n]
+
+            # Extra debug: confirm Tier-1 presence and whether Tier-2 was suppressed.
+            try:
+                if tier1:
+                    logger.debug("CandidateMergeAudit: jy=%r tier1_n=%d tier2_n=%d merged_n=%d top=%r", jy_n, len(tier1), len(tier2), len(cands), (cands[0] if cands else None))
+            except Exception:
+                pass
+            try:
+                logger.debug("CacheAudit: candidates n=%d for jy=%r", len(cands), jy_n)
+                # --- Candidate ranking diagnostics (post-pipeline) ---
+                try:
+                    _top = []
+                    for _i, (_hz, _src, _sc) in enumerate((cands or [])[:10], start=1):
+                        _top.append((_i, str(_hz), str(_src), float(_sc)))
+                    logger.debug("CandidateAudit: jy=%r top10=%r", jy_n, _top)
+                    if cands:
+                        try:
+                            _score0 = float(cands[0][2] or 0.0)
+                            _tie_n = sum(1 for _c in (cands or []) if abs(float(_c[2] or 0.0) - _score0) < 1e-9)
+                            logger.debug("CandidateAudit: jy=%r top_score=%.6f tie_count=%d", jy_n, _score0, _tie_n)
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+            except Exception:
+                pass
 
             # No candidates → manual Hanzi affordance
             if not cands:
@@ -1256,6 +1662,17 @@ class CategoryManagerDialog(QDialog):
 
             # Set top candidate into Hanzi field
             preferred_hz = self._set_hanzi_top_candidate(cands)  # type: ignore[arg-type]
+            try:
+                if hasattr(self, "_update_save_enabled") and callable(self._update_save_enabled):
+                    self._update_save_enabled()
+            except Exception:
+                pass
+            try:
+                if preferred_hz:
+                    logger.debug("TopCandidateAudit: preferred_hz=%r src=%r score=%r", cands[0][0], cands[0][1],
+                                 cands[0][2])
+            except Exception:
+                pass
 
             # Populate candidate dropdown
             self._populate_candidate_combobox(cands, preferred_hz)  # type: ignore[arg-type]
