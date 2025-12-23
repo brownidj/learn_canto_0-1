@@ -6,6 +6,28 @@ import os
 import re
 import time
 
+# ------------------------------
+# Candidate source labels (UI)
+# ------------------------------
+FRIENDLY_SOURCE_LABELS = {
+    "reverse_jyut": "ATT",
+    "tier2-char": "PHON",
+}
+
+HANZI_CANDIDATE_TOOLTIP = (
+    "ATT = Attested & ranked (highest confidence)\n"
+    "• From reverse_jyut.yaml\n"
+    "• Explicitly attested for this Jyutping\n"
+    "• Has a frequency / ordering signal\n"
+    "• Meanings resolved automatically\n\n"
+    "PHON = Phonetic fallback (no ranking)\n"
+    "• Usually from Unihan-only data\n"
+    "• No reverse-index frequency signal\n"
+    "• Score = 0 (many ties)\n\n"
+    "✓ indicates the best automatic choice.\n"
+    "Fallbacks are shown so you can override if needed."
+)
+
 # ----------------------------------------
 # Third-party imports
 # ----------------------------------------
@@ -262,6 +284,14 @@ class CategoryManagerDialog(QDialog):
         self._meaning_facade: MeaningFacade | None = None
         try:
             self._meaning_facade = default_facade()
+            try:
+                logger.debug(
+                    "MeaningFacade init: ok=%s type=%s",
+                    bool(self._meaning_facade is not None),
+                    type(self._meaning_facade).__name__ if self._meaning_facade is not None else "None",
+                )
+            except Exception:
+                pass
         except Exception as e:
             try:
                 logger.warning("Meaning facade init failed: %s", e)
@@ -356,6 +386,9 @@ class CategoryManagerDialog(QDialog):
           can optionally jump focus to the next unassigned row.
     """
     MAX_HANZI_CANDIDATES = 10
+    # Hanzi-specific typography tuning (easy to adjust)
+    _HANZI_TEXT_DELTA_PT = 4        # Hanzi QLineEdit (main display)
+    _HANZI_COMBO_DELTA_PT = 6       # Hanzi candidate combobox + popup
     # Typography deltas for the Add/Edit panel (dialog-local; do not affect the rest of the app)
     _LABEL_FONT_DELTA_PT = 4
     _INPUT_FONT_DELTA_PT = 3
@@ -576,6 +609,13 @@ class CategoryManagerDialog(QDialog):
         # Keep the dropdown reasonably wide but allow it to shrink
         self._cand_combo.setMinimumWidth(240)
         self._cand_combo.setMaximumWidth(320)
+        # Add shared tooltip for Hanzi candidate combobox and popup view
+        self._cand_combo.setToolTip(HANZI_CANDIDATE_TOOLTIP)
+        try:
+            if self._cand_combo.view() is not None:
+                self._cand_combo.view().setToolTip(HANZI_CANDIDATE_TOOLTIP)
+        except Exception:
+            pass
         try:
             formHanzi.addRow("Candidates:", self._cand_combo)
 
@@ -753,7 +793,9 @@ class CategoryManagerDialog(QDialog):
             input_entry.setPointSize(input_entry.pointSize() + int(self._INPUT_FONT_DELTA_PT))
 
             input_hanzi = QFont(base_hanzi)
-            input_hanzi.setPointSize(input_hanzi.pointSize() + int(self._INPUT_FONT_DELTA_PT))
+            input_hanzi.setPointSize(
+                input_hanzi.pointSize() + int(self._INPUT_FONT_DELTA_PT) + int(self._HANZI_TEXT_DELTA_PT)
+            )
 
             # Apply label fonts via the QFormLayout label column
             for _r in range(form_entry.rowCount()):
@@ -782,6 +824,19 @@ class CategoryManagerDialog(QDialog):
             try:
                 if getattr(self, "_add_hz", None) is not None:
                     self._add_hz.setFont(input_hanzi)
+            except Exception:
+                pass
+
+            # Hanzi candidate combobox + popup font
+            try:
+                if getattr(self, "_cand_combo", None) is not None:
+                    combo_font = QFont(input_hanzi)
+                    combo_font.setPointSize(
+                        combo_font.pointSize() + int(self._HANZI_COMBO_DELTA_PT)
+                    )
+                    self._cand_combo.setFont(combo_font)
+                    if self._cand_combo.view() is not None:
+                        self._cand_combo.view().setFont(combo_font)
             except Exception:
                 pass
 
@@ -920,6 +975,10 @@ class CategoryManagerDialog(QDialog):
         try:
             _t_m = self._perf_start("MeaningFacade.meanings_for_display")
             out = facade.meanings_for_display(hz)
+            try:
+                logger.debug("MeaningFacade: hz=%r meanings_n=%d sample=%r", hz, len(list(out or [])), list(out or [])[:3])
+            except Exception:
+                pass
             self._perf_end("MeaningFacade.meanings_for_display", _t_m)
             return [str(x) for x in (out or []) if str(x).strip()]
         except Exception:
@@ -1077,6 +1136,8 @@ class CategoryManagerDialog(QDialog):
                 preferred = bool(preferred_hz and hz_s == preferred_hz)
 
                 label = ""
+                selected = None
+                selected_meanings = []
 
                 # Preferred path: ask the façade to resolve + format the candidate.
                 # This keeps the dialog orchestration-only (no direct candidate_label calls).
@@ -1090,38 +1151,101 @@ class CategoryManagerDialog(QDialog):
                         )
                         if selected is not None and hasattr(selected, "label"):
                             label = str(getattr(selected, "label") or "").strip()
+                        # Prefer meanings returned by the façade (already resolved/cleaned for display).
+                        if selected is not None and hasattr(selected, "meanings"):
+                            try:
+                                selected_meanings = list(getattr(selected, "meanings") or [])
+                            except Exception:
+                                selected_meanings = []
                     except Exception:
                         label = ""
+                        selected = None
+                        selected_meanings = []
 
-                # Back-compat: if façade doesn't support select_candidate, fall back to candidate_label.
-                if not label and facade is not None:
-                    try:
-                        cand_label = getattr(facade, "candidate_label", None)
-                    except Exception:
-                        cand_label = None
-
-                    if callable(cand_label):
-                        try:
-                            label = str(
-                                cand_label(hz_s, src, preferred=preferred, max_items=2) or ""
-                            ).strip()
-                        except Exception:
-                            label = ""
 
                 if not label:
-                    # Final fallback: Hanzi + source tag only
+                    # Final fallback: Hanzi + friendly source label
                     try:
-                        tag = abbr_for_source(src)
+                        friendly = FRIENDLY_SOURCE_LABELS.get(src, abbr_for_source(src))
                     except Exception:
-                        tag = "UNK"
-                    label = "{} ({})".format(hz_s, tag)
+                        friendly = abbr_for_source(src)
+                    label = "{} ({})".format(hz_s, friendly)
                     if preferred:
                         label = "✓ {}".format(label)
 
-                # Append a compact meaning preview when available (keep labels short).
+                # Ensure the combobox shows a brief meaning preview (historical behaviour).
+                # Primary source: meanings returned by select_candidate().
+                # Fallbacks (in order): pipeline.glosses_for_candidate(), then dialog meaning facade.
+                preview = ""
                 try:
-                    # Show up to two glosses for better disambiguation, but keep the label compact.
-                    preview = self._meaning_preview_for_hz(hz_s, max_items=2)
+                    meanings_src: list[str] = []
+                    try:
+                        logger.debug(
+                            "ComboPreviewAudit: hz=%r src=%r preferred=%s selected_meanings_n=%d",
+                            hz_s,
+                            src,
+                            preferred,
+                            len(selected_meanings or []),
+                        )
+                    except Exception:
+                        pass
+
+                    if selected_meanings:
+                        meanings_src = [str(g).strip() for g in selected_meanings if str(g).strip()]
+                    else:
+                        # Prefer pipeline-provided gloss resolution if available.
+                        try:
+                            pipeline = getattr(self, "_hanzi_pipeline", None)
+                        except Exception:
+                            pipeline = None
+
+                        if pipeline is not None and hasattr(pipeline, "glosses_for_candidate"):
+                            try:
+                                meanings_src = [
+                                    str(g).strip()
+                                    for g in (pipeline.glosses_for_candidate(hz_s) or [])
+                                    if str(g).strip()
+                                ]
+                            except Exception:
+                                meanings_src = []
+
+                        if not meanings_src:
+                            # Last fallback: dialog helper (meaning facade)
+                            try:
+                                meanings_src = [
+                                    str(g).strip()
+                                    for g in (self._meanings_for_hanzi(hz_s) or [])
+                                    if str(g).strip()
+                                ]
+                            except Exception:
+                                meanings_src = []
+
+                    try:
+                        logger.debug(
+                            "ComboPreviewAudit: hz=%r meanings_src_n=%d meanings_src_sample=%r",
+                            hz_s,
+                            len(meanings_src or []),
+                            (meanings_src or [])[:4],
+                        )
+                    except Exception:
+                        pass
+
+                    # Preserve previous UI filtering: drop items containing '[' or '(' and then take up to 2.
+                    clean = [g for g in meanings_src if "[" not in g and "(" not in g]
+                    shown = clean[:2] if clean else meanings_src[:2]
+
+                    try:
+                        logger.debug(
+                            "ComboPreviewAudit: hz=%r clean_n=%d shown=%r",
+                            hz_s,
+                            len(clean or []),
+                            shown,
+                        )
+                    except Exception:
+                        pass
+
+                    if shown:
+                        preview = ", ".join([s for s in shown if s])
                 except Exception:
                     preview = ""
 
@@ -1136,11 +1260,23 @@ class CategoryManagerDialog(QDialog):
                     # Avoid duplicating if the label already contains a preview separator.
                     try:
                         if " — " not in label:
-                            label = "{} — {}".format(label, preview)
+                            # Insert the preview before the source tag, if a tag exists.
+                            if label.endswith(")") and " (" in label:
+                                i = label.rfind(" (")
+                                if i > 0:
+                                    label = "{} — {}{}".format(label[:i], preview, label[i:])
+                                else:
+                                    label = "{} — {}".format(label, preview)
+                            else:
+                                label = "{} — {}".format(label, preview)
                     except Exception:
                         pass
 
                 # Store (hz, src) so selection handler has source context if needed later
+                try:
+                    logger.debug("ComboLabelAudit: hz=%r final_label=%r", hz_s, label)
+                except Exception:
+                    pass
                 self._cand_combo.addItem(label, userData=(hz_s, src))
 
                 # Debug: verify userData shape being stored
@@ -2455,6 +2591,39 @@ class CategoryManagerDialog(QDialog):
             except Exception:
                 return []
 
+    def _call_best_effort(self, fn, *args):
+        """Call `fn` with the largest compatible prefix of args.
+
+        This protects us from legacy utils callables whose signatures vary.
+        """
+        if fn is None or not callable(fn):
+            return None
+
+        try:
+            import inspect
+            sig = inspect.signature(fn)
+            params = list(sig.parameters.values())
+
+            max_n = 0
+            for p in params:
+                if p.kind in (p.VAR_POSITIONAL, p.VAR_KEYWORD):
+                    max_n = len(args)
+                    break
+                max_n += 1
+
+            for n in range(min(max_n, len(args)), -1, -1):
+                try:
+                    return fn(*args[:n])
+                except TypeError:
+                    continue
+        except Exception:
+            pass
+
+        try:
+            return fn(*args[:1])
+        except Exception:
+            return None
+
     def _get_compose_and_rank(self):
         """Return (compose_fn, shortlist_fn) for tier-2 Hanzi candidate generation.
 
@@ -2479,70 +2648,81 @@ class CategoryManagerDialog(QDialog):
         return compose_fn, shortlist_fn
 
     def get_cccanto_glosses_for(self, hanzi: str):
-        """Best-effort CC-Canto glosses for a Hanzi candidate.
+        """UI shim: provide CC-Canto glosses for a Hanzi candidate (if available).
 
-        Domain owns meaning sources; the dialog should not reach into `utils`.
+        Keep this file free of any static utils imports (architecture boundary).
         """
-        hz = (str(hanzi) or "").strip()
+        hz = (hanzi or "").strip()
         if not hz:
             return []
 
-        # Prefer the resolver attached to the dialog/facade (if present).
         try:
-            resolver = getattr(self, "_meaning_resolver", None)
-            cc_for = getattr(resolver, "cc_glosses_for", None) if resolver is not None else None
-            if callable(cc_for):
-                out = cc_for(hz)
-                return [str(x).strip() for x in (out or []) if str(x).strip()]
-        except Exception:
-            pass
+            import importlib
+            mod = importlib.import_module("utils.utils")
 
-        # Fallback: use the default domain resolver.
-        try:
-            from domain.meaning_sources import default_resolver
+            # Best-effort initialisation if a loader exists
+            try:
+                init_fn = getattr(mod, "get_cccanto_reverse_map", None)
+                if callable(init_fn):
+                    self._call_best_effort(init_fn)
+            except Exception:
+                pass
 
-            out = default_resolver().cc_glosses_for(hz)
-            return [str(x).strip() for x in (out or []) if str(x).strip()]
-        except Exception:
-            return []
+            fn = getattr(mod, "get_cccanto_glosses_for", None)
+            if callable(fn):
+                out = self._call_best_effort(fn, hz)
+                seq = list(out or [])
+                return [str(x).strip() for x in seq if str(x).strip()]
+
+        except Exception as e:
+            try:
+                logger.debug("CCCanto shim failed for %r: %s", hz, e)
+            except Exception:
+                pass
+
+        return []
 
     def get_cedict_meanings_for(self, hanzi: str):
-        """Best-effort CEDICT meanings for a Hanzi candidate.
+        """UI shim: provide CEDICT meanings for a Hanzi candidate (if available).
 
-        Domain owns meaning sources; the dialog should not reach into `utils`.
+        Keep this file free of any static utils imports (architecture boundary).
         """
-        hz = (str(hanzi) or "").strip()
+        hz = (hanzi or "").strip()
         if not hz:
             return []
 
-        # Prefer the resolver attached to the dialog/facade (if present).
         try:
-            resolver = getattr(self, "_meaning_resolver", None)
-            ce_for = getattr(resolver, "cedict_meanings_for", None) if resolver is not None else None
-            if callable(ce_for):
-                out = ce_for(hz)
-                return [str(x).strip() for x in (out or []) if str(x).strip()]
-        except Exception:
-            pass
+            import importlib
+            mod = importlib.import_module("utils.utils")
 
-        # Fallback: use the default domain resolver.
-        try:
-            from domain.meaning_sources import default_resolver
+            # Best-effort initialisation if a loader exists (names vary historically)
+            for init_name in ("load_cedict", "load_cedict_dict", "load_cedict_meanings", "get_cedict_dict"):
+                try:
+                    init_fn = getattr(mod, init_name, None)
+                    if callable(init_fn):
+                        self._call_best_effort(init_fn)
+                        break
+                except Exception:
+                    continue
 
-            out = default_resolver().cedict_meanings_for(hz)
-            return [str(x).strip() for x in (out or []) if str(x).strip()]
-        except Exception:
-            return []
+            fn = getattr(mod, "get_cedict_meanings_for", None)
+            if callable(fn):
+                out = self._call_best_effort(fn, hz)
+                seq = list(out or [])
+                return [str(x).strip() for x in seq if str(x).strip()]
+
+        except Exception as e:
+            try:
+                logger.debug("CEDICT shim failed for %r: %s", hz, e)
+            except Exception:
+                pass
+
+        return []
 
     def clean_glosses_for_display(self, glosses):
-        """Back-compat UI shim: delegate gloss cleaning to the domain conservative cleaner."""
         try:
-            from domain.meaning_sources import clean_glosses_for_display as _clean
-
-            return list(_clean(glosses) or [])
+            from domain.meaning_sources import clean_glosses_for_display as _cleaner
+            cleaned = _cleaner(list(glosses or []))
+            return list(cleaned or [])
         except Exception:
-            try:
-                seq = glosses if isinstance(glosses, (list, tuple)) else []
-                return [str(x).strip() for x in seq if str(x).strip()]
-            except Exception:
-                return []
+            return list(glosses or [])

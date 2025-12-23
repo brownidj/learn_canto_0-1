@@ -20,9 +20,6 @@ import re
 from dataclasses import dataclass
 from typing import Callable, Optional, Sequence, Mapping
 
-# Keep domain rules separate and testable
-from domain.category_rules import prefer_meanings
-
 logger = logging.getLogger(__name__)
 
 
@@ -393,42 +390,58 @@ class HanziCandidatePipeline:
         return cands
 
     def glosses_for_candidate(self, hanzi: str) -> list[str]:
-        """Return preferred glosses for display for a single Hanzi candidate.
+        hz = (hanzi or "").strip()
+        if not hz:
+            return []
 
-        Priority:
-        - CC-Canto glosses (if available)
-        - CEDICT meanings (fallback)
+        out: list[str] = []
 
-        (This is intentionally small; category_manager can still add richer
-        label formatting.)
-        """
-
-        primary: Sequence[str] = []
-        fallback: Sequence[str] = []
-
-        if callable(self._cc_glosses_for):
+        # 1) CC-Canto first (best for colloquial Cantonese)
+        cc = getattr(self, "_cc_glosses_for", None)
+        if callable(cc):
             try:
-                primary = self._cc_glosses_for(hanzi) or []
+                out = list(cc(hz) or [])
             except Exception:
-                primary = []
+                out = []
 
-        if callable(self._cedict_meanings_for):
-            try:
-                fallback = self._cedict_meanings_for(hanzi) or []
-            except Exception:
-                fallback = []
+        # 2) CEDICT fallback
+        if not out:
+            ced = getattr(self, "_cedict_meanings_for", None)
+            if callable(ced):
+                try:
+                    out = list(ced(hz) or [])
+                except Exception:
+                    out = []
 
-        chosen = prefer_meanings(list(primary), list(fallback))
+        # 3) Normalise strings
+        try:
+            out = [str(x).strip() for x in (out or []) if str(x).strip()]
+        except Exception:
+            out = []
+
+        # 4) Optional cleaning (display-safe)
         cleaner = getattr(self, "_gloss_cleaner", None)
         if callable(cleaner):
             try:
-                cleaned = cleaner(list(chosen))
+                cleaned = cleaner(out)
                 out = [str(x).strip() for x in (cleaned or []) if str(x).strip()]
-                return out
             except Exception:
                 pass
 
-        return [str(x).strip() for x in (chosen or []) if str(x).strip()]
+        try:
+            import logging
+            logging.getLogger(__name__).debug(
+                "PipelineGlossAudit: hz=%r cc=%s cedict=%s out_n=%d sample=%r",
+                hz,
+                bool(callable(getattr(self, "_cc_glosses_for", None))),
+                bool(callable(getattr(self, "_cedict_meanings_for", None))),
+                len(out),
+                (out[:3] if out else []),
+            )
+        except Exception:
+            pass
+
+        return out
 
     def attach_glosses(self, cands: Sequence[HanziCandidate]) -> list[HanziCandidate]:
         """Attach glosses to candidates using `glosses_for_candidate`.

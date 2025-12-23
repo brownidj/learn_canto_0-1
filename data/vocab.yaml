@@ -115,6 +115,13 @@ entries:
       gloss: eight
       hanzi: 八
       register: both
+  bei2:
+    jyutping: bei2
+    senses:
+    - categories:
+      - communication
+      gloss: give
+      hanzi: 畀
   bin1 dou6:
     headword: 邊到
     jyutping: bin1 dou6
@@ -169,6 +176,13 @@ entries:
       gloss: autumn
       hanzi: 秋
       register: both
+  ce1:
+    jyutping: ce1
+    senses:
+    - categories:
+      - vehicle
+      gloss: Car
+      hanzi: 車
   ceng1:
     jyutping: ceng1
     senses:
@@ -267,6 +281,13 @@ entries:
       gloss: winter
       hanzi: 冬
       register: both
+  faa1:
+    jyutping: faa1
+    senses:
+    - categories:
+      - nature_land
+      gloss: variant of 花[hua1], flower, blossom
+      hanzi: 花
   fan2 hung4:
     jyutping: fan2 hung4
     senses:

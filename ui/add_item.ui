@@ -56,6 +56,9 @@
         <property name="rowWrapPolicy">
           <enum>QFormLayout::DontWrapRows</enum>
         </property>
+        <property name="verticalSpacing">
+          <number>14</number>
+        </property>
         <item row="0" column="0">
           <widget class="QLabel" name="labelJyutping">
             <property name="text">
@@ -66,10 +69,13 @@
         <item row="0" column="1">
           <widget class="QLineEdit" name="editJyutping">
             <property name="sizePolicy">
-              <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+              <sizepolicy hsizetype="Expanding" vsizetype="Minimum">
                 <horstretch>0</horstretch>
                 <verstretch>0</verstretch>
               </sizepolicy>
+            </property>
+            <property name="minimumHeight">
+              <number>48</number>
             </property>
             <property name="minimumWidth">
               <number>220</number>
@@ -89,10 +95,13 @@
         <item row="1" column="1">
           <widget class="QLineEdit" name="editMeanings">
             <property name="sizePolicy">
-              <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+              <sizepolicy hsizetype="Expanding" vsizetype="Minimum">
                 <horstretch>0</horstretch>
                 <verstretch>0</verstretch>
               </sizepolicy>
+            </property>
+            <property name="minimumHeight">
+              <number>48</number>
             </property>
             <property name="placeholderText">
               <string>comma-separated, e.g. hello, hi</string>
@@ -122,6 +131,9 @@
         <number>360</number>
       </property>
       <layout class="QFormLayout" name="formHanzi">
+        <property name="verticalSpacing">
+          <number>14</number>
+        </property>
         <item row="0" column="0">
           <widget class="QLabel" name="labelHanzi">
             <property name="text">
@@ -132,10 +144,13 @@
         <item row="0" column="1">
           <widget class="QLineEdit" name="editHanzi">
             <property name="sizePolicy">
-              <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+              <sizepolicy hsizetype="Preferred" vsizetype="Minimum">
                 <horstretch>0</horstretch>
                 <verstretch>0</verstretch>
               </sizepolicy>
+            </property>
+            <property name="minimumHeight">
+              <number>48</number>
             </property>
             <property name="maximumWidth">
               <number>240</number>
