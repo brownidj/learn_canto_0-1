@@ -14,11 +14,9 @@ If a backing source is unavailable, the resolver degrades gracefully.
 from __future__ import annotations
 
 import json
-import re
 import logging
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Callable, Optional, Sequence, List, Iterable
+from typing import Callable, Optional, Sequence, List
 
 import yaml
 
@@ -28,14 +26,21 @@ from domain.storage_paths import (
     cccanto_meanings_map_path,
     cedict_meanings_map_json_path,
     cedict_meanings_map_yaml_path,
-    cedict_ts_path,
+    cedict_ts_path as _cedict_ts_path,
+    resolve_first_existing_data_file,
 )
-
 
 GlossList = List[str]
 
 logger = logging.getLogger(__name__)
 
+
+def cedict_ts_path() -> "Path | None":
+    """Return the first existing CC-CEDICT source file path, if available."""
+    try:
+        return _cedict_ts_path()
+    except Exception:
+        return None
 
 def _clean_list(xs: object) -> GlossList:
     if not isinstance(xs, list):
@@ -309,6 +314,14 @@ def default_facade() -> MeaningFacade:
 _CC_CANTO_MEANINGS_MAP: dict[str, list[str]] | None = None
 _CEDICT_MEANINGS_MAP: dict[str, list[str]] | None = None
 
+def reset_meaning_source_caches() -> None:
+    """Clear lazy-loaded meaning source caches.
+
+    Use this in debugging/tests instead of assigning to the private globals.
+    """
+    global _CC_CANTO_MEANINGS_MAP, _CEDICT_MEANINGS_MAP
+    _CC_CANTO_MEANINGS_MAP = None
+    _CEDICT_MEANINGS_MAP = None
 
 def _project_root() -> Path:
     """Best-effort project root: assumes `domain/` lives directly under root."""
@@ -416,58 +429,108 @@ def _load_json_dict(path: Path) -> dict[str, list[str]]:
     return out
 
 
+
+# New helper for CCCanto raw path
+def _cccanto_raw_path(*, project_dir: Path | None = None) -> Path | None:
+    """Return the CCCanto raw source file path (best-effort)."""
+    try:
+        return resolve_first_existing_data_file(
+            [
+                "cccanto.txt",
+                "cccanto.u8",
+                "cccanto.tsv",
+                "cccanto.csv",
+            ],
+            project_dir=project_dir,
+            prefer_data_dir=True,
+        )
+    except Exception:
+        return None
+
+
 def _get_cc_canto_meanings_map(*, project_dir: Path | None = None) -> dict[str, list[str]]:
     global _CC_CANTO_MEANINGS_MAP
+    # Only return early when we have a NON-EMPTY map.
     if isinstance(_CC_CANTO_MEANINGS_MAP, dict) and _CC_CANTO_MEANINGS_MAP:
         return _CC_CANTO_MEANINGS_MAP
 
+    # 1) Prefer a prebuilt map file (YAML)
     p_map = cccanto_meanings_map_path(project_dir=project_dir)
     if p_map and p_map.exists():
         try:
-            import yaml
             data = yaml.safe_load(p_map.read_text(encoding="utf-8")) or {}
-            if isinstance(data, dict):
-                out: dict[str, list[str]] = {}
-                for k, v in data.items():
-                    if not k:
-                        continue
-                    if isinstance(v, list):
-                        out[str(k)] = [str(x) for x in v if x]
-                    elif isinstance(v, str):
-                        out[str(k)] = [v]
-                _CC_CANTO_MEANINGS_MAP = out
-                return out
         except Exception:
-            pass
+            data = {}
 
-    # Fallback: parse data/cccanto.txt (best-effort)
-    # Try project_dir/data first if given; else fall back to ./data
-    candidates: list[Path] = []
-    if project_dir is not None:
-        candidates.append(Path(project_dir) / "data" / "cccanto.txt")
-    candidates.append(Path(__file__).resolve().parent.parent / "data" / "cccanto.txt")
+        if isinstance(data, dict):
+            out: dict[str, list[str]] = {}
+            for k, v in data.items():
+                if not k:
+                    continue
+                if isinstance(v, list):
+                    out[str(k)] = [str(x) for x in v if x]
+                elif isinstance(v, str):
+                    out[str(k)] = [v]
+            _CC_CANTO_MEANINGS_MAP = out
+            return out
 
-    p_raw = next((p for p in candidates if p.exists()), None)
+    # 2) Fallback: parse raw CCCanto source (best-effort)
+    p_raw = _cccanto_raw_path(project_dir=project_dir)
     if p_raw and p_raw.exists():
         out2: dict[str, list[str]] = {}
         try:
             with p_raw.open("r", encoding="utf-8", errors="ignore") as fh:
+                import re
+
+                # Two supported raw formats:
+                # 1) TSV: hanzi\t...\tgloss
+                # 2) CEDICT-like: TRAD SIMP [pinyin] {jyutping} /def1/def2/.../
+                pat = re.compile(r"^([^\s]+)\s+([^\s]+)\s+\[[^]]*]\s+\{[^}]*}\s+/(.+)/\s*$")
+
                 for line in fh:
                     s = line.strip()
                     if not s or s.startswith("#"):
                         continue
-                    parts = s.split("\t")
-                    if len(parts) < 2:
+
+                    hanzi: str | None = None
+                    defs_raw: str | None = None
+
+                    if "\t" in s:
+                        # TSV
+                        parts = s.split("\t")
+                        if len(parts) >= 2:
+                            hanzi = parts[0].strip()
+                            defs_raw = parts[-1].strip()
+                    else:
+                        # CEDICT-like
+                        m = pat.match(s)
+                        if m:
+                            trad = m.group(1).strip()
+                            simp = m.group(2).strip()
+                            defs_raw = m.group(3).strip()
+                            # Prefer storing both trad and simp keys when present.
+                            # We will set `hanzi` below and also optionally store simp.
+                            hanzi = trad
+
+                    if not hanzi or not defs_raw:
                         continue
-                    hanzi = parts[0].strip()
-                    if not hanzi:
+
+                    # Keep behaviour compatible with earlier code: treat '/' as delimiter.
+                    items = [x.strip() for x in defs_raw.replace("/", ";").split(";") if x.strip()]
+                    if not items:
                         continue
-                    gloss = parts[-1].strip()
-                    if not gloss:
-                        continue
-                    items = [x.strip() for x in gloss.replace("/", ";").split(";") if x.strip()]
-                    if items:
-                        out2[hanzi] = items
+
+                    out2[hanzi] = items
+
+                    # If we parsed a CEDICT-like line, also store simplified key when available.
+                    if "\t" not in s:
+                        try:
+                            if m:
+                                simp_key = m.group(2).strip()
+                                if simp_key and simp_key != hanzi:
+                                    out2[simp_key] = items
+                        except Exception:
+                            pass
         except Exception:
             out2 = {}
 
@@ -478,8 +541,10 @@ def _get_cc_canto_meanings_map(*, project_dir: Path | None = None) -> dict[str, 
     return {}
 
 
+
 def _get_cedict_meanings_map(*, project_dir: Path | None = None) -> dict[str, list[str]]:
     global _CEDICT_MEANINGS_MAP
+    # Only return early when we have a NON-EMPTY map.
     if isinstance(_CEDICT_MEANINGS_MAP, dict) and _CEDICT_MEANINGS_MAP:
         return _CEDICT_MEANINGS_MAP
 
@@ -487,49 +552,47 @@ def _get_cedict_meanings_map(*, project_dir: Path | None = None) -> dict[str, li
     p_yaml = cedict_meanings_map_yaml_path(project_dir=project_dir)
     if p_yaml and p_yaml.exists():
         try:
-            import yaml
             data = yaml.safe_load(p_yaml.read_text(encoding="utf-8")) or {}
-            if isinstance(data, dict):
-                out: dict[str, list[str]] = {}
-                for k, v in data.items():
-                    if not k:
-                        continue
-                    if isinstance(v, list):
-                        out[str(k)] = [str(x) for x in v if x]
-                    elif isinstance(v, str):
-                        out[str(k)] = [v]
-                _CEDICT_MEANINGS_MAP = out
-                return out
         except Exception:
-            pass
+            data = {}
+        if isinstance(data, dict):
+            out: dict[str, list[str]] = {}
+            for k, v in data.items():
+                if not k:
+                    continue
+                if isinstance(v, list):
+                    out[str(k)] = [str(x) for x in v if x]
+                elif isinstance(v, str):
+                    out[str(k)] = [v]
+            _CEDICT_MEANINGS_MAP = out
+            return out
 
     p_json = cedict_meanings_map_json_path(project_dir=project_dir)
     if p_json and p_json.exists():
         try:
-            import json
             data = json.loads(p_json.read_text(encoding="utf-8")) or {}
-            if isinstance(data, dict):
-                out2: dict[str, list[str]] = {}
-                for k, v in data.items():
-                    if not k:
-                        continue
-                    if isinstance(v, list):
-                        out2[str(k)] = [str(x) for x in v if x]
-                    elif isinstance(v, str):
-                        out2[str(k)] = [v]
-                _CEDICT_MEANINGS_MAP = out2
-                return out2
         except Exception:
-            pass
+            data = {}
+        if isinstance(data, dict):
+            out2: dict[str, list[str]] = {}
+            for k, v in data.items():
+                if not k:
+                    continue
+                if isinstance(v, list):
+                    out2[str(k)] = [str(x) for x in v if x]
+                elif isinstance(v, str):
+                    out2[str(k)] = [v]
+            _CEDICT_MEANINGS_MAP = out2
+            return out2
 
-    # 2) Fallback: parse raw CC-CEDICT file
-    p_raw = cedict_ts_path()
+    # 2) Fallback: parse raw CC-CEDICT file (best-effort)
+    p_raw = _cedict_ts_path()
     if p_raw and p_raw.exists():
         out3: dict[str, list[str]] = {}
         try:
             import re
             # CC-CEDICT: TRAD SIMP [pinyin] /def1/def2/
-            pat = re.compile(r"^([^\s]+)\s+([^\s]+)\s+\[[^\]]*\]\s+/(.+)/\s*$")
+            pat = re.compile(r"^([^\s]+)\s+([^\s]+)\s+\[[^]]*]\s+/(.+)/\s*$")
             with p_raw.open("r", encoding="utf-8", errors="ignore") as fh:
                 for line in fh:
                     s = line.strip()
@@ -602,4 +665,6 @@ __all__ = [
     "default_facade",
     "get_cedict_meanings_for",
     "get_cccanto_glosses_for",
+    "reset_meaning_source_caches",
+    "cedict_ts_path",
 ]

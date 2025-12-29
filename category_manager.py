@@ -1,3 +1,5 @@
+
+
 # ----------------------------------------
 # Standard library imports
 # ----------------------------------------
@@ -5,7 +7,6 @@ import logging
 import os
 import re
 import time
-from enum import Enum, auto
 
 # ------------------------------
 # Candidate source labels (UI)
@@ -69,134 +70,15 @@ from domain.hanzi_candidate_pipeline import HanziCandidatePipeline, build_pipeli
 from domain.jyutping_validation import validate_jyut_syllables
 from domain.meaning_sources import MeaningFacade, default_facade, clean_glosses_for_display  # type: ignore
 from domain.storage_paths import categories_yaml_path
+from domain.duplicate_rules import is_duplicate_jy
 from infra.paths import project_root
-
 
 logger = logging.getLogger(__name__)
 
 
 # ------------------------------
-# Add/Edit state machine (Qt-free)
+# Internal helpers (UI-free)
 # ------------------------------
-
-class AddEditState(Enum):
-    """Pure state machine for the Add/Edit panel.
-
-    This enum is intentionally Qt-free so it can be tested in a pure pytest run.
-    """
-
-    EMPTY = auto()
-    JYUTPING_VALID = auto()
-    CANDIDATES_READY = auto()
-    HANZI_SELECTED = auto()
-    MEANINGS_VALID = auto()
-    CATEGORY_SELECTED = auto()
-    READY_TO_SAVE = auto()
-    SAVING = auto()
-
-
-def _derive_state(
-        *,
-        jyutping: str = "",
-        jyut_ok: bool | None = None,
-        has_candidates: bool | None = None,
-        candidates: list | None = None,
-        hanzi: str = "",
-        meanings: str | list | tuple | None = None,
-        category: str = "",
-        category_committed: bool | None = None,
-        saving: bool | None = None,
-        saving_now: bool | None = None,
-) -> AddEditState:
-    # Saving overrides all other states.
-    # Saving overrides everything
-    try:
-        if bool(saving):
-            return AddEditState.SAVING
-    except Exception:
-        pass
-
-    # Jyutping validity: if a caller supplies `jyut_ok`, treat it as authoritative.
-    # Otherwise, fall back to a minimal check (non-empty string). Structural/attestation
-    # validation belongs outside this pure function (see `_refresh_add_state()`).
-    try:
-        jy = str(jyutping or "").strip()
-    except Exception:
-        jy = ""
-
-    if jyut_ok is None:
-        jy_valid = bool(jy)
-    else:
-        try:
-            jy_valid = bool(jyut_ok)
-        except Exception:
-            jy_valid = False
-
-    if not jy_valid:
-        return AddEditState.EMPTY
-
-    # Candidates gate
-    if has_candidates is not None:
-        try:
-            candidates_ready = bool(has_candidates)
-        except Exception:
-            candidates_ready = False
-    else:
-        try:
-            candidates_ready = bool(candidates)
-        except Exception:
-            candidates_ready = False
-
-    if not candidates_ready:
-        return AddEditState.JYUTPING_VALID
-
-    # Hanzi gate
-    try:
-        hz = str(hanzi or "").strip()
-    except Exception:
-        hz = ""
-
-    if not hz:
-        return AddEditState.CANDIDATES_READY
-
-    # Meanings gate
-    has_meanings = False
-    try:
-        if isinstance(meanings, str):
-            has_meanings = bool((meanings or "").strip())
-        elif isinstance(meanings, (list, tuple)):
-            has_meanings = any(bool(str(x).strip()) for x in (meanings or []))
-        else:
-            has_meanings = False
-    except Exception:
-        has_meanings = False
-
-    if not has_meanings:
-        return AddEditState.HANZI_SELECTED
-
-    # Category gate
-    try:
-        cat = str(category or "").strip()
-    except Exception:
-        cat = ""
-
-    cat_valid = bool(cat) and (cat.lower() not in ("all",))
-    if not cat_valid:
-        return AddEditState.MEANINGS_VALID
-
-    # Explicit category commit gate
-    try:
-        if not bool(category_committed):
-            return AddEditState.CATEGORY_SELECTED
-    except Exception:
-        return AddEditState.CATEGORY_SELECTED
-
-    return AddEditState.READY_TO_SAVE
-
-
-    # ------------------------------
-    # Internal helpers (UI-free)
-    # ------------------------------
 
 
 # Minimal state diagram (conceptual)
@@ -240,9 +122,6 @@ class CategoryManagerDialog(QDialog):
         # Sticky manual-entry mode: when the user chooses to type their own Hanzi,
         # we must not overwrite it with any later auto-fill.
         self._manual_hanzi_mode = False
-        self._add_state = AddEditState.EMPTY
-        self._category_committed = False
-        self._last_candidates = []
 
     def _init_style_and_curator(self) -> None:
         """Initialise UI-free helpers used for style and candidate curation."""
@@ -552,6 +431,8 @@ class CategoryManagerDialog(QDialog):
         except Exception:
             pass
 
+        self._hanzi_committed = False
+
         # ---------- Data / caches ----------
         self._init_style_and_curator()
         self._init_vocab_and_categories(vocab_items, categories_map)
@@ -696,16 +577,6 @@ class CategoryManagerDialog(QDialog):
                         le.editingFinished.connect(self._update_save_enabled)
                 except Exception:
                     pass
-        except Exception:
-            pass
-
-        try:
-            if self._add_cat.isEditable() and self._add_cat.lineEdit():
-                _le_cat = self._add_cat.lineEdit()
-                _le_cat.textChanged.connect(self._on_category_dirty)
-                _le_cat.editingFinished.connect(self._on_category_committed)
-
-            self._add_cat.activated.connect(self._on_category_committed)
         except Exception:
             pass
 
@@ -888,11 +759,6 @@ class CategoryManagerDialog(QDialog):
         logger.debug("CategoryManagerDialog: init complete")
         self._perf_end("CategoryManagerDialog.__init__", _t_init)
 
-        try:
-            self._refresh_add_state()
-        except Exception:
-            pass
-
     def _apply_add_edit_typography(
             self,
             *,
@@ -1020,151 +886,50 @@ class CategoryManagerDialog(QDialog):
         except Exception:
             return (s or "").strip().lower()
 
-    def _update_save_enabled(self) -> None:
-        """State-driven Save gating (single source of truth)."""
+    def _warn_duplicate_jy_and_reset(self, jy: str) -> None:
+        """
+        Inform the user that the Jyutping already exists, then clear the field
+        so a different Jyutping can be entered.
+        """
         try:
-            # Read UI values (best-effort; never raise)
-            jy = ""
-            hz = ""
-            cat = ""
-            meanings_list: list[str] = []
-
-            try:
-                jy_edit = getattr(self, "_add_jy", None)
-                jy = str(jy_edit.text() if jy_edit is not None else "") or ""
-            except Exception:
-                jy = ""
-            jy = jy.strip()
-
-            try:
-                hz_edit = getattr(self, "_add_hz", None)
-                hz = str(hz_edit.text() if hz_edit is not None else "") or ""
-            except Exception:
-                hz = ""
-            hz = hz.strip()
-
-            # Meanings can be QTextEdit/QPlainTextEdit or QLineEdit depending on wiring
-            mn_text = ""
-            try:
-                mn_edit = getattr(self, "_add_mn", None)
-                if mn_edit is not None and hasattr(mn_edit, "toPlainText"):
-                    mn_text = str(mn_edit.toPlainText() or "")
-                elif mn_edit is not None and hasattr(mn_edit, "text"):
-                    mn_text = str(mn_edit.text() or "")
-                else:
-                    mn_text = ""
-            except Exception:
-                mn_text = ""
-
-            try:
-                parts = [p.strip() for p in (mn_text or "").split(",")]
-                meanings_list = [p for p in parts if p]
-            except Exception:
-                meanings_list = []
-
-            # Category: prefer stored key, fall back to combo text
-            try:
-                cat = str(getattr(self, "_selected_category", "") or "").strip()
-            except Exception:
-                cat = ""
-            if not cat:
-                try:
-                    cat_combo = getattr(self, "_cat_combo", None)
-                    if cat_combo is not None and hasattr(cat_combo, "currentText"):
-                        cat = str(cat_combo.currentText() or "").strip()
-                except Exception:
-                    cat = ""
-
-            # Candidates object: derive_state only needs “truthy / non-empty” semantics
-            try:
-                candidates_obj = getattr(self, "_candidates", None)
-            except Exception:
-                candidates_obj = None
-
-            try:
-                saving_flag = bool(getattr(self, "_saving", False))
-            except Exception:
-                saving_flag = False
-
-            try:
-                committed_flag = bool(getattr(self, "_category_committed", False))
-            except Exception:
-                committed_flag = False
-
-            # Derive and apply
-            state = _derive_state(
-                jyutping=jy,
-                hanzi=hz,
-                meanings=meanings_list,
-                category=cat,
-                candidates=candidates_obj,
-                saving=saving_flag,
-                category_committed=committed_flag,
+            QMessageBox.warning(
+                self,
+                "Duplicate Jyutping",
+                f"The Jyutping “{jy}” already exists in your vocabulary.\n\n"
+                "Please enter a different Jyutping.",
             )
-            self._set_state(state)
-
         except Exception:
-            # Fail closed but never crash the dialog
+            pass
+
+        # Clear and refocus Jyutping input
+        try:
+            if getattr(self, "_add_jy", None) is not None:
+                self._add_jy.clear()
+                self._add_jy.setFocus()
+        except Exception:
+            pass
+
+    def _update_save_enabled(self):
+        """
+        Enable the Save button when the Add panel has a structurally valid Jyutping,
+        a resolved Hanzi, at least one meaning, and a non-empty category.
+
+        This is intentionally permissive for *new* but well-formed phrases: we only
+        require structural Jyutping validity via _attested_or_structural_ok, not that
+        the phrase already appears in any corpus.
+        """
+        try:
+            jy, hz, mn, cat = self._read_add_fields()
+        except Exception:
+            # If we cannot even read the fields safely, keep Save disabled.
             try:
-                self._set_state(AddEditState.EMPTY)
+                if getattr(self, "btn_save", None) is not None:
+                    self.btn_save.setEnabled(False)
             except Exception:
                 pass
+            return
 
-    def _on_category_dirty(self, *_args) -> None:
-        try:
-            self._category_committed = False
-        except Exception:
-            pass
-        try:
-            self._refresh_add_state()
-        except Exception:
-            pass
-
-    def _on_category_committed(self, *_args) -> None:
-        try:
-            self._category_committed = True
-        except Exception:
-            pass
-        try:
-            self._refresh_add_state()
-        except Exception:
-            pass
-
-    def _set_state(self, state: AddEditState) -> None:
-        try:
-            if getattr(self, "_add_state", None) == state:
-                return
-        except Exception:
-            pass
-
-        try:
-            self._add_state = state
-        except Exception:
-            pass
-
-        # Save gate: ONLY READY_TO_SAVE
-        try:
-            enable = bool(state == AddEditState.READY_TO_SAVE)
-            if getattr(self, "btn_save", None) is not None:
-                self.btn_save.setEnabled(enable)
-        except Exception:
-            pass
-
-        try:
-            logger.debug("AddEditState=%s", getattr(state, "name", str(state)))
-        except Exception:
-            pass
-
-    def _refresh_add_state(self) -> None:
-        try:
-            jy = (self._add_jy.text() or "").strip() if getattr(self, "_add_jy", None) is not None else ""
-            hz = (self._add_hz.text() or "").strip() if getattr(self, "_add_hz", None) is not None else ""
-            mn = (self._add_mn.text() or "").strip() if getattr(self, "_add_mn", None) is not None else ""
-            cat = (self._add_cat.currentText() or "").strip() if getattr(self, "_add_cat", None) is not None else ""
-        except Exception:
-            jy, hz, mn, cat = "", "", "", ""
-
-        # Structural jyutping validity (same as before)
+        # Basic field checks
         try:
             from domain.attestation import is_attested_phrase as _is_attested_phrase
         except Exception:
@@ -1173,69 +938,46 @@ class CategoryManagerDialog(QDialog):
             except Exception:
                 _is_attested_phrase = (lambda _s: False)
 
-        try:
-            jy_structural_ok = bool(jy) and attested_or_structural_ok(jy, is_attested_phrase=_is_attested_phrase)
-        except Exception:
-            jy_structural_ok = bool(jy)
+        jy_ok = bool(jy) and attested_or_structural_ok(
+            jy,
+            is_attested_phrase=_is_attested_phrase,
+        )
+        hz_ok = bool(hz)
+        mn_ok = bool(mn)
+        cat_l = cat.lower()
+        cat_ok = bool(cat) and cat_l not in ("all",)
 
-        # Candidate availability: prefer last pipeline run; fallback to combo count
-        cand_ok = False
+        # Duplicate gate: do not enable Save if Jyutping already exists in vocab
+        dup = False
         try:
-            cand_ok = bool(getattr(self, "_last_candidates", None))
+            dup = bool(
+                jy
+                and is_duplicate_jy(
+                    self._vocab,
+                    jy,
+                    normalize=self._normalize_jy,
+                )
+            )
         except Exception:
-            cand_ok = False
-        if not cand_ok:
-            try:
-                cand_ok = bool(getattr(self, "_cand_combo", None) is not None and self._cand_combo.count() > 1)
-            except Exception:
-                cand_ok = False
+            dup = False
 
+        # Do not allow Save while a save is in progress
+        saving = False
         try:
             saving = bool(getattr(self, "_saving_now", False))
         except Exception:
             saving = False
 
+        enable = jy_ok and (not dup) and hz_ok and mn_ok and cat_ok and (not saving)
+
         try:
-            committed = bool(getattr(self, "_category_committed", False))
-        except Exception:
-            committed = False
-
-        state = _derive_state(
-            jyutping=jy,
-            jyut_ok=jy_structural_ok,
-            has_candidates=cand_ok,
-            hanzi=hz,
-            meanings=mn,
-            category=cat,
-            category_committed=committed,
-            saving=saving,
-        )
-        self._set_state(state)
-
-        # State is the single source of truth for Save gating; do not log legacy *_ok flags.
-        try:
-            enable = bool(state == AddEditState.READY_TO_SAVE)
-
-            _mn_preview = ""
-            try:
-                _mn_preview = (mn or "").strip()
-                if len(_mn_preview) > 60:
-                    _mn_preview = _mn_preview[:57].rstrip() + "…"
-            except Exception:
-                _mn_preview = ""
-
-            logger.debug(
-                "AddEditState=%s save_enabled=%s committed=%s saving=%s cand_ok=%s jy=%r hz=%r mn=%r cat=%r",
-                getattr(state, "name", str(state)),
-                enable,
-                committed,
-                saving,
-                cand_ok,
-                jy,
-                hz,
-                _mn_preview,
-                cat,
-            )
+            if getattr(self, "btn_save", None) is not None:
+                self.btn_save.setEnabled(enable)
+                # Optional: lightweight debug for why Save is off
+                logger.debug(
+                    f"SaveEnabled? {enable} (jy_ok={jy_ok}, dup={dup}, hz_ok={hz_ok}, mn_ok={mn_ok}, "
+                    f"cat_ok={cat_ok}, saving={saving}, jy='{jy}', hz='{hz}', cat='{cat}')"
+                )
         except Exception:
             pass
 
@@ -1386,11 +1128,6 @@ class CategoryManagerDialog(QDialog):
         Dialog remains orchestration-only:
           - meaning resolution + cleaning + formatting is delegated to MeaningFacade.
         """
-        try:
-            self._last_candidates = list(cands or [])
-        except Exception:
-            self._last_candidates = []
-
         try:
             self._cand_combo.blockSignals(True)
             self._cand_combo.clear()
@@ -1836,6 +1573,36 @@ class CategoryManagerDialog(QDialog):
         except Exception:
             pass
 
+        # User explicitly chose this Hanzi (from the candidates UI).
+        # Guard against programmatic combobox changes during population.
+        try:
+            user_action = False
+            try:
+                if index is not None:
+                    user_action = True
+            except Exception:
+                user_action = False
+
+            if not user_action:
+                try:
+                    if combo.hasFocus():
+                        user_action = True
+                except Exception:
+                    pass
+
+            if not user_action:
+                try:
+                    v = combo.view()
+                    if v is not None and v.hasFocus():
+                        user_action = True
+                except Exception:
+                    pass
+
+            if user_action:
+                self._hanzi_committed = True
+        except Exception:
+            pass
+
         # Apply Hanzi selection to the UI
         try:
             hz_edit = getattr(self, "_add_hz", None)
@@ -2178,6 +1945,11 @@ class CategoryManagerDialog(QDialog):
             self._manual_hanzi_mode = True
         except Exception:
             pass
+        # Manual Hanzi entry is not yet a committed choice until user confirms.
+        try:
+            self._hanzi_committed = False
+        except Exception:
+            pass
         # Track first entry into manual mode so repeated clicks don't wipe user input
         try:
             if not hasattr(self, "_manual_hanzi_started"):
@@ -2302,23 +2074,6 @@ class CategoryManagerDialog(QDialog):
         except Exception:
             pass
 
-    def _is_duplicate_jy(self, jy: str) -> bool:
-        """
-        Consider it a duplicate if any existing vocab entry has the same normalized jyut string.
-        """
-        try:
-            jy_n = self._normalize_jy(jy)
-            for _hz, _val in (self._vocab or {}).items():
-                try:
-                    vjy = (_val[1] if isinstance(_val, (list, tuple)) and len(_val) > 1 else "")
-                    if self._normalize_jy(vjy) == jy_n:
-                        return True
-                except Exception:
-                    continue
-        except Exception:
-            pass
-        return False
-
     def _reset_add_panel(self):
         """Clear Add/Edit fields back to initial state and focus Jyutping."""
         try:
@@ -2381,11 +2136,6 @@ class CategoryManagerDialog(QDialog):
                 "categories": [<str>, ...],
             }
         """
-        self._category_committed = True
-        self._refresh_add_state()
-        if self._add_state != AddEditState.READY_TO_SAVE:
-            return
-
         # Re-check that Save should be enabled (defensive)
         try:
             self._update_save_enabled()
@@ -2399,14 +2149,7 @@ class CategoryManagerDialog(QDialog):
             )
             return
 
-        try:
-            jy = (self._add_jy.text() or "").strip() if getattr(self, "_add_jy", None) is not None else ""
-            hz = (self._add_hz.text() or "").strip() if getattr(self, "_add_hz", None) is not None else ""
-            mn = (self._add_mn.text() or "").strip() if getattr(self, "_add_mn", None) is not None else ""
-            cat = (self._add_cat.currentText() or "").strip() if getattr(self, "_add_cat", None) is not None else ""
-        except Exception as e:
-            logger.warning("Save aborted: unable to read Add fields (%s)", e)
-            return
+        jy, hz, mn, cat = self._read_add_fields()
 
         # Basic guard: all fields must be present and category must be something real
         if not jy or not hz or not mn:
@@ -2462,13 +2205,16 @@ class CategoryManagerDialog(QDialog):
         """
         Handler for Enter/Return in the Jyutping field.
 
-        Behaviour:
-          - Validate the Jyutping structurally (and via attestation if available).
-          - If invalid, show a single warning and keep focus in the Jyutping field.
-          - If valid, move focus to the Category control so the user can pick a context.
-          - Do *not* trigger category commit logic or show category warnings here; those
-            are only shown when the user explicitly commits a category or tries to
-            progress without a real category.
+        TODO (ARCH-STATE):
+            Replace this method body with a call into domain.add_edit_sm.handle_jyut_commit(...)
+            This method should become UI-only:
+                - read jyutping from widget
+                - pass to state machine
+                - react to returned state (warnings, focus changes)
+
+        WARNING:
+            Do NOT add further validation or duplicate logic here.
+            Any new rules must go into domain.add_edit_sm or domain.duplicate_rules.
         """
         jy_text = ""
         try:
@@ -2538,6 +2284,47 @@ class CategoryManagerDialog(QDialog):
                 pass
             return
 
+        # Duplicate detection should happen at Jyutping commit time (Enter/Return)
+        # UI must call the domain rule directly (no _is_duplicate_jy indirection).
+        try:
+            dup = bool(
+                is_duplicate_jy(
+                    jy_text,
+                    vocab=getattr(self, "_vocab", {}),
+                    normalize=getattr(self, "_normalize_jy", None),
+                )
+            )
+        except Exception:
+            dup = False
+
+        if dup:
+            try:
+                QMessageBox.warning(
+                    self,
+                    "Duplicate Jyutping",
+                    "That Jyutping already exists in your vocab.\n\n"
+                    "Please change the Jyutping (or edit the existing entry instead).",
+                )
+            except Exception:
+                pass
+            try:
+                if getattr(self, "_add_jy", None) is not None:
+                    self._add_jy.setFocus()
+                    self._add_jy.selectAll()
+            except Exception:
+                pass
+            try:
+                if hasattr(self, "_update_save_enabled") and callable(self._update_save_enabled):
+                    self._update_save_enabled()
+            except Exception:
+                pass
+            return
+
+        # New Jyutping invalidates any chosen Hanzi
+        try:
+            self._hanzi_committed = False
+        except Exception:
+            pass
         try:
             self._manual_hanzi_mode = False
         except Exception:
@@ -2582,6 +2369,147 @@ class CategoryManagerDialog(QDialog):
         """
         return validate_jyut_syllables(jy)
 
+    def _has_valid_inputs(self) -> bool:
+        """
+        Validation gate for enabling the Save button in the Add/Edit panel.
+
+        New workflow alignment
+        ----------------------
+        We treat the Add panel as valid (Save enabled) if:
+
+          1) Jyutping:
+             - Non-empty, and
+             - Structurally valid / attested according to our Jyutping validator.
+
+          2) Category:
+             - Non-empty after stripping whitespace.
+             - 'unassigned' is allowed; we still expect the rest of the entry to be complete.
+
+          3) Hanzi:
+             - The read-only Hanzi field has some non-empty text.
+               (i.e., the user has either accepted the top candidate or chosen from the dropdown.)
+
+          4) Meanings:
+             - At least one non-empty meaning token after splitting on commas,
+               or a single non-empty string.
+               This ensures we don’t commit entries with completely blank glosses.
+
+        If any of these conditions fail, Save is disabled. This keeps the UI responsive while
+        still enforcing that an entry is "complete enough" for learner-facing vocab.
+        """
+        # Prefer new Add-Item widgets; fall back to legacy attributes if present
+        jy_le = getattr(self, "_add_jy", getattr(self, "editJyut", None))
+        mn_le = getattr(self, "_add_mn", getattr(self, "editMeanings", None))
+        hz_le = getattr(self, "_add_hz", None)
+        cat_cb = getattr(self, "_add_cat", getattr(self, "comboCategory", None))
+
+        # 1) Jyutping: must be present and structurally/attested OK
+        jy = (jy_le.text() if jy_le is not None else "").strip()
+        if not jy:
+            try:
+                logger.debug("_has_valid_inputs: invalid -> empty Jyutping")
+            except Exception:
+                pass
+            return False
+
+        # Orchestration-only logic for Jyutping validation (structural or attested)
+        try:
+            from domain.attestation import is_attested_phrase as _is_attested_phrase
+        except Exception:
+            try:
+                _is_attested_phrase = is_attested_phrase  # type: ignore[name-defined]
+            except Exception:
+                _is_attested_phrase = (lambda _s: False)
+
+        try:
+            jy_ok = bool(jy) and attested_or_structural_ok(
+                jy,
+                is_attested_phrase=_is_attested_phrase,
+            )
+        except Exception:
+            # Fail closed: if validation/attestation fails unexpectedly,
+            # do not allow Save to be enabled.
+            jy_ok = False
+
+        if not jy_ok:
+            try:
+                logger.debug("_has_valid_inputs: invalid -> Jyutping failed validation: %r", jy)
+            except Exception:
+                pass
+            return False
+
+        # 2) Category: must be non-empty after stripping; 'unassigned' is allowed
+        cat_txt = ""
+        try:
+            if cat_cb is not None:
+                # Editable combobox: prefer its lineEdit if present
+                if hasattr(cat_cb, "isEditable") and cat_cb.isEditable() and cat_cb.lineEdit() is not None:
+                    cat_txt = (cat_cb.lineEdit().text() or "").strip()
+                else:
+                    cat_txt = (cat_cb.currentText() or "").strip()
+        except Exception:
+            cat_txt = ""
+
+        # Category must be explicitly chosen/entered.
+        if not cat_txt:
+            try:
+                logger.debug("_has_valid_inputs: invalid -> empty category")
+            except Exception:
+                pass
+            return False
+
+        # 3) Hanzi: the resolved Hanzi must be present
+        hz_txt = ""
+        try:
+            if hz_le is not None:
+                hz_txt = (hz_le.text() or "").strip()
+        except Exception:
+            hz_txt = ""
+
+        if not hz_txt:
+            try:
+                logger.debug("_has_valid_inputs: invalid -> empty Hanzi field")
+            except Exception:
+                pass
+            return False
+
+        # 4) Meanings: require at least one non-empty token
+        mn_txt = ""
+        try:
+            if mn_le is not None:
+                mn_txt = (mn_le.text() or "").strip()
+        except Exception:
+            mn_txt = ""
+
+        if not mn_txt:
+            try:
+                logger.debug("_has_valid_inputs: invalid -> empty meanings field")
+            except Exception:
+                pass
+            return False
+
+        # Split on commas and check that at least one token survives stripping
+        try:
+            tokens = [t.strip() for t in mn_txt.split(",")] if "," in mn_txt else [mn_txt.strip()]
+            has_meaning = any(t for t in tokens)
+        except Exception:
+            has_meaning = bool(mn_txt)
+
+        if not has_meaning:
+            try:
+                logger.debug("_has_valid_inputs: invalid -> no non-empty meaning tokens in %r", mn_txt)
+            except Exception:
+                pass
+            return False
+
+        try:
+            logger.debug(
+                "_has_valid_inputs: OK (jy=%r, cat=%r, hz=%r, meanings=%r)",
+                jy, cat_txt, hz_txt, mn_txt,
+            )
+        except Exception:
+            pass
+        return True
 
     def _on_add_category_committed(self) -> None:
         """Commit the category from the editable Add-panel combobox.
@@ -2669,7 +2597,10 @@ class CategoryManagerDialog(QDialog):
             jy_txt = ""
             hz_txt = ""
 
-        if jy_txt and not hz_txt:
+        hanzi_committed = bool(getattr(self, "_hanzi_committed", False))
+
+        # Only run lookup if the user has NOT explicitly chosen a Hanzi
+        if jy_txt and not hanzi_committed:
             _CatTimer.singleShot(0, lambda: self._post_category_fill(jy_txt))
         else:
             try:
@@ -2680,6 +2611,9 @@ class CategoryManagerDialog(QDialog):
 
     def _post_category_fill(self, jy_txt: str) -> None:
         """Run reverse lookup after a category has been committed."""
+        # Do not steal focus or regenerate candidates after user has committed Hanzi
+        if bool(getattr(self, "_hanzi_committed", False)):
+            return
         try:
             n = self._fill_hanzi_candidates(self._normalize_jy(jy_txt))
         except Exception:

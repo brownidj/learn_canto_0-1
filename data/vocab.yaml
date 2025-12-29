@@ -281,6 +281,10 @@ entries:
       gloss: winter
       hanzi: 冬
       register: both
+    - categories:
+      - direction
+      gloss: east, host (i.e. sitting on east side of guest), landlord
+      hanzi: 東
   faa1:
     jyutping: faa1
     senses:
