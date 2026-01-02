@@ -19,6 +19,15 @@ def _import_state_api():
         raise ImportError("Unable to import AddEditState/AddEditContext/reduce from domain.add_edit_sm") from e
 
 
+def _import_event_api():
+    """Return (Event, EventPayload) from the current module if available."""
+    try:
+        from domain.add_edit_sm import Event, EventPayload  # type: ignore
+        return Event, EventPayload
+    except Exception as e:
+        raise ImportError("Unable to import Event/EventPayload from domain.add_edit_sm") from e
+
+
 def _import_state_enum_only():
     try:
         from domain.add_edit_sm import AddEditState  # type: ignore
@@ -173,3 +182,106 @@ def test_reduce_returns_expected_tuple_shape():
     assert isinstance(st1, AddEditState)
     assert isinstance(ctx1, AddEditContext)
     assert isinstance(effects, list)
+
+
+# ---------------------------------------------------------------------------
+# Additional tests for CATEGORY_COMMITTED and candidate fill
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.pure
+def test_category_committed_triggers_fill_candidates_when_hanzi_not_committed():
+    """CATEGORY_COMMITTED should trigger candidate fill when Jyutping is OK and Hanzi is not yet committed."""
+    AddEditState, AddEditContext, reduce_fn = _import_state_api()
+    Event, EventPayload = _import_event_api()
+
+    # Resolve the category-commit event name across versions.
+    evt_enum = None
+    for name in ("CATEGORY_COMMITTED", "CAT_COMMITTED", "CATEGORY_ACCEPTED"):
+        if hasattr(Event, name):
+            evt_enum = getattr(Event, name)
+            break
+
+    if evt_enum is None:
+        pytest.fail("State machine Event is missing CATEGORY_COMMITTED/CAT_COMMITTED/CATEGORY_ACCEPTED")
+
+    # Context: Jyutping is structurally OK, category is OK, but Hanzi is still empty/uncommitted.
+    ctx0 = AddEditContext(
+        jy="baak6",
+        jy_ok=True,
+        duplicate=False,
+        hanzi="",
+        hz_ok=False,
+        manual_hanzi=False,
+        meaning="white",
+        mn_ok=True,
+        category="colors",
+        cat_ok=True,
+        saving=False,
+    )
+
+    state0 = getattr(AddEditState, "JY_ACCEPTED", AddEditState.EMPTY)
+
+    evt = EventPayload(event=evt_enum, value="colors")
+    _st1, _ctx1, effects = reduce_fn(state0, ctx0, evt)
+
+    # We allow either explicit fill_candidates or a more general effect naming.
+    effect_types = []
+    for e in (effects or []):
+        if isinstance(e, dict):
+            effect_types.append(str(e.get("type") or ""))
+        else:
+            effect_types.append(str(getattr(e, "type", "") or ""))
+
+    assert any(t in ("fill_candidates", "fill_hanzi_candidates") for t in effect_types), (
+        "Expected CATEGORY_COMMITTED to request candidate fill when Hanzi is not committed; "
+        f"got effects={effect_types!r}"
+    )
+
+
+@pytest.mark.pure
+def test_category_committed_does_not_trigger_fill_when_user_has_committed_hanzi():
+    """CATEGORY_COMMITTED must not regenerate candidates after explicit user Hanzi choice."""
+    AddEditState, AddEditContext, reduce_fn = _import_state_api()
+    Event, EventPayload = _import_event_api()
+
+    evt_enum = None
+    for name in ("CATEGORY_COMMITTED", "CAT_COMMITTED", "CATEGORY_ACCEPTED"):
+        if hasattr(Event, name):
+            evt_enum = getattr(Event, name)
+            break
+
+    if evt_enum is None:
+        pytest.fail("State machine Event is missing CATEGORY_COMMITTED/CAT_COMMITTED/CATEGORY_ACCEPTED")
+
+    # Context: Hanzi already chosen (manual_hanzi True + hz_ok True).
+    ctx0 = AddEditContext(
+        jy="baak6",
+        jy_ok=True,
+        duplicate=False,
+        hanzi="白",
+        hz_ok=True,
+        manual_hanzi=True,
+        meaning="white",
+        mn_ok=True,
+        category="colors",
+        cat_ok=True,
+        saving=False,
+    )
+
+    state0 = getattr(AddEditState, "CANDIDATES_AVAILABLE", getattr(AddEditState, "JY_ACCEPTED", AddEditState.EMPTY))
+
+    evt = EventPayload(event=evt_enum, value="colors")
+    _st1, _ctx1, effects = reduce_fn(state0, ctx0, evt)
+
+    effect_types = []
+    for e in (effects or []):
+        if isinstance(e, dict):
+            effect_types.append(str(e.get("type") or ""))
+        else:
+            effect_types.append(str(getattr(e, "type", "") or ""))
+
+    assert not any(t in ("fill_candidates", "fill_hanzi_candidates") for t in effect_types), (
+        "Did not expect candidate fill after Hanzi was committed; "
+        f"got effects={effect_types!r}"
+    )

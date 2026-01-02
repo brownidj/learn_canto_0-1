@@ -8,7 +8,7 @@ import time
 from typing import Any, cast
 
 import yaml
-from infra.paths import project_root, data_dir, ui_dir, data_path, ui_path
+from infra.paths import project_root, data_path, ui_path
 
 
 logger = logging.getLogger(__name__)
@@ -354,13 +354,65 @@ def _load_add_item_ui(parent=None) -> QDialog | None:
 
         # Log once after show, to dump full tree with actual sizes
         def _after_show():
-            logger.debug("=== add_item.ui TREE DUMP (after show) ===")
-            _dump_layout_tree(dlg, 0)
-            ge = dlg.geometry()
-            logger.debug("DIALOG size: %dx%d minimum:%dx%d", ge.width(), ge.height(),
-                         dlg.minimumWidth(), dlg.minimumHeight())
+            # In tests/offscreen, skip heavy tree-dump introspection entirely.
+            try:
+                if os.environ.get("QT_QPA_PLATFORM", "").lower() == "offscreen":
+                    return
+                if os.environ.get("PYTEST_CURRENT_TEST"):
+                    return
+            except Exception:
+                # If env access fails, proceed.
+                pass
 
-        QTimer.singleShot(50, _after_show)
+            # Guard: dlg may have been deleted; use shiboken6 validity where available.
+            try:
+                import shiboken6  # type: ignore
+            except Exception:
+                shiboken6 = None
+
+            try:
+                if dlg is None:
+                    return
+                if shiboken6 is not None and hasattr(shiboken6, "isValid"):
+                    try:
+                        if not shiboken6.isValid(dlg):
+                            return
+                    except Exception:
+                        # If validity check fails, fall back to Qt checks below.
+                        pass
+            except Exception:
+                return
+
+            # Check visibility; if not visible or destroyed, return
+            try:
+                if not dlg.isVisible():
+                    return
+            except RuntimeError:
+                return
+            except Exception:
+                # If isVisible fails for other reasons, proceed (fail open)
+                pass
+
+            try:
+                logger.debug("=== add_item.ui TREE DUMP (after show) ===")
+                _dump_layout_tree(dlg, 0)
+                ge = dlg.geometry()
+                logger.debug(
+                    "DIALOG size: %dx%d minimum:%dx%d",
+                    ge.width(),
+                    ge.height(),
+                    dlg.minimumWidth(),
+                    dlg.minimumHeight(),
+                )
+            except RuntimeError:
+                return
+        # Avoid scheduling post-show debug work during tests/offscreen runs.
+        try:
+            if os.environ.get("QT_QPA_PLATFORM", "").lower() != "offscreen" and not os.environ.get("PYTEST_CURRENT_TEST"):
+                QTimer.singleShot(50, _after_show)
+        except Exception:
+            # If env checks fail, schedule as before.
+            QTimer.singleShot(50, _after_show)
         return dlg  # type: ignore[return-value]
     finally:
         file.close()
