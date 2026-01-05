@@ -285,6 +285,13 @@ entries:
       - direction
       gloss: east, host (i.e. sitting on east side of guest), landlord
       hanzi: 東
+  dyun2:
+    jyutping: dyun2
+    senses:
+    - categories:
+      - descriptions_adjectives
+      gloss: (adjective) short, deficient
+      hanzi: 短
   faa1:
     jyutping: faa1
     senses:
@@ -767,6 +774,13 @@ entries:
       - colors
       gloss: surname Lan
       hanzi: 藍
+  leng4:
+    jyutping: leng4
+    senses:
+    - categories:
+      - descriptions_adjectives
+      gloss: (adjective) pretty, beautiful, young
+      hanzi: 靚
   leot6 sik1:
     jyutping: leot6 sik1
     senses:
@@ -876,6 +890,13 @@ entries:
       gloss: horse
       hanzi: 馬
       register: both
+  maan5:
+    jyutping: maan5
+    senses:
+    - categories:
+      - time_calendar
+      gloss: evening, night
+      hanzi: 晚
   maan5 on1:
     headword: 晚安
     jyutping: maan5 on1
@@ -885,6 +906,13 @@ entries:
       gloss: good night
       hanzi: 晚安
       register: colloquial
+  maan6:
+    jyutping: maan6
+    senses:
+    - categories:
+      - descriptions_adjectives
+      gloss: slowly
+      hanzi: 慢
   mai5 sik1:
     jyutping: mai5 sik1
     senses:
@@ -892,6 +920,20 @@ entries:
       - colors
       gloss: beige
       hanzi: 米色
+  man4:
+    jyutping: man4
+    senses:
+    - categories:
+      - communication
+      gloss: writings, language, culture
+      hanzi: 文
+  man6:
+    jyutping: man6
+    senses:
+    - categories:
+      - communication
+      gloss: (verb) to question, ask
+      hanzi: 問
   mei6 loi4:
     headword: 未來
     jyutping: mei6 loi4
@@ -901,6 +943,13 @@ entries:
       gloss: future
       hanzi: 未來
       register: both
+  ming4:
+    jyutping: ming4
+    senses:
+    - categories:
+      - descriptions_adjectives
+      gloss: (adjective) bright, obvious
+      hanzi: 明
   miu5:
     headword: 秒
     jyutping: miu5
@@ -930,6 +979,13 @@ entries:
       gloss: younger sister
       hanzi: 妹妹
       register: colloquial
+  naai5:
+    jyutping: naai5
+    senses:
+    - categories:
+      - food_drink_eating_drinking
+      gloss: milk, mother
+      hanzi: 奶
   naam4:
     headword: 男
     jyutping: naam4
@@ -1280,6 +1336,20 @@ entries:
       gloss: close the door
       hanzi: 閂門
       register: colloquial
+  sai3:
+    jyutping: sai3
+    senses:
+    - categories:
+      - descriptions_adjectives
+      gloss: small, tiny, fine
+      hanzi: 細
+  sam1:
+    jyutping: sam1
+    senses:
+    - categories:
+      - health
+      gloss: heart, mind
+      hanzi: 心
   sam1 luk6:
     jyutping: sam1 luk6
     senses:
@@ -1494,6 +1564,13 @@ entries:
       gloss: rat; mouse
       hanzi: 鼠
       register: both
+  taai3:
+    jyutping: taai3
+    senses:
+    - categories:
+      - descriptions_adjectives
+      gloss: great, great-grand mother or father
+      hanzi: 太
   taai3 joeng4:
     headword: 太陽
     jyutping: taai3 joeng4

@@ -1474,7 +1474,7 @@ if __name__ == "__main__":
             return []
 
 
-        def _commit_vocab_entry_from_dialog(entry: dict):
+        def _commit_vocab_entry_from_dialog(entry: dict, dialog=None):
             """
             Commit a new vocab entry coming from the CategoryManagerDialog.
 
@@ -1518,6 +1518,35 @@ if __name__ == "__main__":
                     vocab[hz] = [[gloss], jy]
             except Exception as e:
                 logger.warning("Failed to update in-memory vocab for '%s' (%s)", hz, e)
+
+            # ---- Mirror update back into the dialog (same-session duplicate detection) ----
+            # The dialog keeps its own in-memory vocab snapshot for duplicate checks and previews.
+            # Ensure it is updated immediately after Save, so the user can re-enter the same
+            # Jyutping without restarting the app/dialog.
+            try:
+                dlg_vocab = getattr(dialog, "_vocab", None)
+            except (TypeError, AttributeError, RuntimeError):
+                dlg_vocab = None
+
+            if isinstance(dlg_vocab, dict):
+                try:
+                    # Dialog expects the canonical internal shape used by its own logic.
+                    # Prefer list-of-meanings + jyutping (matches the rest of the app).
+                    dlg_vocab[hz] = [[gloss], jy]
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
+
+            # Optional: if the dialog exposes a test/legacy mirror dict, keep it in sync too.
+            try:
+                dlg_vocab_items = getattr(dialog, "vocab_items", None)
+            except (TypeError, AttributeError, RuntimeError):
+                dlg_vocab_items = None
+
+            if isinstance(dlg_vocab_items, dict):
+                try:
+                    dlg_vocab_items[hz] = [[gloss], jy]
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
 
             # ---- Update in-memory categories_map ----
             try:
@@ -1716,7 +1745,10 @@ if __name__ == "__main__":
 
             # Provide a commit callback so Save in the dialog can update vocab and persist to YAML
             try:
-                dlg._commit_callback = _commit_vocab_entry_from_dialog
+                def _commit_with_dialog(entry: dict):
+                    return _commit_vocab_entry_from_dialog(entry, dialog=dlg)
+
+                dlg._commit_callback = _commit_with_dialog
             except Exception:
                 logger.debug("Could not attach commit callback to CategoryManagerDialog")
 

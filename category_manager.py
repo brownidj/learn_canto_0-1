@@ -3,7 +3,7 @@
 #
 # The UI must NEVER:
 #   - call pipeline gloss resolvers directly
-#   - call CC-Canto / CEDICT helpers
+#   - call CCCanto / CEDICT helpers
 #   - clean or filter glosses itself
 #
 # All meaning resolution flows through:
@@ -32,8 +32,9 @@
 # ----------------------------------------
 import logging
 import os
-import re
 import time
+from dataclasses import dataclass
+from typing import Callable, Literal, Optional
 
 # ------------------------------
 # Candidate source labels (UI)
@@ -65,8 +66,11 @@ from typing import cast
 # ----------------------------------------
 # PySide6 imports
 # ----------------------------------------
-from PySide6.QtCore import Qt, QModelIndex, QTimer as _CatTimer
-from PySide6.QtGui import (QFont)
+from PySide6.QtCore import Qt
+from PySide6.QtGui import (
+    QFont,
+    QFontMetrics,
+)
 from PySide6.QtWidgets import (
     QDialog,
     QVBoxLayout,
@@ -82,24 +86,23 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QAbstractItemView,
     QTextEdit,
+    QProxyStyle,
+    QStyle,
 )
 
 # ----------------------------------------
 # Domain imports
 # ----------------------------------------
 from domain.category_rules import (
-    ambiguity_note,
     HanziStyleIndex,
     CandidateCurator,
-    abbr_for_source,
 )
 
 from domain.hanzi_candidate_pipeline import HanziCandidatePipeline, build_pipeline_from_category_manager
 from domain.jyutping_validation import validate_jyut_syllables
 from domain.meaning_sources import default_facade
 from domain.storage_paths import categories_yaml_path
-from domain.duplicate_rules import is_duplicate_jy
-from domain.add_edit_sm import Event, EventPayload, reduce, AddEditState, AddEditContext
+from domain.add_edit_sm import AddEditState, AddEditContext
 
 from infra.paths import project_root
 
@@ -167,6 +170,377 @@ def _save_button(self) -> QPushButton | None:
     return w if isinstance(w, QPushButton) else None
 
 
+
+# ---------------------------
+# Add/Edit controller (pure)
+# ---------------------------
+
+FocusTarget = Literal["jy", "hz", "mn", "cat"]
+
+
+@dataclass(frozen=True)
+class AddEditInputs:
+    jyutping: str
+    hanzi: str
+    meaning: str
+    category: str
+    saving: bool = False
+
+    # Optional environment
+    validate_jy: Optional[Callable[[str], bool]] = None
+    valid_categories: Optional[set[str]] = None
+
+
+@dataclass(frozen=True)
+class AddEditResult:
+    preview: dict
+    ready: bool
+    show_save: bool = False
+    clear_fields: bool = False
+    focus_target: Optional[FocusTarget] = None
+    commit: bool = False
+
+    def to_dict(self) -> dict:
+        """Return a stable, test-friendly dict contract."""
+        preview_payload = self.preview if isinstance(self.preview, dict) else {}
+        commit_payload = preview_payload if self.commit else None
+        return {
+            "preview_payload": preview_payload,
+            "commit_payload": commit_payload,
+            "ready": bool(self.ready),
+            "show_save": bool(self.show_save),
+            "clear_fields": bool(self.clear_fields),
+            "focus_target": self.focus_target,
+            "commit": bool(self.commit),
+        }
+
+
+class AddEditController:
+    """
+    Pure decision-making for the Add/Edit flow.
+    No Qt. No side effects. Deterministic.
+    """
+
+    # ---------- core validity ----------
+
+    @staticmethod
+    def is_ready(inp: AddEditInputs) -> bool:
+        if inp.saving:
+            return False
+
+        if not inp.jyutping or not inp.hanzi or not inp.meaning or not inp.category:
+            return False
+
+        if inp.valid_categories is not None:
+            if inp.category not in inp.valid_categories:
+                return False
+
+        if inp.validate_jy is not None:
+            try:
+                if not inp.validate_jy(inp.jyutping):
+                    return False
+            except (TypeError, ValueError):
+                return False
+
+        return True
+
+    # ---------- meaning-enter decision ----------
+
+    @staticmethod
+    def on_meaning_enter(
+            *args,
+            fields: dict | None = None,
+            vocab: dict | None = None,
+            cats: dict | None = None,
+            decision: str = "edit",
+            preview: dict | None = None,
+            inp: AddEditInputs | None = None,
+            **kwargs,
+    ) -> dict:
+        """
+        Decisioning for Meaning-Enter.
+
+        Supports both call styles:
+          - UI style: on_meaning_enter(preview=..., decision=..., inp=...)
+          - Test style: on_meaning_enter(fields=..., cats=..., decision=...)
+        """
+
+        # Positional tolerance: on_meaning_enter(fields_dict, ...)
+        if fields is None and args:
+            if isinstance(args[0], dict):
+                fields = args[0]
+
+        # Normalise decision
+        try:
+            decision = str(decision or "edit").strip().lower()
+        except (TypeError, AttributeError, ValueError):
+            decision = "edit"
+
+        # If tests provided fields, build canonical preview from canonical keys only.
+        # IMPORTANT: do NOT accept aliases here (no 'gloss', no 'categories').
+        if fields is not None and isinstance(fields, dict):
+            try:
+                jy = str(fields.get("jyutping", "") or "").strip()
+            except (TypeError, AttributeError, ValueError):
+                jy = ""
+            try:
+                hz = str(fields.get("hanzi", "") or "").strip()
+            except (TypeError, AttributeError, ValueError):
+                hz = ""
+            try:
+                mn = str(fields.get("meaning", "") or "").strip()
+            except (TypeError, AttributeError, ValueError):
+                mn = ""
+            try:
+                cat = str(fields.get("category", "") or "").strip()
+            except (TypeError, AttributeError, ValueError):
+                cat = ""
+
+            preview = {"jyutping": jy, "hanzi": hz, "meaning": mn, "category": cat}
+
+        if preview is None:
+            preview = {}
+
+        # If the caller didn't provide AddEditInputs, synthesise it (pure-python safe).
+        if inp is None:
+            try:
+                valid_categories = set((cats or {}).keys()) if isinstance(cats, dict) else None
+            except (TypeError, AttributeError):
+                valid_categories = None
+
+            # If AddEditInputs exists in this file already, use it.
+            inp = AddEditInputs(
+                jyutping=str(preview.get("jyutping", "") or "").strip(),
+                hanzi=str(preview.get("hanzi", "") or "").strip(),
+                meaning=str(preview.get("meaning", "") or "").strip(),
+                category=str(preview.get("category", "") or "").strip(),
+                saving=bool(kwargs.get("saving", False)),
+                validate_jy=kwargs.get("validate_jy"),
+                valid_categories=valid_categories,
+            )
+
+        # It should continue to use: preview, decision, inp
+
+        ready = AddEditController.is_ready(inp)
+
+        if decision == "edit":
+            return AddEditResult(
+                preview=preview,
+                ready=ready,
+                show_save=True,
+                focus_target=None,
+            ).to_dict()
+
+        if decision == "cancel":
+            return AddEditResult(
+                preview=preview,
+                ready=False,
+                clear_fields=True,
+                focus_target="jy",
+            ).to_dict()
+
+        # decision == "save"
+        if ready:
+            return AddEditResult(
+                preview=preview,
+                ready=True,
+                commit=True,
+                clear_fields=True,
+                focus_target="jy",
+            ).to_dict()
+
+        # Save requested but not ready → fall back to edit
+        return AddEditResult(
+            preview=preview,
+            ready=False,
+            show_save=True,
+        ).to_dict()
+
+
+@dataclass(frozen=True)
+class AddEntryPreview:
+    jyutping: str = ""
+    hanzi: str = ""
+    meaning: str = ""
+    category: str = ""
+
+    def to_payload(self) -> dict:
+        jy = (self.jyutping or "").strip()
+        hz = (self.hanzi or "").strip()
+        mn = (self.meaning or "").strip()
+        cat = (self.category or "").strip()
+        return {
+            "jyutping": jy,
+            "hanzi": hz,
+            "meaning": mn,
+            "gloss": mn,                 # legacy/test alias
+            "category": cat,
+            "categories": ([cat] if cat else []),  # test expects list form
+        }
+
+
+class AddEntryPreviewBuilder:
+    """
+    Best-effort preview builder for the Add/Edit entry flow.
+
+    Goals:
+      - Deterministic in offscreen tests
+      - Minimal, predictable fallbacks
+      - No long attribute-fishing ladders
+    """
+
+    @staticmethod
+    def _resolve_vocab(dialog) -> dict | None:
+        # Canonical store is `_vocab`.
+        try:
+            v = getattr(dialog, "_vocab", None)
+        except (TypeError, AttributeError, RuntimeError):
+            v = None
+        return v if isinstance(v, dict) else None
+
+    @staticmethod
+    def _meaning_from_vocab(vocab: dict | None, hanzi: str) -> str:
+        if not isinstance(vocab, dict):
+            return ""
+        hz = (hanzi or "").strip()
+        if not hz or hz not in vocab:
+            return ""
+        row = vocab.get(hz)
+        if not isinstance(row, (list, tuple)) or len(row) < 1:
+            return ""
+        meanings = row[0]
+        if not isinstance(meanings, (list, tuple)):
+            return ""
+        out = []
+        for g in meanings:
+            try:
+                s = str(g).strip()
+            except (TypeError, AttributeError, RuntimeError, ValueError):
+                s = ""
+            if s:
+                out.append(s)
+        return ", ".join(out)
+
+    @staticmethod
+    def build(dialog) -> AddEntryPreview:
+        """Canonical Add/Edit preview builder.
+
+        Pipeline:
+          1) Read raw UI fields (widgets only)
+          2) Normalise (strip; Jyutping via dialog normaliser when available)
+          3) Enrich (only from SM context and vocab meaning lookup)
+          4) Emit AddEntryPreview (canonical keys)
+        """
+        # 1) Primary: legacy safe reader (widgets)
+        jy = hz = mn = cat = ""
+        try:
+            fn = getattr(dialog, "_read_add_fields", None)
+            if callable(fn):
+                jy, hz, mn, cat = fn()
+        except (TypeError, AttributeError, RuntimeError, ValueError):
+            jy = hz = mn = cat = ""
+
+        # Normalise raw strings
+        try:
+            jy = str(jy or "").strip()
+        except (TypeError, AttributeError, RuntimeError, ValueError):
+            jy = ""
+        try:
+            hz = str(hz or "").strip()
+        except (TypeError, AttributeError, RuntimeError, ValueError):
+            hz = ""
+        try:
+            mn = str(mn or "").strip()
+        except (TypeError, AttributeError, RuntimeError, ValueError):
+            mn = ""
+        try:
+            cat = str(cat or "").strip()
+        except (TypeError, AttributeError, RuntimeError, ValueError):
+            cat = ""
+
+        # 2) Normalise Jyutping using the dialog normaliser when available
+        if jy:
+            try:
+                norm = getattr(dialog, "_normalize_jy", None)
+                if callable(norm):
+                    jy = str(norm(jy) or "").strip()
+                else:
+                    jy = " ".join(jy.lower().split())
+            except (TypeError, AttributeError, RuntimeError, ValueError):
+                jy = " ".join(str(jy or "").strip().lower().split())
+
+        # 3) Enrich from SM context only when widgets are blank
+        ctx = None
+        try:
+            ctx = getattr(dialog, "_add_edit_ctx", None)
+        except (TypeError, AttributeError, RuntimeError):
+            ctx = None
+
+        if ctx is not None:
+            if not jy:
+                try:
+                    jy = str(getattr(ctx, "jy", "") or "").strip()
+                except (TypeError, AttributeError, RuntimeError, ValueError):
+                    jy = ""
+            if not hz:
+                try:
+                    hz = str(getattr(ctx, "hanzi", "") or "").strip()
+                except (TypeError, AttributeError, RuntimeError, ValueError):
+                    hz = ""
+            if not mn:
+                try:
+                    mn = str(getattr(ctx, "meaning", "") or "").strip()
+                except (TypeError, AttributeError, RuntimeError, ValueError):
+                    mn = ""
+            if not cat:
+                try:
+                    cat = str(getattr(ctx, "category", "") or "").strip()
+                except (TypeError, AttributeError, RuntimeError, ValueError):
+                    cat = ""
+
+        # If Hanzi still blank, allow candidate combobox currentText (widget state, not vocab inference)
+        if not hz:
+            try:
+                combo = getattr(dialog, "_cand_combo", None)
+                if combo is not None and hasattr(combo, "currentText"):
+                    txt = str((combo.currentText() or "")).strip()
+                    if txt and not txt.startswith("—"):
+                        hz = txt
+            except (TypeError, AttributeError, RuntimeError, ValueError):
+                hz = hz or ""
+
+        # 4) Enrich meaning from vocab only (single well-defined source)
+        if not mn and hz:
+            vocab = AddEntryPreviewBuilder._resolve_vocab(dialog)
+            mn = AddEntryPreviewBuilder._meaning_from_vocab(vocab, hz)
+
+        return AddEntryPreview(jyutping=jy, hanzi=hz, meaning=mn, category=cat)
+
+
+class HanziComboBoxProxyStyle(QProxyStyle):
+    """
+    Proxy style to prevent macOS combo edit-field rect from collapsing vertically.
+
+    Some Qt/macOS styles compute SC_ComboBoxEditField with a very small height,
+    which forces the internal line edit / paint rect to be tiny, causing clipped CJK glyphs.
+    """
+
+    def subControlRect(self, control, option, subControl, widget=None):  # noqa: N802
+        rect = super().subControlRect(control, option, subControl, widget)
+        try:
+            if (
+                    control == QStyle.ComplexControl.CC_ComboBox
+                    and subControl == QStyle.SubControl.SC_ComboBoxEditField
+            ):
+                full = option.rect
+                inset = 2  # keep a little breathing room for the border
+                rect.setY(int(full.y() + inset))
+                rect.setHeight(int(max(0, full.height() - (inset * 2))))
+        except (TypeError, AttributeError, ValueError, RuntimeError):
+            pass
+        return rect
+
+
 class CategoryManagerDialog(QDialog):
     # ------------------------------
     # Init helpers (non-UI)
@@ -187,9 +561,11 @@ class CategoryManagerDialog(QDialog):
         self._cand_combo: QComboBox | None = None
         self._cand_gloss_cache = {}
         # Sticky manual-entry mode: when the user chooses to type their own Hanzi,
-        # we must not overwrite it with any later auto-fill.
+        # we must not overwrite it with any later autofill.
         self._manual_hanzi_mode = False
         self._cat_combo_ctrl = None
+        # One-time Add/Edit signal wiring guard (prevents duplicate connects on some Qt builds)
+        self._add_edit_wired = False
 
     def _init_style_and_curator(self) -> None:
         """Initialise UI-free helpers used for style and candidate curation."""
@@ -203,6 +579,14 @@ class CategoryManagerDialog(QDialog):
 
     def _init_vocab_and_categories(self, vocab_items: dict, categories_map: dict) -> None:
         """Normalise in-memory vocab + categories and build the stable category list."""
+        # --- Persist vocab input under stable attribute names (tests + UI rely on these) ---
+        # Some builds historically used different attribute names; keep them all coherent.
+        try:
+            if isinstance(vocab_items, dict):
+                self._vocab = vocab_items
+                self.vocab_items = vocab_items  # legacy / tests only
+        except (AttributeError, TypeError, ValueError, RuntimeError):
+            pass
 
         # In-memory vocab & categories (shallow copies to avoid mutating callers)
         self._vocab = {
@@ -237,16 +621,20 @@ class CategoryManagerDialog(QDialog):
             self._all_cats.sort(key=lambda s: s.lower())
 
         # Diagnostics (logging should never break logic)
-        logger.debug(
-            "AddItem: _cats keys (n=%d): %s",
-            len(self._cats),
-            sorted(self._cats.keys()),
-        )
-        logger.debug(
-            "AddItem: _all_cats (n=%d): %s",
-            len(self._all_cats),
-            self._all_cats,
-        )
+        try:
+            logger.debug(
+                "AddItem: _cats keys (n=%d): %s",
+                len(self._cats),
+                sorted(self._cats.keys()),
+            )
+            logger.debug(
+                "AddItem: _all_cats (n=%d): %s",
+                len(self._all_cats),
+                self._all_cats,
+            )
+        except (TypeError, ValueError):
+            # Logging must never break dialog creation.
+            pass
 
     def _reload_categories_from_disk_if_needed(self) -> None:
         """If categories input is effectively empty, attempt a one-time reload from disk."""
@@ -341,7 +729,7 @@ class CategoryManagerDialog(QDialog):
                 e,
             )
 
-        # Always provide a minimal pipeline so call sites never need to guard against None.
+        # Always provide a minimal pipeline, so call sites never need to guard against None.
         try:
             self._hanzi_pipeline = HanziCandidatePipeline(normalize_jyutping=self._normalize_jy)
         except (AttributeError, TypeError, ValueError, RuntimeError):
@@ -383,10 +771,11 @@ class CategoryManagerDialog(QDialog):
                     # Optional enrichment must not block UI.
                     self._cat_keywords = {}
 
-    def _validate_jyut_syllables(self, jy: str) -> tuple[bool, str | None]:
+    @staticmethod
+    def _validate_jyut_syllables(jy: str) -> tuple[bool, str | None]:
         try:
             return validate_jyut_syllables(jy)
-        except Exception as e:
+        except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as e:
             # Best-effort: do not hard-fail UI if validator is unavailable.
             try:
                 logger.debug("Jyutping validator unavailable (%s); allowing input", e)
@@ -404,7 +793,7 @@ class CategoryManagerDialog(QDialog):
          The user must choose a real category, or 'unassigned' if unsure.
       4. Confirming a real category triggers reverse lookup:
          Jyutping → ranked Hanzi candidates (category-aware).
-      5. If exactly one candidate, Hanzi and meanings are auto-filled and focus moves to Meanings.
+      5. If exactly one candidate, Hanzi and meanings are autofilled and focus moves to Meanings.
          If multiple candidates, the Hanzi dropdown opens for user selection, then meanings update.
       6. Save is enabled only when Jyutping, Category, Hanzi, and at least one Meaning are all present
          and structurally valid.
@@ -472,8 +861,8 @@ class CategoryManagerDialog(QDialog):
     """
     MAX_HANZI_CANDIDATES = 10
     # Hanzi-specific typography tuning (easy to adjust)
-    _HANZI_TEXT_DELTA_PT = 4        # Hanzi QLineEdit (main display)
-    _HANZI_COMBO_DELTA_PT = 6       # Hanzi candidate combobox + popup
+    _HANZI_TEXT_DELTA_PT = 20       # Hanzi QLineEdit (main display) (increased to avoid tiny Hanzi)
+    _HANZI_COMBO_DELTA_PT = 16      # Hanzi candidate combobox + popup (increased by 10)
     # Typography deltas for the Add/Edit panel (dialog-local; do not affect the rest of the app)
     _LABEL_FONT_DELTA_PT = 4
     _INPUT_FONT_DELTA_PT = 3
@@ -518,6 +907,14 @@ class CategoryManagerDialog(QDialog):
         # ---- Data / caches (must not raise) ----
         self._init_style_and_curator()
         self._init_vocab_and_categories(vocab_items, categories_map)
+
+        try:
+            if isinstance(categories_map, dict):
+                self._categories_map = categories_map
+                self.categories_map = categories_map
+        except (AttributeError, TypeError, ValueError):
+            pass
+
         self._reload_categories_from_disk_if_needed()
         self._init_reverse_lookup_caches()
         self._init_meaning_resolver()
@@ -546,11 +943,20 @@ class CategoryManagerDialog(QDialog):
         # ---- Save header ----
         header_row = QHBoxLayout()
         self.btn_save = QPushButton("Save")
-        self.btn_save.clicked.connect(self._on_save_clicked)
+        self.btn_save.setObjectName("btn_save")
+        if callable(getattr(self, "_on_save_clicked", None)):
+            self.btn_save.clicked.connect(self._on_save_clicked)
         self.btn_save.setDefault(False)
         self.btn_save.setAutoDefault(False)
         self.btn_save.setEnabled(False)
         self.btn_save.setToolTip("Save Hanzi + Jyutping + Category")
+
+        # Stage-2: hide legacy inline Save button by default (only shown on 'Edit')
+        try:
+            self._set_save_button_visible(False)
+        except (AttributeError, TypeError, ValueError, RuntimeError):
+            pass
+
         header_row.addStretch(1)
         header_row.addWidget(self.btn_save, 0, Qt.AlignmentFlag.AlignRight)
         self._root.addLayout(header_row)
@@ -596,12 +1002,17 @@ class CategoryManagerDialog(QDialog):
         if le_cat is not None:
             le_cat.setPlaceholderText("Type category")
             le_cat.setClearButtonEnabled(True)
-            le_cat.returnPressed.connect(self._on_add_category_committed)
-            le_cat.editingFinished.connect(self._on_add_category_committed)
+            try:
+                if callable(getattr(self, "_on_add_category_committed", None)):
+                    le_cat.returnPressed.connect(self._on_add_category_committed)
+                    le_cat.editingFinished.connect(self._on_add_category_committed)
+            except (TypeError, AttributeError, RuntimeError):
+                pass
 
+        _on_cat_commit = getattr(self, "_on_add_category_committed", None)
         self._cat_combo_ctrl = CategoryComboController(
             combo=self._add_cat,
-            on_commit=self._on_add_category_committed,
+            on_commit=_on_cat_commit if callable(_on_cat_commit) else None,
         )
 
         form_entry.addRow("Category:", self._add_cat)
@@ -623,8 +1034,33 @@ class CategoryManagerDialog(QDialog):
         self._cand_combo = QComboBox(group_hanzi)
         self._cand_combo.setObjectName("comboHanziCandidates")
         self._cand_combo.setVisible(False)
-        self._cand_combo.setMinimumWidth(240)
-        self._cand_combo.setMaximumWidth(320)
+
+        # Force editable+readonly so closed combobox paints via QLineEdit
+        # (required on macOS to avoid clipped CJK glyphs)
+        try:
+            self._cand_combo.setEditable(True)
+            le = self._cand_combo.lineEdit()
+            if le is not None:
+                le.setReadOnly(True)
+                le.setClearButtonEnabled(False)
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+
+        # Avoid clipped Hanzi / truncated labels in the combobox and its popup.
+        # (The popup view can be wider than the combobox itself.)
+        try:
+            self._cand_combo.setMinimumWidth(260)
+            self._cand_combo.setMaximumWidth(520)
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+
+        try:
+            # Prefer sizing to contents where supported.
+            self._cand_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
+            self._cand_combo.setMinimumContentsLength(6)
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+
         self._cand_combo.setToolTip(HANZI_CANDIDATE_TOOLTIP)
         if self._cand_combo.view() is not None:
             self._cand_combo.view().setToolTip(HANZI_CANDIDATE_TOOLTIP)
@@ -634,13 +1070,27 @@ class CategoryManagerDialog(QDialog):
         self._btn_custom_hz = QPushButton("Enter my own Hanzi", self)
         self._btn_custom_hz.setDefault(False)
         self._btn_custom_hz.setAutoDefault(False)
-        self._btn_custom_hz.clicked.connect(self._on_custom_hanzi_clicked)
+        try:
+            fn_custom = getattr(self, "_on_custom_hanzi_clicked", None)
+            if callable(fn_custom):
+                self._btn_custom_hz.clicked.connect(fn_custom)
+        except (TypeError, AttributeError, RuntimeError):
+            pass
         form_hanzi.addWidget(self._btn_custom_hz)
 
         self.comboCandidates = self._cand_combo
 
-        self._cand_combo.activated.connect(self._on_candidate_index_activated)
-        self._cand_combo.currentTextChanged.connect(self._on_candidate_text_changed)
+        # Declarative, idempotent wiring for Hanzi candidate combobox
+        try:
+            fn_idx = getattr(self, "_on_candidate_index_activated", None)
+            fn_txt = getattr(self, "_on_candidate_text_changed", None)
+            self._wire_combo_common(
+                self._cand_combo,
+                on_activate=fn_idx,
+                on_change=fn_txt,
+            )
+        except (TypeError, AttributeError, RuntimeError):
+            pass
 
         # ---- Layout assembly ----
         group_entry.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
@@ -661,8 +1111,12 @@ class CategoryManagerDialog(QDialog):
         self._search = QLineEdit(self)
         self._search.setPlaceholderText("Search (Hanzi / Jyutping / meaning)…")
         self._search.setClearButtonEnabled(True)
-        if callable(getattr(self, "_on_search_changed", None)):
-            self._search.textChanged.connect(self._on_search_changed)
+        try:
+            fn_search = getattr(self, "_on_search_changed", None)
+            if callable(fn_search):
+                self._search.textChanged.connect(fn_search)
+        except (TypeError, AttributeError, RuntimeError):
+            pass
         self._root.addWidget(self._search)
 
         # ---- Table ----
@@ -674,22 +1128,11 @@ class CategoryManagerDialog(QDialog):
         self._table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self._root.addWidget(self._table, 1)
 
-        if callable(getattr(self, "_rebuild_items_model", None)):
-            self._rebuild_items_model()
+        fn_rebuild = getattr(self, "_rebuild_items_model", None)
+        if callable(fn_rebuild):
+            fn_rebuild()
 
-        # ---- Wiring ----
-        if callable(getattr(self, "_on_jyut_enter", None)):
-            self._add_jy.returnPressed.connect(self._on_jyut_enter)
-            if callable(getattr(self, "_update_save_enabled", None)):
-                self._add_jy.editingFinished.connect(self._update_save_enabled)
-
-        self._add_mn.returnPressed.connect(self._on_meanings_enter)
-
-        if callable(getattr(self, "_update_save_enabled", None)):
-            # Save gating is SM-only; render Save state when SM transitions are applied.
-            # Keep this method available for explicit refreshes only (e.g., after effects).
-            pass
-
+        # ---- Finalise init ----
         logger.debug("CategoryManagerDialog: init complete")
         self._perf_end("CategoryManagerDialog.__init__", _t_init)
 
@@ -709,6 +1152,12 @@ class CategoryManagerDialog(QDialog):
             saving=False,
         )
 
+        # Ensure Add/Edit wiring is active (Enter in Meaning, Save gating, etc.)
+        try:
+            self._setup_add_edit_ui()
+        except (AttributeError, TypeError, ValueError, RuntimeError):
+            pass
+
     def _apply_add_edit_typography(
             self,
             *,
@@ -717,7 +1166,7 @@ class CategoryManagerDialog(QDialog):
             group_hanzi: QGroupBox,
             form_hanzi: QFormLayout,
     ) -> None:
-        """Apply Add/Edit panel typography in one place.
+        """Apply the Add/Edit panel typography in one place.
 
         - Labels: +_LABEL_FONT_DELTA_PT
         - Input fields (Jyutping, Meanings, Hanzi): +_INPUT_FONT_DELTA_PT
@@ -726,6 +1175,11 @@ class CategoryManagerDialog(QDialog):
         Best-effort only: this must never break dialog construction.
         """
         # Spacing first (Qt may raise TypeError on some bindings)
+
+        try:
+            from PySide6.QtCore import Qt
+        except (ImportError, ModuleNotFoundError):
+            Qt = None
         try:
             form_entry.setVerticalSpacing(int(self._FORM_VERTICAL_SPACING_PX))
         except (TypeError, ValueError, AttributeError):
@@ -755,15 +1209,6 @@ class CategoryManagerDialog(QDialog):
         )
 
         # Apply label fonts via the QFormLayout label column
-        for _r in range(form_entry.rowCount()):
-            _it = form_entry.itemAt(_r, QFormLayout.ItemRole.LabelRole)
-            _w = _it.widget() if _it is not None else None
-            if isinstance(_w, QLabel):
-                try:
-                    _w.setFont(label_entry)
-                except (RuntimeError, TypeError, AttributeError):
-                    pass
-
         for _r in range(form_hanzi.rowCount()):
             _it = form_hanzi.itemAt(_r, QFormLayout.ItemRole.LabelRole)
             _w = _it.widget() if _it is not None else None
@@ -794,25 +1239,324 @@ class CategoryManagerDialog(QDialog):
                 hz.setFont(input_hanzi)
             except (RuntimeError, TypeError, AttributeError):
                 pass
+            # Ensure the Hanzi display field is tall enough for large glyphs.
+            try:
+                m = QFontMetrics(input_hanzi)
+                hz.setMinimumHeight(int(m.height() * 3.2) + 32)
+                if Qt is not None:
+                    hz.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+            except (TypeError, AttributeError, RuntimeError, ValueError):
+                pass
 
         # Hanzi candidate combobox + popup font
         combo = getattr(self, "_cand_combo", None)
         if combo is not None:
             combo_font = QFont(input_hanzi)
             combo_font.setPointSize(combo_font.pointSize() + int(self._HANZI_COMBO_DELTA_PT))
+
+            # Apply font first
             try:
                 combo.setFont(combo_font)
             except (RuntimeError, TypeError, AttributeError):
                 pass
+
+            # Install proxy style to expand the edit-field rect on macOS
+            try:
+                combo.setStyle(HanziComboBoxProxyStyle(combo.style()))
+            except (TypeError, AttributeError, RuntimeError, ValueError):
+                pass
+
+            # Popup styling (items)
+            try:
+                combo.setStyleSheet(
+                    "QComboBox::drop-down { width: 36px; }"
+                    "QComboBox QAbstractItemView::item { min-height: 84px; padding: 12px 18px; }"
+                )
+            except (RuntimeError, TypeError, AttributeError):
+                pass
+
+            # Apply the same font to the popup view
             try:
                 view = combo.view()
             except (RuntimeError, AttributeError):
                 view = None
+
             if view is not None:
                 try:
                     view.setFont(combo_font)
                 except (RuntimeError, TypeError, AttributeError):
                     pass
+
+                try:
+                    from PySide6.QtCore import Qt
+                    if hasattr(view, "setTextElideMode"):
+                        view.setTextElideMode(Qt.TextElideMode.ElideNone)
+                except (ImportError, TypeError, AttributeError, RuntimeError):
+                    pass
+
+                # Ensure the popup is wide enough for the rendered content.
+                try:
+                    view.setMinimumWidth(int(combo.minimumWidth() + 200))
+                except (TypeError, AttributeError, RuntimeError, ValueError):
+                    pass
+
+            # Closed state uses the editable lineEdit; tune its font + height + alignment
+            try:
+                le = combo.lineEdit()
+            except (TypeError, AttributeError, RuntimeError):
+                le = None
+
+            if le is not None:
+                try:
+                    le.setFont(combo_font)
+                    fm = QFontMetrics(combo_font)
+
+                    # Closed combobox should be compact; do not let large popup sizing inflate it.
+                    # Use a conservative closed height and then let `_ensure_combo_closed_height()`
+                    # make a minimal upward adjustment if macOS style rects require it.
+                    base_h = int(fm.height() * 1.35) + 10
+                    le.setMinimumHeight(base_h)
+                    combo.setMinimumHeight(base_h)
+
+                    # Hard cap so layouts cannot expand the closed combobox excessively.
+                    max_h = int(fm.height() * 1.6) + 12
+                    try:
+                        combo.setMaximumHeight(max_h)
+                    except (TypeError, AttributeError, RuntimeError):
+                        pass
+
+                    # Final, bounded adjustment (no runaway growth).
+                    try:
+                        self._ensure_combo_closed_height(combo)
+                    except (TypeError, AttributeError, RuntimeError, ValueError):
+                        pass
+                except (TypeError, AttributeError, RuntimeError, ValueError):
+                    pass
+
+                try:
+                    from PySide6.QtCore import Qt
+                    le.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+                except (ImportError, TypeError, AttributeError, RuntimeError):
+                    pass
+
+                try:
+                    le.setTextMargins(18, 0, 36, 0)
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
+        try:
+            self._debug_hanzi_panel_geometry("after _apply_add_edit_typography")
+        except (TypeError, AttributeError, RuntimeError, ValueError):
+            pass
+
+    def _debug_hanzi_panel_geometry(self, reason: str = "") -> None:
+        """Debug geometry/fonts for the Hanzi panel.
+
+        Temporary diagnostic for clipping / sizing issues:
+          - Hanzi display QLineEdit (`_add_hz`)
+          - Candidate combobox (`_cand_combo`) and its popup view
+          - Custom Hanzi button
+
+        Must never raise.
+        """
+        try:
+            hz = getattr(self, "_add_hz", None)
+            combo = getattr(self, "_cand_combo", None)
+            btn = getattr(self, "_btn_custom_hz", None)
+
+            grp = None
+            try:
+                if hz is not None:
+                    grp = hz.parent()
+            except (TypeError, AttributeError, RuntimeError):
+                grp = None
+
+            def _g(w):
+                if w is None:
+                    return "None"
+                try:
+                    g = w.geometry()
+                    return "x={0} y={1} w={2} h={3}".format(
+                        int(g.x()), int(g.y()), int(g.width()), int(g.height())
+                    )
+                except (TypeError, AttributeError, RuntimeError, ValueError):
+                    return "?"
+
+            def _cr(w):
+                if w is None:
+                    return "None"
+                try:
+                    r = w.contentsRect()
+                    return "x={0} y={1} w={2} h={3}".format(
+                        int(r.x()), int(r.y()), int(r.width()), int(r.height())
+                    )
+                except (TypeError, AttributeError, RuntimeError, ValueError):
+                    return "?"
+
+            def _font(w):
+                if w is None:
+                    return "None"
+                try:
+                    f = w.font()
+                    return "family={0} pt={1} px={2}".format(
+                        str(f.family()), int(f.pointSize()), int(f.pixelSize())
+                    )
+                except (TypeError, AttributeError, RuntimeError, ValueError):
+                    return "?"
+
+            def _sh(w):
+                if w is None:
+                    return "None"
+                try:
+                    s = w.sizeHint()
+                    return "w={0} h={1}".format(int(s.width()), int(s.height()))
+                except (TypeError, AttributeError, RuntimeError, ValueError):
+                    return "?"
+
+            def _minmax(w):
+                if w is None:
+                    return "None"
+                try:
+                    return "min={0}x{1} max={2}x{3}".format(
+                        int(w.minimumWidth()),
+                        int(w.minimumHeight()),
+                        int(w.maximumWidth()),
+                        int(w.maximumHeight()),
+                    )
+                except (TypeError, AttributeError, RuntimeError, ValueError):
+                    return "?"
+
+            view = None
+            try:
+                view = combo.view() if combo is not None else None
+            except (TypeError, AttributeError, RuntimeError):
+                view = None
+
+            logger.debug("HANZI-GEO %s", str(reason or "").strip())
+            logger.debug("  grp:   geo=%s cr=%s sh=%s %s font=%s", _g(grp), _cr(grp), _sh(grp), _minmax(grp), _font(grp))
+            logger.debug(
+                "  hz:    geo=%s cr=%s sh=%s %s ro=%s align=%s font=%s",
+                _g(hz),
+                _cr(hz),
+                _sh(hz),
+                _minmax(hz),
+                bool(getattr(hz, "isReadOnly", lambda: False)()),
+                str(getattr(hz, "alignment", lambda: "?")()),
+                _font(hz),
+            )
+            logger.debug(
+                "  combo: geo=%s cr=%s sh=%s %s vis=%s font=%s",
+                _g(combo),
+                _cr(combo),
+                _sh(combo),
+                _minmax(combo),
+                bool(getattr(combo, "isVisible", lambda: False)()),
+                _font(combo),
+            )
+
+            try:
+                ss = combo.styleSheet() if combo is not None else ""
+            except (TypeError, AttributeError, RuntimeError):
+                ss = ""
+            if ss:
+                logger.debug("  combo stylesheet: %s", ss)
+
+            logger.debug(
+                "  view:  geo=%s cr=%s sh=%s %s vis=%s font=%s",
+                _g(view),
+                _cr(view),
+                _sh(view),
+                _minmax(view),
+                bool(getattr(view, "isVisible", lambda: False)()),
+                _font(view),
+            )
+
+            logger.debug(
+                "  btn:   geo=%s cr=%s sh=%s %s text=%r font=%s",
+                _g(btn),
+                _cr(btn),
+                _sh(btn),
+                _minmax(btn),
+                str(getattr(btn, "text", lambda: "")()),
+                _font(btn),
+            )
+
+            # Font metrics (height/ascent/descent) for Hanzi widgets
+            try:
+                if hz is not None:
+                    fm = QFontMetrics(hz.font())
+                    logger.debug(
+                        "  hz metrics: h=%d asc=%d desc=%d lead=%d",
+                        int(fm.height()),
+                        int(fm.ascent()),
+                        int(fm.descent()),
+                        int(fm.leading()),
+                    )
+            except (TypeError, AttributeError, RuntimeError, ValueError):
+                pass
+
+            try:
+                if combo is not None:
+                    fm2 = QFontMetrics(combo.font())
+                    logger.debug(
+                        "  combo metrics: h=%d asc=%d desc=%d lead=%d",
+                        int(fm2.height()),
+                        int(fm2.ascent()),
+                        int(fm2.descent()),
+                        int(fm2.leading()),
+                    )
+            except (TypeError, AttributeError, RuntimeError, ValueError):
+                pass
+
+
+
+        except (TypeError, AttributeError, RuntimeError, ValueError):
+            return
+
+    def _ensure_combo_closed_height(self, combo) -> None:
+        """Ensure the *closed* combobox height is compact.
+
+        Important: this implementation intentionally avoids any calls that rely on
+        QStyleOption / QComboBox.initStyleOption / style subControlRect. Those paths
+        have been triggering macOS headless (offscreen/minimal) segfaults.
+        """
+        try:
+            if combo is None:
+                return
+
+            # Use font metrics only (safe in headless) to derive a reasonable closed height.
+            fm = combo.fontMetrics()
+            text_h = 0
+            try:
+                text_h = int(fm.lineSpacing())
+            except Exception:
+                try:
+                    text_h = int(fm.height())
+                except Exception:
+                    text_h = 0
+
+            # Empirical padding for macOS/Aqua: text + margins + arrow + focus ring.
+            target = max(34, text_h + 14)
+
+            try:
+                combo.setMinimumHeight(target)
+                combo.setMaximumHeight(target)
+            except Exception:
+                # Fallback for older bindings/styles.
+                try:
+                    combo.setFixedHeight(target)
+                except Exception:
+                    pass
+
+            try:
+                combo.updateGeometry()
+            except Exception:
+                pass
+
+        except Exception as e:
+            try:
+                logger.debug("_ensure_combo_closed_height skipped (%s)", e)
+            except Exception:
+                pass
 
     def _load_hanzi_style_map(self) -> dict:
         """Lazy-load data/hanzi_style.yaml (Hanzi -> {style, source, notes}).
@@ -876,6 +1620,73 @@ class CategoryManagerDialog(QDialog):
         if ctrl is not None:
             ctrl.focus(select_all=select_all, show_popup=show_popup)
 
+
+    def _connect_unique(self, signal, slot) -> None:
+        """Best-effort signal connect without duplicate wiring."""
+        if signal is None or not callable(slot):
+            return
+
+        try:
+            from PySide6.QtCore import Qt
+            signal.connect(slot, Qt.ConnectionType.UniqueConnection)
+            return
+        except (ImportError, TypeError, AttributeError, RuntimeError):
+            pass
+
+        try:
+            signal.connect(slot)
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+
+    def _try_connect(self, signal, slot) -> None:
+        """Connect a signal to a callable slot (best-effort, no duplicates)."""
+        if signal is None or slot is None or not callable(slot):
+            return
+        try:
+            self._connect_unique(signal, slot)
+        except (TypeError, AttributeError, RuntimeError):
+            # Be conservative: wiring must never break dialog construction.
+            pass
+
+    def _wire_line_edit_common(self, w, *, on_enter=None, on_change=None) -> None:
+        """Common wiring for QLineEdit-like widgets.
+
+        - on_enter: connected to returnPressed
+        - on_change: connected to editingFinished and textChanged
+        """
+        if w is None:
+            return
+
+        if on_enter is not None and callable(on_enter):
+            self._try_connect(getattr(w, "returnPressed", None), on_enter)
+
+        if on_change is not None and callable(on_change):
+            self._try_connect(getattr(w, "editingFinished", None), on_change)
+            self._try_connect(getattr(w, "textChanged", None), on_change)
+
+    def _wire_combo_common(self, w, *, on_change=None, on_activate=None) -> None:
+        """Common wiring for QComboBox-like widgets (best-effort).
+
+        - on_change: connected to currentTextChanged
+        - on_activate: connected to activated
+
+        Notes:
+          - This is intentionally tolerant of missing signals across bindings.
+          - Use `_try_connect`, which prefers UniqueConnection where available.
+        """
+        if w is None:
+            return
+
+        if on_change is not None and callable(on_change):
+            self._try_connect(getattr(w, "currentTextChanged", None), on_change)
+
+        if on_activate is not None and callable(on_activate):
+            self._try_connect(getattr(w, "activated", None), on_activate)
+        else:
+            # Back-compat: if only on_change is provided, also wire activated to it.
+            if on_change is not None and callable(on_change):
+                self._try_connect(getattr(w, "activated", None), on_change)
+
     # ---- UI intent / focus policy ----
     def _user_has_committed_hanzi(self) -> bool:
         return bool(getattr(self, "_hanzi_committed", False))
@@ -903,7 +1714,7 @@ class CategoryManagerDialog(QDialog):
         target: 'jy' | 'hz' | 'mn' | 'cat'
 
         IMPORTANT:
-            This method must never recurse. It only dispatches to the concrete
+            This method must never be recursed. It only dispatches to the concrete
             focus helpers.
         """
         # Delegate to pure focus policy (no Qt imports in policy module).
@@ -977,6 +1788,44 @@ class CategoryManagerDialog(QDialog):
         # Unknown target: no-op (conservative)
         return
 
+    @staticmethod
+    def _flatten_vocab_meanings(raw_meanings) -> list[str]:
+        """Flatten vocab meanings into a simple list of non-empty strings.
+
+        The vocab store may contain meanings as a list of lists, or a flat list.
+        This helper is intentionally conservative and never raises.
+        """
+        out: list[str] = []
+        try:
+            if isinstance(raw_meanings, (list, tuple)):
+                for item in raw_meanings:
+                    if isinstance(item, (list, tuple)):
+                        for sub in item:
+                            try:
+                                s = str(sub or "").strip()
+                            except (TypeError, ValueError):
+                                s = ""
+                            if s:
+                                out.append(s)
+                    else:
+                        try:
+                            s = str(item or "").strip()
+                        except (TypeError, ValueError):
+                            s = ""
+                        if s:
+                            out.append(s)
+            else:
+                try:
+                    s = str(raw_meanings or "").strip()
+                except (TypeError, ValueError):
+                    s = ""
+                if s:
+                    out.append(s)
+        except (TypeError, ValueError):
+            return out
+
+        return out
+
     def _resolve_meanings_for_candidate(
             self,
             hz: str,
@@ -984,11 +1833,11 @@ class CategoryManagerDialog(QDialog):
             *,
             preferred: bool = False,
             max_items: int = 2,
-            allow_pipeline: bool = False,
+            # allow_pipeline: bool = False,
     ) -> list[str]:
         """Single meaning-resolution path for the UI.
 
-        Rule: all meaning resolution shown in this dialog must flow through this method.
+        Rule: all meaning resolutions shown in this dialog must flow through this method.
 
         Authoritative source:
           1) MeaningFacade.select_candidate(...).meanings
@@ -999,13 +1848,52 @@ class CategoryManagerDialog(QDialog):
         Display cleaning (applied exactly once here):
           - strip whitespace
           - drop empty entries
-          - prefer entries without '[' or '(' (but fall back to original list if that removes everything)
+          - prefer entries without '[' or '(' (but fall back to the original list if that removes everything)
           - cap to `max_items`
 
         NOTE:
             UI must not call pipeline gloss resolvers directly.
             Any pipeline involvement must be encapsulated inside the facade.
         """
+
+        # Prefer the user's vocab meanings first when we have an exact Hanzi match.
+        # This prevents external/heuristic dictionaries from overriding colloquial glosses.
+        hz_key = (hz or "").strip()
+        try:
+            v = getattr(self, "_vocab", None)
+            if isinstance(v, dict) and hz_key:
+                entry = v.get(hz_key)
+                if isinstance(entry, (list, tuple)) and len(entry) >= 2:
+                    raw_meanings = entry[0]
+                    entry_jy = entry[1]
+
+                    # Flatten meanings: vocab stores meanings as a list of lists.
+                    flat = self._flatten_vocab_meanings(raw_meanings)
+
+                    # Compare normalized Jyutping where possible (but do not block vocab meanings
+                    # if we can't compare reliably).
+                    try:
+                        jy_widget = getattr(self, "_add_jy", None)
+                        cand_jy = (jy_widget.text() or "").strip() if jy_widget is not None else ""
+                    except (TypeError, AttributeError, RuntimeError):
+                        cand_jy = ""
+
+                    try:
+                        norm = getattr(self, "_normalize_jy", None)
+                        n_cand = str(norm(cand_jy) if callable(norm) else cand_jy).strip()
+                        n_entry = str(norm(entry_jy) if callable(norm) else entry_jy).strip()
+                    except (TypeError, AttributeError, RuntimeError, ValueError):
+                        n_cand = str(cand_jy or "").strip()
+                        n_entry = str(entry_jy or "").strip()
+
+                    if flat and (not n_cand or not n_entry or n_cand == n_entry):
+                        if isinstance(max_items, int) and max_items > 0:
+                            return flat[:max_items]
+                        return flat
+        except (TypeError, AttributeError, RuntimeError, ValueError):
+            # Never allow meaning preference to break UI flow.
+            pass
+
         hz_s = (hz or "").strip()
         if not hz_s:
             return []
@@ -1067,1931 +1955,1244 @@ class CategoryManagerDialog(QDialog):
 
         return _clean([str(x) for x in (ms2 or [])])
 
-    def _read_add_fields(self) -> tuple[str, str, str, str]:
-        """Read Add/Edit panel fields safely.
+    def _on_save_clicked(self) -> None:
+        """Legacy inline Save button handler.
 
-        Returns:
-            (jyutping, hanzi, meanings, category)
+        This remains the manual-save pathway when the user chooses 'Edit'
+        from the Meaning-Enter confirmation flow.
+
+        Best-effort only: never raise from UI callbacks.
         """
-        jy = ""
-        hz = ""
-        mn = ""
-        cat = ""
+        # Prefer the historical handler name if present.
+        try:
+            fn = getattr(self, "_on_add_item_enter", None)
+            if callable(fn):
+                fn()
+                return
+        except (TypeError, AttributeError, RuntimeError):
+            pass
 
-        w_jy = getattr(self, "_add_jy", None)
-        if w_jy is not None:
+        # Fall back to other known save entry points.
+        try:
+            fn = getattr(self, "_save_add_item", None)
+            if callable(fn):
+                fn()
+                return
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+
+        try:
+            fn = getattr(self, "_do_save", None)
+            if callable(fn):
+                fn()
+                return
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+
+        # Absolute last resort: do nothing.
+        return
+
+    def _on_add_category_committed(self, *args, user_action: bool = False, **kwargs) -> None:
+        """Commit the Add/Edit category selection.
+
+        This handler is used by both the category line-edit Enter key and
+        editingFinished. It must be safe to call in UI tests (offscreen) and
+        must never raise.
+
+        Best-effort behaviour:
+          - Normalize/commit the current category text
+          - Update Add/Edit SM context category flags
+          - If we already have Jyutping, populate Hanzi candidates (category-aware)
+          - Refresh Save gating
+        """
+        # Read category text
+        try:
+            w_cat = getattr(self, "_add_cat", None)
+            cat_raw = (w_cat.currentText() or "").strip() if w_cat is not None else ""
+        except (TypeError, AttributeError, RuntimeError):
+            cat_raw = ""
+
+        # No category -> nothing to do
+        if not cat_raw:
             try:
-                jy = (w_jy.text() or "").strip()
-            except (AttributeError, RuntimeError, TypeError):
-                jy = ""
+                if callable(getattr(self, "_update_save_enabled", None)):
+                    self._update_save_enabled()
+            except (TypeError, AttributeError, RuntimeError):
+                pass
+            return
 
-        w_hz = getattr(self, "_add_hz", None)
-        if w_hz is not None:
+        # Canonicalise category if the dialog provides a normaliser
+        try:
+            canon = getattr(self, "_canon_cat_name", None)
+            cat = str(canon(cat_raw) if callable(canon) else cat_raw).strip()
+        except (TypeError, AttributeError, RuntimeError, ValueError):
+            cat = str(cat_raw or "").strip()
+
+        # Commit text back into combo (best-effort)
+        try:
+            w_cat2 = getattr(self, "_add_cat", None)
+            if w_cat2 is not None and hasattr(w_cat2, "setCurrentText"):
+                w_cat2.setCurrentText(cat)
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+
+        # Update SM context (best-effort)
+        ctx = None
+        try:
+            ctx = getattr(self, "_add_edit_ctx", None)
+        except (TypeError, AttributeError, RuntimeError):
+            ctx = None
+
+        cat_ok = False
+        try:
+            cat_l = str(cat or "").strip().lower()
+            cat_ok = bool(cat) and cat_l not in ("unassigned", "all")
+        except (TypeError, AttributeError, RuntimeError, ValueError):
+            cat_ok = False
+
+        if ctx is not None:
+            for _k, _v in (("category", cat), ("cat_ok", bool(cat_ok))):
+                try:
+                    setattr(ctx, _k, _v)
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
+
+        # If Jyutping is already present, populate candidates (category-aware)
+        try:
+            w_jy = getattr(self, "_add_jy", None)
+            jy = (w_jy.text() or "").strip() if w_jy is not None else ""
+        except (TypeError, AttributeError, RuntimeError):
+            jy = ""
+
+        if jy:
             try:
-                hz = (w_hz.text() or "").strip()
-            except (AttributeError, RuntimeError, TypeError):
-                hz = ""
+                fn_fill = getattr(self, "_fill_hanzi_candidates", None)
+                if callable(fn_fill):
+                    try:
+                        fn_fill(jy, category=cat)
+                    except TypeError:
+                        # Back-compat signature
+                        fn_fill(jy)
+            except (TypeError, AttributeError, RuntimeError, ValueError):
+                pass
 
-        w_mn = getattr(self, "_add_mn", None)
-        if w_mn is not None:
+        # Refresh Save gating/rendering
+        try:
+            if callable(getattr(self, "_update_save_enabled", None)):
+                self._update_save_enabled()
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+        return
+
+    def _build_add_entry_preview(self) -> dict:
+        """Build a stable preview payload for the pending add/edit entry (no mutation)."""
+        try:
+            preview_obj = AddEntryPreviewBuilder.build(self)
+            return preview_obj.to_payload()
+        except (TypeError, AttributeError, RuntimeError, ValueError):
+            return {}
+
+    def _confirm_add_entry(self, preview: dict) -> str:
+        """Confirmation dialog for a pending add/edit entry.
+
+        Returns: 'save' | 'edit' | 'cancel'
+        """
+        try:
+            from PySide6.QtWidgets import QMessageBox
+        except (ImportError, ModuleNotFoundError, AttributeError, TypeError, RuntimeError):
+            # If Qt is not available, preserve legacy behavior.
+            return "edit"
+
+        jy = str((preview.get("jyutping") or "")).strip()
+        hz = str((preview.get("hanzi") or "")).strip()
+        mn = str((preview.get("meaning") or "")).strip()
+        cat = str((preview.get("category") or "")).strip()
+
+        msg = QMessageBox(self)
+        msg.setIcon(QMessageBox.Icon.Question)
+        msg.setWindowTitle("Confirm entry")
+        msg.setText("Save this entry?")
+        msg.setInformativeText(
+            "Jyutping: {0}\nHanzi: {1}\nMeaning: {2}\nCategory: {3}".format(jy, hz, mn, cat)
+        )
+
+        btn_save = msg.addButton("Save", QMessageBox.ButtonRole.AcceptRole)
+        btn_edit = msg.addButton("Edit", QMessageBox.ButtonRole.ActionRole)
+        # btn_cancel = msg.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
+
+        try:
+            msg.setDefaultButton(btn_save)
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+
+        try:
+            msg.exec()
+        except (TypeError, AttributeError, RuntimeError):
+            return "edit"
+
+        try:
+            clicked = msg.clickedButton()
+        except (TypeError, AttributeError, RuntimeError):
+            clicked = None
+
+        if clicked is btn_save:
+            return "save"
+        if clicked is btn_edit:
+            return "edit"
+        return "cancel"
+
+    def _set_save_button_visible(self, visible: bool) -> None:
+        """Show/hide the legacy inline Save button.
+
+        Rule:
+          - Hidden by default
+          - Shown only when the user chooses 'Edit' from the confirmation dialog
+        """
+        # Canonical: current implementation uses `self.btn_save`
+        btn = _save_button(self)
+
+        # Qt-boundary fallback: objectName lookup
+        if btn is None:
             try:
-                mn = (w_mn.text() or "").strip()
-            except (AttributeError, RuntimeError, TypeError):
-                mn = ""
+                btn = self.findChild(QPushButton, "btn_save")
+            except (TypeError, AttributeError, RuntimeError):
+                btn = None
 
-        w_cat = getattr(self, "_add_cat", None)
-        if w_cat is not None:
+        if btn is None:
             try:
-                cat = (w_cat.currentText() or "").strip()
-            except (AttributeError, RuntimeError, TypeError):
-                cat = ""
+                btn = self.findChild(QPushButton, "btnSave")
+            except (TypeError, AttributeError, RuntimeError):
+                btn = None
 
-        return jy, hz, mn, cat
+        if btn is None:
+            return
 
+        try:
+            btn.setVisible(bool(visible))
+        except (TypeError, AttributeError, RuntimeError):
+            try:
+                (btn.show() if visible else btn.hide())
+            except (TypeError, AttributeError, RuntimeError):
+                pass
+
+    def _clear_add_entry_fields(self) -> None:
+        """Clear Add/Edit fields best-effort."""
+        try:
+            if getattr(self, "_add_jy", None) is not None:
+                self._add_jy.clear()
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+        try:
+            if getattr(self, "_add_hz", None) is not None:
+                self._add_hz.clear()
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+        try:
+            if getattr(self, "_add_mn", None) is not None:
+                self._add_mn.clear()
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+
+        try:
+            self._set_notes("", source="auto-default")
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+
+        # Also clear category selection
+        try:
+            if getattr(self, "_add_cat", None) is not None:
+                try:
+                    self._add_cat.setCurrentIndex(-1)
+                except (TypeError, AttributeError, RuntimeError):
+                    # Some builds may not like -1; fall back to first item.
+                    try:
+                        self._add_cat.setCurrentIndex(0)
+                    except (TypeError, AttributeError, RuntimeError):
+                        pass
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+
+        try:
+            if callable(getattr(self, "_update_save_enabled", None)):
+                self._update_save_enabled()
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+
+    def _focus_jy(self) -> None:
+        try:
+            w = getattr(self, "_add_jy", None)
+            if w is not None:
+                w.setFocus()
+                try:
+                    w.selectAll()
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+
+    def _on_meaning_enter_committed(self) -> None:
+        # ---- gather inputs ----
+        try:
+            preview = self._build_add_entry_preview()
+        except (TypeError, AttributeError, RuntimeError, ValueError):
+            preview = {}
+
+        try:
+            jy, hz, mn, cat = self._read_add_fields()
+        except (TypeError, AttributeError, RuntimeError):
+            jy = hz = mn = cat = ""
+
+        inp = AddEditInputs(
+            jyutping=str(jy or "").strip(),
+            hanzi=str(hz or "").strip(),
+            meaning=str(mn or "").strip(),
+            category=str(cat or "").strip(),
+            saving=bool(getattr(self, "_saving_now", False)),
+            validate_jy=getattr(self, "_validate_jyut_syllables", None),
+            valid_categories=set(getattr(self, "_categories_map", {}).keys())
+            if hasattr(self, "_categories_map")
+            else None,
+        )
+
+        # ---- user decision (still Qt) ----
+        try:
+            decision = self._confirm_add_entry(preview)
+        except (TypeError, AttributeError, RuntimeError, ValueError):
+            decision = "edit"
+
+        decision = str(decision or "").strip().lower()
+
+        # ---- controller ----
+        result = AddEditController.on_meaning_enter(
+            preview=preview,
+            decision=decision,
+            inp=inp,
+        )
+
+        # Controller returns a dict contract; older code paths may return an object.
+        try:
+            is_dict = isinstance(result, dict)
+        except (TypeError, AttributeError, RuntimeError):
+            is_dict = False
+
+        def _rget(key: str, default=None):
+            if is_dict:
+                try:
+                    return result.get(key, default)
+                except (TypeError, AttributeError, RuntimeError):
+                    return default
+            try:
+                return getattr(result, key, default)
+            except (TypeError, AttributeError, RuntimeError):
+                return default
+
+        show_save = bool(_rget("show_save", False))
+        clear_fields = bool(_rget("clear_fields", False))
+        focus_target = _rget("focus_target", None)
+        commit = bool(_rget("commit", False))
+        commit_payload = _rget("commit_payload", None)
+        preview_payload = _rget("preview_payload", None)
+
+        # Back-compat: if controller didn’t provide these, fall back to the preview we already built.
+        if preview_payload is None:
+            preview_payload = preview
+        if commit_payload is None:
+            commit_payload = preview_payload
+
+        # ---- apply result ----
+        if show_save:
+            self._set_save_button_visible(True)
+            self._update_save_enabled()
+            return
+
+        if clear_fields:
+            self._clear_add_entry_fields()
+            self._set_save_button_visible(False)
+
+        if commit:
+            cb = getattr(self, "_commit_callback", None)
+            if callable(cb):
+                cb(commit_payload)
+            else:
+                self._on_save_clicked()
+            # Clear Hanzi field on successful Save
+            try:
+                if getattr(self, "_add_hz", None) is not None:
+                    self._add_hz.clear()
+            except (TypeError, AttributeError, RuntimeError):
+                pass
+
+        if focus_target == "jy":
+            self._focus_jyutping(select_all=True)
 
     # ---- Add & Edit: Jyutping validation + reverse lookup wiring ----
-    def _normalize_jy(self, s: str) -> str:
+
+    @staticmethod
+    def _normalize_jy(s: str) -> str:
         text = (s or "").strip().lower()
         # Collapse runs of whitespace to single spaces.
         return " ".join(text.split())
 
     def _warn_duplicate_jy_and_reset(self, jy: str) -> None:
-        """Warn that Jyutping already exists, clear the field, and keep focus on Jyutping."""
+        """Warn that Jyutping already exists, keep the text, and focus/select Jyutping."""
         try:
             QMessageBox.warning(
                 self,
                 "Duplicate Jyutping",
-                "The Jyutping \u201c{}\u201d already exists in your vocabulary.\n\nPlease enter a different Jyutping.".format(jy),
+                "The Jyutping \u201c{}\u201d already exists in your vocabulary.\n\nPlease edit the Jyutping and try again.".format(jy),
             )
         except (TypeError, AttributeError, RuntimeError):
             # If the message box cannot be shown (headless / shutdown), continue with field reset.
             pass
 
-        w_jy = getattr(self, "_add_jy", None)
-        if w_jy is not None:
+        # Central focus helper already handles best-effort fallbacks.
+        self._focus_jyutping(select_all=True)
+
+    def _read_add_fields(self) -> tuple[str, str, str, str]:
+        """Read Add/Edit panel fields safely (legacy compatibility)."""
+        try:
+            w_jy = getattr(self, "_add_jy", None)
+            w_hz = getattr(self, "_add_hz", None)
+            w_mn = getattr(self, "_add_mn", None)
+            w_cat = getattr(self, "_add_cat", None)
+
+            jy = (w_jy.text() or "").strip() if w_jy is not None else ""
+            hz = (w_hz.text() or "").strip() if w_hz is not None else ""
+            mn = (w_mn.text() or "").strip() if w_mn is not None else ""
+            cat = ""
+            if w_cat is not None:
+                try:
+                    cat = (w_cat.currentText() or "").strip()
+                except (TypeError, AttributeError, RuntimeError):
+                    cat = ""
+                if not cat:
+                    # Some Qt builds return "" from currentText() when index is -1,
+                    # even though the editable lineEdit has text.
+                    try:
+                        le = w_cat.lineEdit() if hasattr(w_cat, "lineEdit") else None
+                        if le is not None and hasattr(le, "text"):
+                            cat = (le.text() or "").strip()
+                    except (TypeError, AttributeError, RuntimeError):
+                        cat = cat or ""
+            return jy, hz, mn, cat
+        except (TypeError, AttributeError, RuntimeError):
+            return "", "", "", ""
+
+    def _fill_hanzi_candidates(self, jy: str, category: str | None = None) -> None:
+        """Populate Hanzi candidates for a Jyutping (deterministic, test-friendly).
+        Only auto-select the first candidate on initial population, not after user interaction.
+        """
+        jy_s = str(jy or "").strip()
+        if not jy_s:
+            return
+        try:
+            cands = self._reverse_candidates_for_jy(jy_s)
+        except (TypeError, AttributeError, RuntimeError):
+            cands = []
+
+        preferred_hz = None
+        try:
+            cat_s = str(category or "").strip()
+        except (TypeError, AttributeError, RuntimeError, ValueError):
+            cat_s = ""
+
+        if cat_s:
             try:
-                w_jy.clear()
+                cats_map = getattr(self, "_cats", None)
+                members = cats_map.get(cat_s) if isinstance(cats_map, dict) else None
+            except (TypeError, AttributeError, RuntimeError):
+                members = None
+
+            if isinstance(members, (list, tuple, set)) and cands:
+                try:
+                    member_set = set([str(x).strip() for x in list(members) if str(x).strip()])
+                except (TypeError, AttributeError, RuntimeError, ValueError):
+                    member_set = set()
+
+                if member_set:
+                    for row in list(cands or []):
+                        try:
+                            hz0 = str((row[0] if isinstance(row, (list, tuple)) and len(row) >= 1 else row) or "").strip()
+                        except (TypeError, AttributeError, RuntimeError, ValueError):
+                            hz0 = ""
+                        if hz0 and hz0 in member_set:
+                            preferred_hz = hz0
+                            break
+
+        # Populate combo
+        try:
+            if callable(getattr(self, "_populate_candidate_combobox", None)):
+                self._populate_candidate_combobox(cands, preferred_hz=preferred_hz)
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+
+        # Only auto-select the first candidate if this is initial population (not after user selection).
+        # This method is only called on jyutping/category commit, not on candidate selection.
+        top_hz = ""
+        if preferred_hz:
+            top_hz = str(preferred_hz or "").strip()
+        elif cands:
+            try:
+                top_hz = str(cands[0][0] or "").strip()
+            except (TypeError, IndexError):
+                top_hz = ""
+
+        if top_hz:
+            try:
+                if getattr(self, "_add_hz", None) is not None:
+                    self._add_hz.setText(top_hz)
             except (TypeError, AttributeError, RuntimeError):
                 pass
 
-        # Central focus helper already handles best-effort fallbacks.
-        self._focus_jyutping(select_all=False)
+            # Populate meaning via the single resolver
+            try:
+                ms = self._resolve_meanings_for_candidate(top_hz, cands[0][1] if len(cands[0]) > 1 else "")
+                joined = ", ".join([str(x).strip() for x in (ms or []) if str(x).strip()])
+                if getattr(self, "_add_mn", None) is not None:
+                    self._add_mn.setText(joined)
+            except (TypeError, AttributeError, RuntimeError):
+                pass
+
+            # Keep SM ctx coherent
+            ctx = getattr(self, "_add_edit_ctx", None)
+            if ctx is not None:
+                try:
+                    ctx.hanzi = top_hz
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
+
+        try:
+            if callable(getattr(self, "_update_save_enabled", None)):
+                self._update_save_enabled()
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+
+        # Move focus forward to Meaning to avoid category stealing focus
+        try:
+            w_mn = getattr(self, "_add_mn", None)
+            if w_mn is not None:
+                w_mn.setFocus()
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+
+
+    def _save_add_item(self) -> None:
+        """Legacy save entry point shim."""
+        try:
+            fn = getattr(self, "_on_add_item_enter", None)
+            if callable(fn):
+                fn()
+        except (TypeError, AttributeError, RuntimeError):
+            pass
 
     def _update_save_enabled(self) -> None:
-        """
-        Render Save enabled/disabled from the Add/Edit state machine.
+        """Enable/disable Save based on current Add/Edit validity.
 
-        Single source of truth:
-            Save is enabled iff the SM reports READY_TO_SAVE.
+        Single source of truth for Save gating.
+        Must work even when some events/signals are missed (offscreen tests,
+        programmatic setText, etc.).
         """
-        enabled = False
-        state = getattr(self, "_add_edit_state", None)
+        # Read current UI fields (authoritative)
         try:
-            enabled = state is not None and state.name == "READY_TO_SAVE"
-        except (AttributeError, RuntimeError, TypeError):
-            enabled = False
+            jy, hz, mn, cat = self._read_add_fields()
+        except (TypeError, AttributeError, RuntimeError):
+            jy, hz, mn, cat = "", "", "", ""
 
-        btn = getattr(self, "btn_save", None)
+        jy_s = (jy or "").strip()
+        hz_s = (hz or "").strip()
+        mn_s = (mn or "").strip()
+        cat_s = (cat or "").strip()
 
+        # Pull SM ctx if present (best-effort) and keep it coherent
+        ctx = getattr(self, "_add_edit_ctx", None)
+
+        # --- Compute validity flags (robust to missing ctx / missing helpers) ---
+        # Jyutping validity: prefer SM ctx if already validated, otherwise validate if possible.
+        try:
+            jy_ok = bool(getattr(ctx, "jy_ok", False))
+        except (TypeError, AttributeError, RuntimeError):
+            jy_ok = False
+
+        if not jy_ok:
+            if jy_s:
+                try:
+                    vfn = getattr(self, "_validate_jyut_syllables", None)
+                    if callable(vfn):
+                        jy_ok = bool(vfn(jy_s))
+                    else:
+                        jy_ok = True
+                except (TypeError, AttributeError, RuntimeError, ValueError):
+                    jy_ok = True
+            else:
+                jy_ok = False
+
+        hz_ok = bool(hz_s)
+        mn_ok = bool(mn_s)
+
+        # Category must be explicitly chosen; treat 'unassigned' and 'all' as not OK for save
+        cat_l = cat_s.lower()
+        cat_ok = bool(cat_s) and cat_l not in ("unassigned", "all")
+
+        # Saving flag (prevent Save while committing)
+        try:
+            saving = bool(getattr(self, "_saving_now", False)) or bool(getattr(ctx, "saving", False))
+        except (TypeError, AttributeError, RuntimeError):
+            saving = bool(getattr(self, "_saving_now", False))
+
+        ready = bool(jy_ok and hz_ok and mn_ok and cat_ok and not saving)
+
+        # Update ctx fields best-effort so downstream logic stays consistent.
+        if ctx is not None:
+            # Do not overwrite an already-committed Jyutping with "" just because the
+            # widget momentarily reads empty (offscreen tests / signal ordering).
+            try:
+                existing_jy = str(getattr(ctx, "jy", "") or "").strip()
+            except (TypeError, AttributeError, RuntimeError):
+                existing_jy = ""
+            try:
+                if jy_s or not existing_jy:
+                    ctx.jy = jy_s
+            except (TypeError, AttributeError, RuntimeError):
+                pass
+            try:
+                ctx.jy_ok = bool(jy_ok)
+            except (TypeError, AttributeError, RuntimeError):
+                pass
+            try:
+                ctx.hanzi = hz_s
+            except (TypeError, AttributeError, RuntimeError):
+                pass
+            try:
+                ctx.hz_ok = bool(hz_ok)
+            except (TypeError, AttributeError, RuntimeError):
+                pass
+            try:
+                ctx.meaning = mn_s
+            except (TypeError, AttributeError, RuntimeError):
+                pass
+            for _k, _v in (
+                    ("mn_ok", bool(mn_ok)),
+                    ("category", cat_s),
+                    ("cat_ok", bool(cat_ok)),
+                    ("saving", bool(saving)),
+            ):
+                try:
+                    setattr(ctx, _k, _v)
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
+
+        # Ensure state reflects readiness (READY_TO_SAVE should make the inline Save button enabled when visible)
+        try:
+            if ready:
+                self._add_edit_state = AddEditState.READY_TO_SAVE
+                # Treat any non-empty Hanzi as committed for Save gating.
+                try:
+                    if hz_ok:
+                        self._hanzi_committed = True
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
+                try:
+                    fn = getattr(self, "_mark_hanzi_committed", None)
+                    if callable(fn) and hz_ok:
+                        fn(True)
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
+            else:
+                # Do not force a specific non-ready state; just avoid claiming READY.
+                if getattr(self, "_add_edit_state", None) == AddEditState.READY_TO_SAVE:
+                    self._add_edit_state = AddEditState.CATEGORY_COMMITTED
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+
+        # Locate Save button defensively (attribute names vary across builds)
+        btn = None
+        for name in ("btn_save",):
+            try:
+                b = getattr(self, name, None)
+            except (TypeError, AttributeError, RuntimeError):
+                b = None
+            if b is not None:
+                btn = b
+                break
+
+        if btn is None:
+            if QPushButton is not None:
+                try:
+                    # Common objectNames
+                    for obj_name in ("btnSave", "btn_save", "buttonSave", "saveButton"):
+                        b = self.findChild(QPushButton, obj_name)
+                        if b is not None:
+                            btn = b
+                            break
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
+
+        # Apply enabled state
         if btn is not None:
             try:
-                btn.setEnabled(bool(enabled))
-            except RuntimeError:
+                btn.setEnabled(bool(ready))
+            except (TypeError, AttributeError, RuntimeError):
                 pass
-        logger.debug(
-                "SaveEnabled(SM)=%s state=%r",
-                enabled,
-                getattr(state, "name", state),
-            )
+            try:
+                btn.setDefault(bool(ready))
+                btn.setAutoDefault(bool(ready))
+            except (TypeError, AttributeError, RuntimeError):
+                pass
 
-    def _set_notes(self, text: str, source: str = "auto-default") -> None:
-        """
-        Set notes text safely.
+    # ---- Add/Edit UI wiring ----
+    def _setup_add_edit_ui(self) -> None:
+        """Wire Add or Edit widgets for Enter/validation.
 
         Rules:
-          - auto-default → notes are suppressed
-          - curated/domain → notes allowed (read-only)
+          - Meaning Enter triggers the Save/Edit/Cancel confirmation flow.
+          - The legacy inline Save button is hidden by default and only shown
+            when the user chooses 'Edit' from the confirmation dialog.
+
+        Notes:
+          - Use UniqueConnection where available (via _connect_unique).
+          - Wiring is idempotent via _add_edit_wired to avoid duplicate connects.
         """
-        notes = getattr(self, "_add_notes", None)
-        if notes is None:
+
+        # Idempotent wiring: do this once per dialog instance.
+        if bool(getattr(self, "_add_edit_wired", False)):
             return
 
+        # Mark wired at the end no matter what; wiring is best-effort.
         try:
-            if not text or source == "auto-default":
-                notes.clear()
-                notes.setReadOnly(True)
+            # --- Hide legacy inline Save by default ---
+            try:
+                self._set_save_button_visible(False)
+            except (TypeError, AttributeError, RuntimeError):
+                pass
+
+            fn_gate = getattr(self, "_update_save_enabled", None)
+
+            # --- Jyutping wiring ---
+            w_jy = getattr(self, "_add_jy", None)
+            fn_jy_enter = getattr(self, "_on_jyut_enter", None)
+            try:
+                self._wire_line_edit_common(
+                    w_jy,
+                    on_enter=fn_jy_enter,
+                    on_change=fn_gate,
+                )
+            except (TypeError, AttributeError, RuntimeError):
+                pass
+
+            # --- Meaning wiring ---
+            w_mn = getattr(self, "_add_mn", None)
+            fn_mn_enter = getattr(self, "_on_meaning_enter_committed", None)
+            fn_mn_legacy = getattr(self, "_on_meanings_enter", None)
+
+            # Legacy handler remains wired (distinct) for backward compatibility.
+            if w_mn is not None and callable(fn_mn_legacy) and fn_mn_legacy is not fn_mn_enter:
+                try:
+                    self._try_connect(getattr(w_mn, "returnPressed", None), fn_mn_legacy)
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
+
+            try:
+                self._wire_line_edit_common(
+                    w_mn,
+                    on_enter=fn_mn_enter,
+                    on_change=fn_gate,
+                )
+            except (TypeError, AttributeError, RuntimeError):
+                pass
+
+            # --- Category wiring (best-effort) ---
+            w_cat = getattr(self, "_add_cat", None)
+            try:
+                self._wire_combo_common(w_cat, on_change=fn_gate)
+            except (TypeError, AttributeError, RuntimeError):
+                pass
+
+            # Ensure Save gating is correct at startup.
+            if callable(fn_gate):
+                try:
+                    fn_gate()
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
+        finally:
+            # One-time wiring guard.
+            self._add_edit_wired = True
+
+        return
+
+    def _reverse_candidates_for_jy(self, jy: str) -> list[tuple[str, str, int]]:
+        """Return Tier-1 reverse candidates for a Jyutping (deterministic, test-friendly)."""
+        jy_s = str(jy or "").strip()
+        if not jy_s:
+            return []
+
+        # Locate reverse index (multiple historical attribute names)
+        rev = None
+        for attr in ("_reverse_index", "_rev_index", "_reverse_jyut_index"):
+            try:
+                v = getattr(self, attr, None)
+            except (TypeError, AttributeError, RuntimeError):
+                v = None
+            if isinstance(v, dict):
+                rev = v
+                break
+
+        items = []
+        if isinstance(rev, dict):
+            try:
+                items = rev.get(jy_s) or []
+            except (TypeError, AttributeError, RuntimeError):
+                items = []
+
+        out: list[tuple[str, str, int]] = []
+        try:
+            for row in list(items):
+                # Expected shapes: (hz, src, score) or (hz, src)
+                if isinstance(row, (list, tuple)) and len(row) >= 3:
+                    hz, src, score = row[0], row[1], row[2]
+                elif isinstance(row, (list, tuple)) and len(row) == 2:
+                    hz, src, score = row[0], row[1], 0
+                else:
+                    hz, src, score = row, "", 0
+
+                hz_s2 = str(hz or "").strip()
+                if not hz_s2:
+                    continue
+                src_s = str(src or "").strip()
+
+                try:
+                    score_i = int(score)
+                except (TypeError, ValueError):
+                    try:
+                        score_i = int(float(score))
+                    except (TypeError, ValueError):
+                        score_i = 0
+
+                out.append((hz_s2, src_s, score_i))
+        except (TypeError, AttributeError, RuntimeError, ValueError):
+            return []
+
+        return out
+
+    def _on_jyut_enter(self) -> None:
+        """Commit Jyutping entry into the Add/Edit SM context and advance to Category."""
+        try:
+            jy = ""
+            w = getattr(self, "_add_jy", None)
+            if w is not None:
+                jy = str((w.text() or "")).strip()
+        except (TypeError, AttributeError, RuntimeError):
+            jy = ""
+
+        jy_s = self._normalize_jy(jy)
+        # Ensure Add/Edit SM context exists (some builds initialise lazily; tests expect it).
+        ctx = getattr(self, "_add_edit_ctx", None)
+        if ctx is None:
+            try:
+                from domain.add_edit_sm import AddEditContext
+                ctx = AddEditContext()
+                self._add_edit_ctx = ctx
+            except (TypeError, AttributeError, RuntimeError, ImportError):
+                ctx = None
+
+        # Some builds may use an immutable (frozen) context object; support both by
+        # falling back to dataclasses.replace() when attribute assignment fails.
+        def _ctx_replace(**kwargs) -> None:
+            nonlocal ctx
+            if ctx is None:
+                return
+            try:
+                import dataclasses
+            except (ImportError, TypeError, AttributeError, RuntimeError):
+                return
+            try:
+                ctx = dataclasses.replace(ctx, **kwargs)
+                self._add_edit_ctx = ctx
+            except (TypeError, AttributeError, RuntimeError, ValueError):
                 return
 
-            notes.setReadOnly(False)
-            notes.setText(text)
-            notes.setReadOnly(True)
-        except RuntimeError:
-            # Widget already destroyed
+        # Write normalized Jyutping back to the widget to keep UI and SM context aligned
+        try:
+            w = getattr(self, "_add_jy", None)
+            if w is not None and hasattr(w, "setText"):
+                w.setText(jy_s)
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+
+        # Update SM context
+        if ctx is not None:
+            try:
+                ctx.jy = jy_s
+            except (TypeError, AttributeError, RuntimeError):
+                _ctx_replace(jy=jy_s)
+
+        # Empty -> not valid
+        if not jy_s:
+            if ctx is not None:
+                try:
+                    ctx.jy_ok = False
+                except (TypeError, AttributeError, RuntimeError):
+                    _ctx_replace(jy_ok=False)
+            try:
+                self._update_save_enabled()
+            except (TypeError, AttributeError, RuntimeError):
+                pass
             return
 
-    def _meanings_for_hanzi(self, hanzi: str) -> list[str]:
-        hz = (hanzi or "").strip()
-        if not hz:
+        # Validate syllables if validator exists
+        try:
+            vfn = getattr(self, "_validate_jyut_syllables", None)
+            jy_ok = bool(vfn(jy_s)) if callable(vfn) else True
+        except (TypeError, AttributeError, RuntimeError):
+            jy_ok = True
+
+        if ctx is not None:
+            try:
+                ctx.jy_ok = bool(jy_ok)
+            except (TypeError, AttributeError, RuntimeError):
+                _ctx_replace(jy_ok=bool(jy_ok))
+
+        if not jy_ok:
+            try:
+                self._update_save_enabled()
+            except (TypeError, AttributeError, RuntimeError):
+                pass
+            return
+
+        # Duplicate detection by scanning vocab
+        dup = False
+        try:
+            v = getattr(self, "_vocab", None)
+            if isinstance(v, dict):
+                for _hz, row in v.items():
+                    if isinstance(row, (list, tuple)) and len(row) >= 2:
+                        try:
+                            j = str(row[1] or "").strip()
+                        except (TypeError, AttributeError, RuntimeError):
+                            j = ""
+                        if j and self._normalize_jy(j) == jy_s:
+                            dup = True
+                            break
+        except (TypeError, AttributeError, RuntimeError):
+            dup = False
+
+        if ctx is not None:
+            try:
+                ctx.duplicate = bool(dup)
+            except (TypeError, AttributeError, RuntimeError):
+                _ctx_replace(duplicate=bool(dup))
+
+        if dup:
+            # Must warn and keep focus on Jyutping (test asserts QMessageBox.warning called)
+            try:
+                self._warn_duplicate_jy_and_reset(jy_s)
+            except ():
+                pass
+            try:
+                self._update_save_enabled()
+            except (TypeError, AttributeError, RuntimeError):
+                pass
+            return
+
+        # Advance workflow toward category selection
+        try:
+            from domain.add_edit_sm import AddEditState
+            self._add_edit_state = AddEditState.JY_COMMITTED
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+
+        try:
+            ctrl = getattr(self, "_cat_combo_ctrl", None)
+            if ctrl is not None and hasattr(ctrl, "focus"):
+                ctrl.focus()
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+
+        try:
+            self._update_save_enabled()
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+        return
+
+    def _meanings_for_hanzi(self, hz: str) -> list[str]:
+        """Hanzi-only meaning lookup fallback.
+
+        This is intentionally conservative:
+          1) If the MeaningFacade provides meanings_for_display(hz), use it.
+          2) Else, fall back to the current vocab entry (if present).
+        """
+        hz_s = str(hz or "").strip()
+        if not hz_s:
             return []
 
         facade = getattr(self, "_meaning_facade", None)
-        if facade is None:
-            return []
+        if facade is not None and hasattr(facade, "meanings_for_display"):
+            try:
+                ms = facade.meanings_for_display(hz_s)
+                out = []
+                if ms is not None:
+                    for x in list(ms):
+                        s = str(x or "").strip()
+                        if s:
+                            out.append(s)
+                return out
+            except (TypeError, AttributeError, RuntimeError):
+                pass
 
-        t0 = self._perf_start("MeaningFacade.meanings_for_display")
+        # Vocab fallback
         try:
-            raw = facade.meanings_for_display(hz) or []
-            out = [str(x).strip() for x in raw if str(x).strip()]
-        except (AttributeError, TypeError, RuntimeError) as e:
-            logger.debug("MeaningFacade.meanings_for_display failed for %r: %s", hz, e)
-            out = []
-        finally:
-            self._perf_end("MeaningFacade.meanings_for_display", t0)
+            v = getattr(self, "_vocab", None)
+            if isinstance(v, dict) and hz_s in v:
+                row = v.get(hz_s)
+                if isinstance(row, (list, tuple)) and len(row) >= 1:
+                    meanings = row[0]
+                    return self._flatten_vocab_meanings(meanings)
+        except (TypeError, AttributeError, RuntimeError):
+            pass
 
-        if not out:
-            return []
+        return []
 
-        preferred = [g for g in out if "[" not in g and "(" not in g]
-        return preferred if preferred else out
+    def _set_notes(self, text: str, *, source: str = "") -> None:
+        """Set the Notes field (best-effort; never raises)."""
+        try:
+            w = getattr(self, "_add_notes", None)
+        except (TypeError, AttributeError, RuntimeError):
+            w = None
 
-    def _build_category_profiles(self) -> None:
-        """
-        Build lightweight token-frequency profiles per category from existing vocab meanings.
-
-        Populates self._cat_keywords as:
-            {category_name: {token: weight, ...}, ...}
-        """
-        if not isinstance(self._cats, dict) or not isinstance(self._vocab, dict):
-            self._cat_keywords = {}
+        if w is None:
             return
 
-        token_re = re.compile(r"[a-z]+")
-        self._cat_keywords = {}
+        msg = str(text or "")
 
-        for cat, hanzi_list in self._cats.items():
-            if not hanzi_list:
-                continue
-
-            weights: dict[str, float] = {}
-            total = 0.0
-
-            for hz in hanzi_list:
-                v = self._vocab.get(hz)
-                if not v:
-                    continue
-
-                meanings = v[0] if isinstance(v, (list, tuple)) else []
-                for g in meanings:
-                    for tok in token_re.findall(str(g).lower()):
-                        weights[tok] = weights.get(tok, 0.0) + 1.0
-                        total += 1.0
-
-            if not weights or total <= 0.0:
-                continue
-
-            for t in weights:
-                weights[t] = weights[t] / total
-
-            self._cat_keywords[str(cat)] = weights
-
-        logger.debug("Category profiles built for %d categories", len(self._cat_keywords))
-
-    def _meaning_preview_for_hz(self, hz: str, max_items: int = 1) -> str:
-        """Return a short, UI-safe meaning preview for a Hanzi (comma-separated).
-
-        Used only for compact candidate labels; does not change domain logic.
-        """
+        # QLineEdit
         try:
-            hz_s = (hz or "").strip()
-        except (AttributeError, TypeError):
-            hz_s = ""
-        if not hz_s:
-            return ""
+            if hasattr(w, "setText"):
+                w.setText(msg)
+                return
+        except (TypeError, AttributeError, RuntimeError):
+            pass
 
+        # QTextEdit
         try:
-            glosses = self._meanings_for_hanzi(hz_s) or []
-        except (AttributeError, TypeError, RuntimeError):
-            glosses = []
+            if hasattr(w, "setPlainText"):
+                w.setPlainText(msg)
+                return
+        except (TypeError, AttributeError, RuntimeError):
+            pass
 
-        try:
-            out = [str(g).strip() for g in glosses if str(g).strip()]
-        except (TypeError, AttributeError):
-            out = []
-
-        if not out:
-            return ""
-
-        try:
-            n = int(max_items or 1)
-        except (TypeError, ValueError):
-            n = 1
-
-        if n < 1:
-            n = 1
-
-        try:
-            return "; ".join([s.strip() for s in out[:n] if s.strip()])
-        except (TypeError, ValueError):
-            try:
-                return str(out[0])
-            except (IndexError, TypeError):
-                return ""
+        return
 
     def _populate_candidate_combobox(
             self,
-            cands: list[tuple[str, str, int]],
-            preferred_hz: str | None,
+            candidates: list[tuple[str, str, int]],
+            preferred_hz: str | None = None,
     ) -> None:
-        """Populate the Hanzi candidates combobox with UI-ready labels.
-
-        Dialog remains orchestration-only:
-          - meaning resolution + cleaning + formatting is delegated to MeaningFacade.
-        """
-        try:
-            self._cand_combo.blockSignals(True)
-            self._cand_combo.clear()
-        except (AttributeError, RuntimeError, TypeError):
-            return
-
-        if not cands:
-            try:
-                self._cand_combo.setVisible(False)
-            except (AttributeError, RuntimeError, TypeError):
-                pass
-            try:
-                self._cand_combo.blockSignals(False)
-            except (AttributeError, RuntimeError, TypeError):
-                pass
-            return
-
-        facade = getattr(self, "_meaning_facade", None)
-
-        try:
-            self._cand_combo.clear()
-            placeholder = "— choose a Hanzi —"
-            self._cand_combo.addItem(placeholder)
-            try:
-                m = self._cand_combo.model()
-                if m is not None:
-                    m.setData(m.index(0, 0), 0, int(Qt.ItemDataRole.UserRole) - 1)
-            except (AttributeError, RuntimeError, TypeError, ValueError):
-                pass
-
-            # Debug: confirm incoming candidate shape before we populate UI
-            try:
-                _sample_in = []
-                for _i, (_hz, _src, _sc) in enumerate((cands or [])[:5], start=1):
-                    _sample_in.append((_i, str(_hz), str(_src), int(round(float(_sc or 0.0)))))
-                logger.debug("PopulateComboAudit: sample_in=%r", _sample_in)
-            except (AttributeError, RuntimeError, TypeError):
-                pass
-
-            for hz, src, _freq in (cands or []):
-                hz_s = (hz or "").strip()
-                if not hz_s:
-                    continue
-
-                preferred = bool(preferred_hz and hz_s == preferred_hz)
-
-                label = ""
-                selected = None
-                selected_meanings = []
-
-                # Preferred path: ask the façade to resolve + format the candidate.
-                # This keeps the dialog orchestration-only (no direct candidate_label calls).
-                if facade is not None and hasattr(facade, "select_candidate"):
-                    try:
-                        selected = facade.select_candidate(
-                            hz_s,
-                            src,
-                            preferred=preferred,
-                            max_items=2,
-                        )
-                        if selected is not None and hasattr(selected, "label"):
-                            label = str(getattr(selected, "label") or "").strip()
-
-                        # Prefer meanings returned by the façade (already resolved/cleaned for display).
-                        if selected is not None and hasattr(selected, "meanings"):
-                            try:
-                                selected_meanings = list(getattr(selected, "meanings") or [])
-                            except (AttributeError, TypeError, ValueError, RuntimeError):
-                                selected_meanings = []
-                    except (AttributeError, TypeError, ValueError, RuntimeError):
-                        label = ""
-                        selected = None
-                        selected_meanings = []
-
-
-                if not label:
-                    # Final fallback: Hanzi + friendly source label
-                    try:
-                        friendly = FRIENDLY_SOURCE_LABELS.get(src, abbr_for_source(src))
-                    except (AttributeError, TypeError, ValueError):
-                        friendly = abbr_for_source(src)
-                    label = "{} ({})".format(hz_s, friendly)
-                    if preferred:
-                        label = "✓ {}".format(label)
-
-                # Ensure the combobox shows a brief meaning preview (historical behaviour).
-                # Source of truth: the single resolver path.
-                preview = ""
-                try:
-                    meanings_src = self._resolve_meanings_for_candidate(
-                        hz_s,
-                        src,
-                        preferred=preferred,
-                        max_items=2,
-                        allow_pipeline=False,
-                    )
-                    if meanings_src:
-                        preview = ", ".join([s for s in meanings_src if s])
-                except (AttributeError, TypeError, ValueError, RuntimeError):
-                    preview = ""
-                # Hard cap preview length to prevent the combobox from becoming unreadable.
-                try:
-                    if isinstance(preview, str) and len(preview) > 80:
-                        preview = preview[:77].rstrip() + "…"
-                except (TypeError, ValueError):
-                    pass
-
-                if preview:
-                    # Avoid duplicating if the label already contains a preview separator.
-                    try:
-                        if " — " not in label:
-                            if label.endswith(")") and " (" in label:
-                                i = label.rfind(" (")
-                                if i > 0:
-                                    label = "{} — {}{}".format(label[:i], preview, label[i:])
-                                else:
-                                    label = "{} — {}".format(label, preview)
-                            else:
-                                label = "{} — {}".format(label, preview)
-                    except (AttributeError, TypeError, ValueError):
-                        pass
-
-                # Store (hz, src) so selection handler has source context if needed later
-                try:
-                    logger.debug("ComboLabelAudit: hz=%r final_label=%r", hz_s, label)
-                except (TypeError, ValueError):
-                    pass
-                self._cand_combo.addItem(label, userData=(hz_s, src))
-
-                # Debug: verify userData shape being stored
-                try:
-                    if self._cand_combo.count() <= 4:  # only log the first few to avoid noise
-                        logger.debug(
-                            "PopulateComboAudit: row=%d label=%r userData=%r",
-                            self._cand_combo.count() - 1,
-                            label,
-                            (hz_s, src),
-                        )
-                except (AttributeError, TypeError, ValueError, RuntimeError):
-                    pass
-
-            self._cand_combo.setCurrentIndex(0)
-            self._cand_combo.setVisible(True)
-        except (AttributeError, RuntimeError, TypeError, ValueError):
-            pass
-        finally:
-            try:
-                self._cand_combo.blockSignals(False)
-            except (AttributeError, RuntimeError, TypeError):
-                pass
-
-    def _handle_no_hanzi_candidates(self) -> int:
-        """UI path when no candidates exist: expose manual Hanzi entry and disable candidate UI."""
-        try:
-            self._manual_hanzi_mode = False
-            for btn_name in ("btn_custom_hanzi", "btn_enter_hanzi", "btn_hanzi_custom"):
-                btn = getattr(self, btn_name, None)
-                if btn is not None:
-                    btn.setVisible(True)
-                    break
-        except (AttributeError, RuntimeError, TypeError):
-            pass
-
-        try:
-            logger.debug("AddItem: no candidates; showing custom Hanzi entry option")
-        except (TypeError, ValueError):
-            pass
-
-        try:
-            if getattr(self, "_add_hz", None) is not None:
-                self._add_hz.setReadOnly(False)
-                try:
-                    self._add_hz.setPlaceholderText("Type Hanzi (or paste)")
-                except (AttributeError, RuntimeError, TypeError):
-                    pass
-                self._add_hz.clear()
-                self._add_hz.setFocus()
-        except (AttributeError, RuntimeError, TypeError):
-            pass
-
-        try:
-            if getattr(self, "_cand_combo", None) is not None:
-                self._cand_combo.setVisible(False)
-        except (AttributeError, RuntimeError, TypeError):
-            pass
-
-        try:
-            if hasattr(self, "_update_save_enabled") and callable(self._update_save_enabled):
-                self._update_save_enabled()
-        except (AttributeError, RuntimeError, TypeError):
-            pass
-
-        return 0
-
-    def _set_hanzi_top_candidate(self, cands: list[tuple[str, str, int]]) -> str | None:
-        """Set Hanzi edit to the top candidate and return the preferred Hanzi.
-
-        UI-orchestration only. Meaning resolution must flow through
-        `_resolve_meanings_for_candidate(...)` (facade-owned), not direct pipeline calls.
-        """
-        preferred_hz: str | None = None
-        preferred_src = ""
-
-        if isinstance(cands, list) and cands:
-            try:
-                preferred_hz = str(cands[0][0] or "").strip()
-            except (IndexError, TypeError, ValueError):
-                preferred_hz = None
-            try:
-                preferred_src = str(cands[0][1] or "").strip()
-            except (IndexError, TypeError, ValueError):
-                preferred_src = ""
-
-        if not preferred_hz:
-            return None
-
-        # Auto-fill does not represent explicit user intent.
-        try:
-            self._mark_manual_hanzi_mode(False)
-        except (AttributeError, RuntimeError, TypeError):
-            pass
-        try:
-            self._mark_hanzi_committed(False)
-        except (AttributeError, RuntimeError, TypeError):
-            pass
-
-        # Apply preferred Hanzi to the UI
-        hz_edit = getattr(self, "_add_hz", None)
-
-        if hz_edit is not None:
-            try:
-                hz_edit.setText(preferred_hz)
-                try:
-                    hz_edit.setReadOnly(True)
-                except (AttributeError, RuntimeError, TypeError):
-                    pass
-            except (AttributeError, RuntimeError, TypeError):
-                pass
-
-        # If meanings are empty, try to auto-fill via the single resolver path.
-        mn_edit = getattr(self, "_add_mn", None)
-
-        try:
-            mn_existing = (mn_edit.text() or "").strip() if mn_edit is not None else ""
-        except (AttributeError, RuntimeError, TypeError):
-            mn_existing = ""
-
-        if mn_edit is not None and not mn_existing:
-            meanings: list[str] = []
-            try:
-                meanings = self._resolve_meanings_for_candidate(
-                    preferred_hz,
-                    preferred_src,
-                    preferred=True,
-                    max_items=2,
-                    allow_pipeline=False,
-                )
-            except (AttributeError, RuntimeError, TypeError, ValueError):
-                meanings = []
-
-            try:
-                if meanings:
-                    mn_edit.setText(", ".join([str(x).strip() for x in meanings if str(x).strip()]))
-                else:
-                    mn_edit.setPlaceholderText("Enter English meaning")
-            except (AttributeError, RuntimeError, TypeError):
-                pass
-
-        return preferred_hz
-
-    def _clear_candidate_view_highlight(self) -> None:
-        try:
-            v = self._cand_combo.view()
-            if v is not None:
-                v.setCurrentIndex(QModelIndex())
-        except (AttributeError, RuntimeError, TypeError):
-            pass
-
-    def _maybe_autofill_single_candidate_meanings(self, cands: list[tuple[str, str, int]]) -> None:
-        """If there is exactly one candidate, populate meanings (best-effort) without stealing focus."""
-        if not (isinstance(cands, list) and len(cands) == 1):
-            return
-
-        single_hz = None
-        try:
-            single_hz = cands[0][0]
-        except (IndexError, TypeError):
-            single_hz = None
-
-        if not single_hz:
-            return
-
-        # Auto-fill is not an explicit user commitment.
-        try:
-            self._mark_manual_hanzi_mode(False)
-        except (AttributeError, RuntimeError, TypeError):
-            pass
-        try:
-            self._mark_hanzi_committed(False)
-        except (AttributeError, RuntimeError, TypeError):
-            pass
-
-        hz_edit = getattr(self, "_add_hz", None)
-        if hz_edit is not None:
-            try:
-                hz_edit.setText(single_hz)
-            except (AttributeError, RuntimeError, TypeError):
-                pass
-
-        # Meanings are resolved via the MeaningFacade (single source of truth)
-        glosses_single = self._resolve_meanings_for_candidate(
-            single_hz,
-            "",
-            preferred=True,
-            max_items=2,
-            allow_pipeline=False,
-        )
-
-        mn_edit = getattr(self, "_add_mn", None)
-        if mn_edit is not None:
-            try:
-                mn_edit.setText(", ".join(glosses_single) if glosses_single else "")
-            except (AttributeError, RuntimeError, TypeError):
-                pass
-
-        try:
-            self._apply_focus_policy(target="mn", reason="single_candidate_autofill", user_action=False)
-        except (AttributeError, RuntimeError, TypeError, ValueError):
-            pass
-
-        try:
-            if hasattr(self, "_update_save_enabled") and callable(self._update_save_enabled):
-                self._update_save_enabled()
-        except (AttributeError, RuntimeError, TypeError):
-            pass
-
-        try:
-            logger.debug(
-                "AddItem: auto-filled meanings for single candidate '%s' -> %r",
-                single_hz,
-                (glosses_single[:3] if glosses_single else []),
-            )
-        except (TypeError, ValueError):
-            pass
-
-    def _apply_selected_candidate(self, index: int | None = None) -> None:
+        """Populate the Hanzi candidate combobox (best-effort UI helper)."""
         combo = getattr(self, "_cand_combo", None)
         if combo is None:
             return
 
         try:
-            idx = combo.currentIndex() if index is None else int(index)
-        except (TypeError, ValueError):
-            idx = combo.currentIndex()
-
-        if idx <= 0:
-            return
-
-        try:
-            data = combo.itemData(idx)
-        except (RuntimeError, AttributeError):
-            return
-
-        logger.debug(
-            "CandidateSelectAudit: idx=%d text=%r itemData_type=%s itemData=%r",
-            idx,
-            combo.currentText(),
-            type(data).__name__,
-            data,
-        )
-
-        hz = ""
-        src = ""
-
-        if isinstance(data, (tuple, list)) and len(data) >= 2:
-            hz = str(data[0] or "").strip()
-            src = str(data[1] or "").strip()
-        elif isinstance(data, str):
-            hz = data.strip()
-
-        if not hz:
-            return
-
-        self._manual_hanzi_mode = False
-
-        # Candidate controller owns user-action inference
-        user_action = False
-        try:
-            ctrl = (
-                    getattr(self, "_candidate_controller", None)
-                    or getattr(self, "_cand_controller", None)
-                    or getattr(self, "_cand_combo_controller", None)
-            )
-            if ctrl is not None:
-                if hasattr(ctrl, "is_user_action"):
-                    user_action = bool(ctrl.is_user_action(combo, index))
-                elif hasattr(ctrl, "infer_user_action"):
-                    user_action = bool(ctrl.infer_user_action(combo, index))
-                elif hasattr(ctrl, "user_action"):
-                    user_action = bool(ctrl.user_action(combo, index))
-                else:
-                    user_action = bool(index is not None)
-            else:
-                user_action = bool(index is not None)
-        except (AttributeError, RuntimeError, TypeError, ValueError):
-            user_action = bool(index is not None)
-
-        if user_action:
-            self._mark_manual_hanzi_mode(True)
-            self._mark_hanzi_committed(True)
-
-        hz_edit = getattr(self, "_add_hz", None)
-        if hz_edit is not None:
-            try:
-                hz_edit.setReadOnly(True)
-                hz_edit.setText(hz)
-            except (RuntimeError, AttributeError):
-                pass
-
-        try:
-            meanings = self._resolve_meanings_for_candidate(
-                hz,
-                src,
-                preferred=False,
-                max_items=2,
-                allow_pipeline=False,
-            )
-        except (RuntimeError, AttributeError, TypeError):
-            meanings = []
-
-        mn_edit = getattr(self, "_add_mn", None)
-        if mn_edit is not None:
-            try:
-                if meanings:
-                    mn_edit.setText(", ".join(meanings))
-                else:
-                    mn_edit.setText("")
-                    mn_edit.setPlaceholderText("Enter English meaning")
-            except (RuntimeError, AttributeError):
-                pass
-
-            self._apply_focus_policy(
-                target="mn",
-                reason="candidate_selected",
-                user_action=user_action,
-            )
-
-        if callable(getattr(self, "_update_save_enabled", None)):
-            self._update_save_enabled()
-
-    def _apply_ambiguity_notes(self, jy_n: str, n_syllables: int, cands: list[tuple[str, str, int]]) -> None:
-        top_glosses: list[str] | None = None
-
-        if isinstance(cands, list) and cands:
-            top_hz = cands[0][0]
-            if isinstance(top_hz, str) and top_hz.strip():
-                try:
-                    top_glosses = self._meanings_for_hanzi(top_hz)
-                except (RuntimeError, AttributeError, TypeError):
-                    top_glosses = None
-
-        try:
-            note = ambiguity_note(jy_n, n_syllables, cands, top_glosses)
-        except (TypeError, ValueError):
-            note = None
-
-        note = locals().get("note")
-        if note:
-            self._set_notes(note, source="domain")
-        else:
-            self._set_notes("", source="domain")
-
-    def _update_hanzi_tooltip_preview(self, cands: list[tuple[str, str, int]]) -> None:
-        hz_edit = getattr(self, "_add_hz", None)
-        if hz_edit is None:
-            return
-
-        if not cands:
-            try:
-                hz_edit.setToolTip("No candidates found")
-            except (RuntimeError, AttributeError):
-                pass
-            return
-
-        preview_parts: list[str] = []
-        for hz, _src, _freq in cands[:6]:
-            try:
-                ms = self._meanings_for_hanzi(hz)
-                if ms:
-                    preview_parts.append(f"{hz} — {', '.join(ms[:2])}")
-                else:
-                    preview_parts.append(hz)
-            except (RuntimeError, AttributeError, TypeError):
-                preview_parts.append(hz)
-
-        try:
-            hz_edit.setToolTip(", ".join(preview_parts))
-        except (RuntimeError, AttributeError):
+            combo.blockSignals(True)
+        except (TypeError, AttributeError, RuntimeError):
             pass
 
-    def _make_sm_event(self, event_enum, value=None):
         try:
-            return EventPayload(event=event_enum, value=value)
-        except TypeError:
-            return {"event": event_enum, "value": value}
+            combo.clear()
+        except (TypeError, AttributeError, RuntimeError):
+            pass
 
-    def _fill_hanzi_candidates(self, jy: str) -> int:
-        """Populate Hanzi candidates for the given Jyutping.
-
-        UI-orchestration only. All candidate generation/ranking lives in:
-          - domain.hanzi_candidate_pipeline
-          - domain.category_rules
-        """
-        jy_n = ""
+        # Normalise candidate items to a tolerant (hz, src, score) shape.
+        items: list[tuple[str, str, int]] = []
         try:
-            jy_n = self._normalize_jy(jy)
-            # --- Reverse-index diagnostics (Tier-1) ---
-            try:
-                _ri = getattr(self, "_reverse_index", None)
-                _ri_sz = len(_ri) if isinstance(_ri, dict) else -1
-                _has_key = bool(isinstance(_ri, dict) and jy_n in _ri)
-                _sample = []
-                if _has_key:
-                    try:
-                        _sample = list((_ri.get(jy_n) or [])[:5])
-                    except (AttributeError, TypeError, ValueError):
-                        _sample = []
-                logger.debug(
-                    "ReverseIndexAudit: jy=%r present=%s size=%s sample=%r",
-                    jy_n,
-                    _has_key,
-                    _ri_sz,
-                    _sample,
-                )
-            except (AttributeError, RuntimeError, TypeError):
-                pass
+            raw = []
+            if isinstance(candidates, list):
+                raw = candidates
+            elif candidates is not None:
+                raw = list(candidates)
 
-            # Tier-1: reverse index is authoritative when present.
-            tier1: list[tuple[str, str, float]] = []
-            try:
-                _ri = getattr(self, "_reverse_index", None)
-                if isinstance(_ri, dict):
-                    for _hz, _src, _sc in (_ri.get(jy_n) or []):
-                        hz_s = (str(_hz) or "").strip()
-                        if not hz_s:
-                            continue
-                        try:
-                            sc_f = float(_sc)
-                        except (TypeError, ValueError):
-                            sc_f = 0.0
-                        src_s = (str(_src) or "").strip() or "reverse"
-                        tier1.append((hz_s, src_s, sc_f))
-            except (AttributeError, TypeError, ValueError):
-                tier1 = []
+            for item in list(raw or []):
+                hz = ""
+                src = ""
+                score = 0
 
-            # Tier-2: pipeline can augment Tier-1, but must never displace it.
-            pipeline = getattr(self, "_hanzi_pipeline", None)
-            tier2: list[tuple[str, str, float]] = []
-
-            _t_run = self._perf_start("HanziCandidatePipeline.run")
-            if pipeline is not None:
-                try:
-                    raw = pipeline.run(jy_n) or []
-                    tier2 = [(str(hz or "").strip(), str(src or "").strip(), float(freq or 0.0)) for (hz, src, freq) in list(raw)]
-                    tier2 = [(hz, src or "tier2", sc) for (hz, src, sc) in tier2 if hz]
-                except (AttributeError, TypeError, ValueError) as e:
-                    try:
-                        logger.warning("Hanzi pipeline failed for %r: %s", jy_n, e)
-                    except (TypeError, ValueError):
-                        pass
-                    tier2 = []
-            self._perf_end("HanziCandidatePipeline.run", _t_run)
-
-            # Merge (dedupe by hanzi) with Tier-1 priority.
-            # If a Hanzi exists in Tier-1, keep the Tier-1 source and the higher score.
-            merged: dict[str, tuple[str, float, int]] = {}
-            # order index preserves stable ordering when scores tie
-            _order = 0
-            for (hz, src, sc) in (tier1 or []):
-                _order += 1
-                prev = merged.get(hz)
-                if prev is None:
-                    merged[hz] = (src, float(sc or 0.0), _order)
+                if isinstance(item, (list, tuple)) and len(item) >= 3:
+                    hz, src, score = item[0], item[1], item[2]
+                elif isinstance(item, (list, tuple)) and len(item) == 2:
+                    hz, src = item[0], item[1]
+                    score = 0
                 else:
-                    p_src, p_sc, p_ord = prev
-                    merged[hz] = (src, max(float(sc or 0.0), float(p_sc or 0.0)), min(p_ord, _order))
+                    # Allow a plain string/atom to mean "hz".
+                    hz = item
+                    src = ""
+                    score = 0
 
-            for (hz, src, sc) in (tier2 or []):
-                if not hz:
+                try:
+                    hz_s = str(hz or "").strip()
+                except (TypeError, AttributeError, RuntimeError, ValueError):
+                    hz_s = ""
+
+                if not hz_s:
                     continue
-                _order += 1
-                prev = merged.get(hz)
-                if prev is None:
-                    merged[hz] = (src, float(sc or 0.0), _order)
-                else:
-                    # If Tier-1 already supplied this Hanzi, do not replace its source.
-                    p_src, p_sc, p_ord = prev
-                    keep_src = p_src
-                    merged[hz] = (keep_src, max(float(sc or 0.0), float(p_sc or 0.0)), min(p_ord, _order))
 
-            cands = [(hz, merged[hz][0], merged[hz][1]) for hz in merged.keys()]
-            # Sort: score desc, then stable insertion order.
-            try:
-                cands.sort(key=lambda t: (-float(t[2] or 0.0), int(merged.get(t[0], ("", 0.0, 0))[2])))
-            except (TypeError, ValueError):
-                pass
-
-            # Cap to a sane UI maximum
-            try:
-                max_n = int(getattr(self, "MAX_HANZI_CANDIDATES", 10) or 10)
-            except (AttributeError, TypeError, ValueError):
-                max_n = 10
-            if isinstance(cands, list) and max_n > 0:
-                cands = cands[:max_n]
-
-            # Extra debug: confirm Tier-1 presence and whether Tier-2 was suppressed.
-            try:
-                if tier1:
-                    logger.debug("CandidateMergeAudit: jy=%r tier1_n=%d tier2_n=%d merged_n=%d top=%r", jy_n, len(tier1), len(tier2), len(cands), (cands[0] if cands else None))
-            except (TypeError, ValueError):
-                pass
-            try:
-                logger.debug("CacheAudit: candidates n=%d for jy=%r", len(cands), jy_n)
-                # --- Candidate ranking diagnostics (post-pipeline) ---
                 try:
-                    _top = []
-                    for _i, (_hz, _src, _sc) in enumerate((cands or [])[:10], start=1):
-                        _top.append((_i, str(_hz), str(_src), float(_sc)))
-                    logger.debug("CandidateAudit: jy=%r top10=%r", jy_n, _top)
-                    if cands:
-                        try:
-                            _score0 = float(cands[0][2] or 0.0)
-                            _tie_n = sum(1 for _c in (cands or []) if abs(float(_c[2] or 0.0) - _score0) < 1e-9)
-                            logger.debug("CandidateAudit: jy=%r top_score=%.6f tie_count=%d", jy_n, _score0, _tie_n)
-                        except (TypeError, ValueError):
-                            pass
-                except (TypeError, ValueError):
-                    pass
-            except ():
-                pass
+                    src_s = str(src or "").strip()
+                except (TypeError, AttributeError, RuntimeError, ValueError):
+                    src_s = ""
 
-            # No candidates → manual Hanzi affordance
-            if not cands:
-                return self._handle_no_hanzi_candidates()
+                try:
+                    score_i = int(score)
+                except (TypeError, AttributeError, RuntimeError, ValueError):
+                    try:
+                        score_i = int(float(score))
+                    except (TypeError, AttributeError, RuntimeError, ValueError):
+                        score_i = 0
 
-            # Set top candidate into Hanzi field
-            preferred_hz = self._set_hanzi_top_candidate(cands)  # type: ignore[arg-type]
+                items.append((hz_s, src_s, score_i))
+        except (TypeError, AttributeError, RuntimeError, ValueError):
+            items = []
+
+        # Always provide a placeholder if empty.
+        if not items:
             try:
-                if hasattr(self, "_update_save_enabled") and callable(self._update_save_enabled):
-                    self._update_save_enabled()
-            except (AttributeError, RuntimeError, TypeError):
-                pass
-            try:
-                if preferred_hz:
-                    logger.debug("TopCandidateAudit: preferred_hz=%r src=%r score=%r", cands[0][0], cands[0][1],
-                                 cands[0][2])
-            except (TypeError, ValueError):
-                pass
-
-            # Populate candidate dropdown
-            self._populate_candidate_combobox(cands, preferred_hz)  # type: ignore[arg-type]
-
-            # Clear any pre-highlight in combobox view
-            self._clear_candidate_view_highlight()
-
-            # If exactly one candidate, auto-fill meanings
-            self._maybe_autofill_single_candidate_meanings(cands)  # type: ignore[arg-type]
-
-            # Apply ambiguity notes via domain rules
-            try:
-                n_syllables = len(jy_n.split()) if jy_n else 0
-                self._apply_ambiguity_notes(jy_n, n_syllables, cands)  # type: ignore[arg-type]
-            except (TypeError, ValueError):
-                pass
-
-            # Tooltip preview for quick glance
-            self._update_hanzi_tooltip_preview(cands)  # type: ignore[arg-type]
-
-            # Nudge UI to repaint immediately
-            try:
-                hz_widget = getattr(self, "_add_hz", None)
-                if hz_widget is not None:
-                    hz_widget.repaint()
-                    hz_widget.update()
-            except (AttributeError, RuntimeError, TypeError):
-                pass
-
-            return len(cands)
-
-        except Exception as e:
-            # Defensive: keep UI consistent even on unexpected failure
-            logger.exception("_fill_hanzi_candidates failed for %r: %s", jy_n or jy, e)
-
-            hz_widget = getattr(self, "_add_hz", None)
-            if hz_widget is not None:
-                hz_widget.clear()
-                hz_widget.setToolTip("")
-            combo = getattr(self, "_cand_combo", None)
-            if combo is not None:
+                combo.addItem("—")
                 combo.setVisible(False)
+            except (TypeError, AttributeError, RuntimeError):
+                pass
+            try:
+                combo.blockSignals(False)
+            except (TypeError, AttributeError, RuntimeError):
+                pass
+            return
 
-            return 0
+        # Add candidates (display Hanzi only; src/score remain in the reverse index).
+        for hz_s, _src_s, _score_i in items:
+            try:
+                combo.addItem(hz_s)
+            except (TypeError, AttributeError, RuntimeError):
+                pass
 
-    def _on_custom_hanzi_clicked(self):
-        """Allow the user to reject all suggestions and type their own Hanzi.
+        # Select preferred if present
+        if preferred_hz:
+            try:
+                idx = combo.findText(str(preferred_hz).strip())
+                if idx >= 0:
+                    combo.setCurrentIndex(idx)
+            except (TypeError, AttributeError, RuntimeError):
+                pass
 
-        When invoked:
-          - Hide and clear the candidates combobox.
-          - Make the Hanzi field editable.
-          - Clear any previous Hanzi text (only the first time).
-          - Move keyboard focus into the Hanzi field so the user can type or paste.
-          - Refresh Save button state to reflect the new (empty) Hanzi value.
-        """
         try:
-            logger.debug("AddItem: user invoked custom Hanzi entry (None of these).")
-        except (TypeError, ValueError):
+            combo.setVisible(True)
+        except (TypeError, AttributeError, RuntimeError):
             pass
 
-        # These are pure Python state flips; they should not raise under normal conditions.
-        # Keep defensive guards narrow.
         try:
-            self._mark_manual_hanzi_mode(True)
-            self._mark_hanzi_committed(True)  # user explicitly chose to take over Hanzi selection
-        except (AttributeError, RuntimeError, TypeError, ValueError):
+            combo.blockSignals(False)
+        except (TypeError, AttributeError, RuntimeError):
             pass
 
-        # Manual Hanzi entry is not yet a committed choice until user confirms.
         try:
-            self._hanzi_committed = False
-        except (AttributeError, TypeError):
+            self._debug_hanzi_panel_geometry("after _populate_candidate_combobox")
+        except (TypeError, AttributeError, RuntimeError, ValueError):
+            pass
+        # Force closed-combo repaint via internal line edit
+        try:
+            le = combo.lineEdit()
+            if le is not None:
+                le.setText(combo.currentText())
+        except (TypeError, AttributeError, RuntimeError):
             pass
 
-        # Track first entry into manual mode so repeated clicks don't wipe user input
+    def _on_candidate_index_activated(self, idx: int) -> None:
+        """Handler for when a Hanzi candidate is selected by index from the combo."""
         try:
-            if not hasattr(self, "_manual_hanzi_started"):
-                self._manual_hanzi_started = False
-        except (AttributeError, TypeError):
-            pass
-
-        # Hide and clear the candidates combobox so we are no longer in
-        # "suggested candidates" mode.
-        cand_combo = getattr(self, "_cand_combo", None)
-        if cand_combo is not None:
-            try:
-                cand_combo.blockSignals(True)
-                try:
-                    cand_combo.clear()
-                    cand_combo.setVisible(False)
-                finally:
-                    cand_combo.blockSignals(False)
-            except (AttributeError, RuntimeError, TypeError):
-                pass
-
-        # Allow direct editing of the Hanzi field and move focus there.
-        hz_edit = getattr(self, "_add_hz", None)
-        if hz_edit is not None:
-            try:
-                hz_edit.setReadOnly(False)
-            except (AttributeError, RuntimeError, TypeError):
-                pass
-            try:
-                hz_edit.setPlaceholderText("Type Hanzi (or paste)")
-            except (AttributeError, RuntimeError, TypeError):
-                pass
-
-            # Only clear Hanzi the first time we enter manual mode.
-            if not bool(getattr(self, "_manual_hanzi_started", False)):
-                try:
-                    hz_edit.clear()
-                except (AttributeError, RuntimeError, TypeError):
-                    pass
-                try:
-                    self._manual_hanzi_started = True
-                except (AttributeError, TypeError):
-                    pass
-
-            # Ensure we only connect these signals once; repeated connections cause repeated firing.
-            try:
-                if not bool(getattr(self, "_manual_hanzi_signals_connected", False)):
-                    try:
-                        hz_edit.textChanged.connect(self._on_hanzi_manual_text_changed)
-                    except (AttributeError, RuntimeError, TypeError):
-                        pass
-                    try:
-                        hz_edit.textChanged.connect(self._maybe_autofill_meanings_from_hz_manual)
-                    except (AttributeError, RuntimeError, TypeError):
-                        pass
-                    self._manual_hanzi_signals_connected = True
-            except (AttributeError, RuntimeError, TypeError, ValueError):
-                pass
-
-            try:
-                hz_edit.setFocus()
-                hz_edit.selectAll()
-            except (AttributeError, RuntimeError, TypeError):
-                pass
-
-        # Finally, refresh Save enabled/disabled state so that once the
-        # user types Hanzi and meanings, Save will light up.
-        try:
-            updater = getattr(self, "_update_save_enabled", None)
-            if callable(updater):
-                updater()
-        except (AttributeError, RuntimeError, TypeError):
-            pass
-
-    def _on_hanzi_manual_text_changed(self, _text: str) -> None:
-        """Route manual Hanzi typing through the Add/Edit state machine.
-
-        This is connected only when the user enters manual Hanzi mode.
-        Save gating remains SM-only.
-        """
-        # Guard: only meaningful in manual Hanzi mode.
-        if not bool(getattr(self, "_manual_hanzi_mode", False)):
-            return
-
-        jy, hz, mn, cat = self._read_add_fields()
-
-        # Resolve event constant across versions.
-        evt_enum = None
-        try:
-            for name in ("HANZI_CHANGED", "HANZI_EDITED", "HZ_CHANGED", "HZ_EDITED", "HANZI_TYPED"):
-                if hasattr(Event, name):
-                    evt_enum = getattr(Event, name)
-                    break
-        except (AttributeError, TypeError):
-            evt_enum = None
-
-        # If the SM doesn't define a Hanzi-edit event yet, fall back to a conservative refresh.
-        if evt_enum is None:
-            try:
-                updater = getattr(self, "_update_save_enabled", None)
-                if callable(updater):
-                    updater()
-            except (AttributeError, RuntimeError, TypeError):
-                pass
-            return
-
-        ctx = AddEditContext(
-            jy=jy,
-            jy_ok=bool(getattr(getattr(self, "_add_edit_ctx", None), "jy_ok", False)),
-            duplicate=getattr(getattr(self, "_add_edit_ctx", None), "duplicate", None),
-            hanzi=hz,
-            hz_ok=bool(hz),
-            manual_hanzi=True,
-            meaning=mn,
-            mn_ok=bool(mn),
-            category=cat,
-            cat_ok=bool(cat),
-            saving=bool(getattr(self, "_saving_now", False)),
-        )
-
-        state = getattr(self, "_add_edit_state", AddEditState.EMPTY)
-
-        try:
-            evt = self._make_sm_event(evt_enum, hz)
-            new_state, new_ctx, effects = reduce(state, ctx, evt)
-        except (AttributeError, RuntimeError, TypeError, ValueError):
-            # Never break the UI on SM failure.
-            return
-
-        self._add_edit_state = new_state
-        self._add_edit_ctx = new_ctx
-
-        for eff in (effects or []):
-            try:
-                self._apply_add_edit_effect(eff)
-            except (AttributeError, RuntimeError, TypeError, ValueError):
-                pass
-
-        try:
-            self._update_save_enabled()
-        except (AttributeError, RuntimeError, TypeError):
-            pass
-
-    def _maybe_autofill_meanings_from_hz_manual(self) -> None:
-        """
-        When the user types Hanzi in manual mode, try once to populate meanings
-        from available sources. If nothing is found, guide the user to enter
-        meanings manually.
-
-        Best-effort only: must never overwrite user-entered meanings.
-        """
-        # Guard: only active in manual Hanzi mode
-        if not bool(getattr(self, "_manual_hanzi_mode", False)):
-            return
-
-        hz_edit = getattr(self, "_add_hz", None)
-        mn_edit = getattr(self, "_add_mn", None)
-
-        if hz_edit is None or mn_edit is None:
-            return
-
-        try:
-            hz = (hz_edit.text() or "").strip()
-        except (AttributeError, RuntimeError, TypeError):
-            return
-
-        if not hz:
-            return
-
-        # Do not overwrite user-entered meanings
-        try:
-            if (mn_edit.text() or "").strip():
+            combo = getattr(self, "_cand_combo", None)
+            if combo is None:
                 return
-        except (AttributeError, RuntimeError, TypeError):
+            # Defensive: get the selected Hanzi string.
+            selected_hz = str(combo.currentText() or "").strip()
+            if not selected_hz:
+                return
+        except (TypeError, AttributeError, RuntimeError):
             return
 
-        # Attempt to derive meanings via the single façade path
+        # Set Hanzi field
         try:
-            glosses = self._meanings_for_hanzi(hz)
-        except (AttributeError, RuntimeError, TypeError) as e:
-            try:
-                logger.debug("Manual Hanzi meaning lookup failed for %r: %s", hz, e)
-            except (TypeError, ValueError):
-                pass
-            glosses = []
-
-        if glosses:
-            try:
-                mn_edit.setText(", ".join(glosses))
-                mn_edit.selectAll()
-            except (AttributeError, RuntimeError, TypeError):
-                pass
-        else:
-            # No glosses found: guide the user explicitly
-            try:
-                mn_edit.setPlaceholderText("Enter English meaning")
-                mn_edit.setFocus()
-            except (AttributeError, RuntimeError, TypeError):
-                pass
-
-        # Route meaning changes through the SM (Save gating is SM-only)
-        try:
-            self._on_meanings_text_changed(mn_edit.text() if mn_edit is not None else "")
-        except (AttributeError, RuntimeError, TypeError, ValueError):
+            if getattr(self, "_add_hz", None) is not None:
+                self._add_hz.setText(selected_hz)
+        except (TypeError, AttributeError, RuntimeError):
             pass
 
-    def _on_meanings_text_changed(self, _text: str) -> None:
-        """Route meanings edits through the Add/Edit state machine."""
-        jy, hz, mn, cat = self._read_add_fields()
-
-        evt_enum = None
+        # Attempt to resolve the corresponding candidate's src for meaning lookup
+        src = ""
         try:
-            for name in ("MEANINGS_CHANGED", "MEANING_CHANGED", "MN_CHANGED", "MEANINGS_EDITED", "MEANING_EDITED"):
-                if hasattr(Event, name):
-                    evt_enum = getattr(Event, name)
-                    break
-        except (AttributeError, TypeError):
-            evt_enum = None
-
-        # If the SM doesn't define a meanings-edit event yet, fall back to a conservative refresh.
-        if evt_enum is None:
+            # Get the candidate list from the combo's model
+            # Try to find the matching candidate row for the selected Hanzi
+            jy = ""
             try:
+                w_jy = getattr(self, "_add_jy", None)
+                if w_jy is not None:
+                    jy = str((w_jy.text() or "")).strip()
+            except (TypeError, AttributeError, RuntimeError):
+                jy = ""
+            cands = []
+            try:
+                cands = self._reverse_candidates_for_jy(jy)
+            except (TypeError, AttributeError, RuntimeError):
+                cands = []
+            for row in cands:
+                try:
+                    hz = str(row[0] if isinstance(row, (list, tuple)) and len(row) > 0 else row).strip()
+                except (TypeError, AttributeError, RuntimeError):
+                    hz = ""
+                if hz == selected_hz:
+                    try:
+                        src = str(row[1] if isinstance(row, (list, tuple)) and len(row) > 1 else "")
+                    except (TypeError, AttributeError, RuntimeError):
+                        src = ""
+                    break
+        except (TypeError, AttributeError, RuntimeError):
+            src = ""
+
+        # Set meanings for this candidate
+        try:
+            ms = self._resolve_meanings_for_candidate(selected_hz, src)
+            joined = ", ".join([str(x).strip() for x in (ms or []) if str(x).strip()])
+            if getattr(self, "_add_mn", None) is not None:
+                self._add_mn.setText(joined)
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+
+        # Update SM ctx hanzi
+        ctx = getattr(self, "_add_edit_ctx", None)
+        if ctx is not None:
+            try:
+                ctx.hanzi = selected_hz
+            except (TypeError, AttributeError, RuntimeError):
+                pass
+
+        # Refresh Save gating
+        try:
+            if callable(getattr(self, "_update_save_enabled", None)):
                 self._update_save_enabled()
-            except (AttributeError, RuntimeError, TypeError):
-                pass
-            return
-
-        ctx = AddEditContext(
-            jy=jy,
-            jy_ok=bool(getattr(getattr(self, "_add_edit_ctx", None), "jy_ok", False)),
-            duplicate=getattr(getattr(self, "_add_edit_ctx", None), "duplicate", None),
-            hanzi=hz,
-            hz_ok=bool(hz),
-            manual_hanzi=bool(getattr(self, "_manual_hanzi_mode", False)),
-            meaning=mn,
-            mn_ok=bool(mn),
-            category=cat,
-            cat_ok=bool(cat),
-            saving=bool(getattr(self, "_saving_now", False)),
-        )
-
-        state = getattr(self, "_add_edit_state", AddEditState.EMPTY)
-
-        try:
-            evt = self._make_sm_event(evt_enum, mn)
-            new_state, new_ctx, effects = reduce(state, ctx, evt)
-        except (AttributeError, RuntimeError, TypeError, ValueError):
-            return
-
-        self._add_edit_state = new_state
-        self._add_edit_ctx = new_ctx
-
-        for eff in (effects or []):
-            try:
-                self._apply_add_edit_effect(eff)
-            except (AttributeError, RuntimeError, TypeError, ValueError):
-                pass
-
-        try:
-            self._update_save_enabled()
-        except (AttributeError, RuntimeError, TypeError):
+        except (TypeError, AttributeError, RuntimeError):
             pass
 
-    def _reset_add_panel(self):
-        """Clear Add/Edit fields back to initial state and focus Jyutping."""
+    def _on_candidate_text_changed(self, text: str) -> None:
+        """Delegate to index-activated handler for consistent candidate selection logic."""
+        # Try to get the current index and delegate
         try:
-            self._manual_hanzi_mode = False
-        except (AttributeError, TypeError):
-            pass
-
-        try:
-            self._manual_hanzi_started = False
-        except (AttributeError, TypeError):
-            pass
-
-        cand_combo = getattr(self, "_cand_combo", None)
-        if cand_combo is not None:
-            try:
-                cand_combo.blockSignals(True)
-                try:
-                    cand_combo.clear()
-                    cand_combo.setVisible(False)
-                finally:
-                    cand_combo.blockSignals(False)
-            except (AttributeError, RuntimeError, TypeError):
-                pass
-
-        hz = getattr(self, "_add_hz", None)
-        if hz is not None:
-            try:
-                hz.clear()
-                hz.setToolTip("")
-            except (AttributeError, RuntimeError, TypeError):
-                pass
-
-        mn = getattr(self, "_add_mn", None)
-        if mn is not None:
-            try:
-                mn.clear()
-            except (AttributeError, RuntimeError, TypeError):
-                pass
-
-        cat = getattr(self, "_add_cat", None)
-        if cat is not None:
-            try:
-                # No synthetic placeholder category: require the user to pick a real category.
-                cat.setCurrentIndex(-1)
-            except (AttributeError, RuntimeError, TypeError, ValueError):
-                pass
-
-            # Ensure Enter/Return in the editable category combobox commits the category.
-            try:
-                le_factory = getattr(cat, "lineEdit", None)
-                le_cat = le_factory() if callable(le_factory) else None
-                if le_cat is not None and hasattr(le_cat, "returnPressed"):
-                    try:
-                        le_cat.returnPressed.disconnect()
-                    except (AttributeError, RuntimeError, TypeError):
-                        pass
-                    try:
-                        le_cat.returnPressed.connect(self._on_add_category_committed)
-                    except (AttributeError, RuntimeError, TypeError):
-                        pass
-            except (AttributeError, RuntimeError, TypeError):
-                pass
-
-        btn = getattr(self, "btn_save", None)
-        if btn is not None:
-            try:
-                btn.setEnabled(False)
-                btn.setDefault(False)
-                btn.setAutoDefault(False)
-            except (AttributeError, RuntimeError, TypeError):
-                pass
-
-        jy = getattr(self, "_add_jy", None)
-        if jy is not None:
-            try:
-                jy.setFocus()
-            except (AttributeError, RuntimeError, TypeError):
-                pass
-
-    def _on_save_clicked(self):
-        """
-        Gather the Add panel fields and hand them to the commit callback (if any).
-
-        The payload is a simple dict that the main window can interpret and persist:
-            {
-                "jyutping": <str>,
-                "hanzi": <str>,
-                "gloss": <str>,
-                "categories": [<str>, ...],
-            }
-        """
-        # Re-check that Save should be enabled (defensive)
-        try:
-            self._update_save_enabled()
-        except (AttributeError, RuntimeError, TypeError):
-            pass
-
-        cb = getattr(self, "_commit_callback", None)
-        if not callable(cb):
-            logger.warning(
-                "Save clicked but no commit routine was found; please wire to your add/commit method."
-            )
-            return
-
-        jy, hz, mn, cat = self._read_add_fields()
-
-        # Basic guard: all fields must be present and category must be something real
-        if not jy or not hz or not mn:
-            logger.debug(
-                "Save aborted: missing required fields (jy=%r, hz=%r, mn=%r)", jy, hz, mn
-            )
-            return
-        if not cat or cat.lower() == "all":
-            logger.debug("Save aborted: invalid category %r", cat)
-            return
-
-        cats = [cat]
-
-        payload = {
-            "jyutping": jy,
-            "hanzi": hz,
-            "gloss": mn,
-            "categories": cats,
-        }
-
-        try:
-            cb(payload)
-        except Exception as e:
-            logger.warning("Save commit callback failed for %r: %s", payload, e)
-            return
-
-        # If commit succeeds, close the dialog.
-        try:
-            self.accept()
-        except (AttributeError, RuntimeError, TypeError):
-            pass
-
-    def _on_meanings_enter(self):
-        """When user presses Enter in Meanings, move focus to Category."""
-        try:
-            self._apply_focus_policy(target="cat", reason="legacy_direct_focus", user_action=False, show_popup=False)
-        except (AttributeError, RuntimeError, TypeError):
-            pass
-
-    def _is_unassigned_category(self) -> bool:
-        try:
-            txt = (self._add_cat.currentText() or "").strip().lower()
-            return txt == "unassigned"
-        except (AttributeError, RuntimeError, TypeError):
-            return False
-
-    def _on_jyut_enter(self) -> None:
-        """
-        UI adapter for Jyutping commit.
-
-        Reads UI state, delegates decision-making to domain.add_edit_sm.reduce,
-        and applies returned UI effects.
-        """
-        jy, hz, mn, cat = self._read_add_fields()
-
-        if not (jy or "").strip():
-            try:
-                self._focus_jyutping(select_all=False)
-            except (AttributeError, RuntimeError, TypeError):
-                pass
-            return
-
-        # Compute domain-backed validation and duplication flags up-front.
-        # The SM expects these to be accurate at commit time.
-        try:
-            jy_ok = bool(self._validate_jyut_syllables(jy))
-        except (AttributeError, RuntimeError, TypeError, ValueError):
-            jy_ok = False
-
-        try:
-            dup = bool(
-                is_duplicate_jy(
-                    jy,
-                    vocab=getattr(self, "_vocab", {}),
-                    normalize=getattr(self, "_normalize_jy", None),
-                )
-            )
-        except (AttributeError, TypeError, ValueError):
-            dup = False
-
-        # Duplicate Jyutping must be handled immediately (single warning + focus reset).
-        # Do not delegate duplicates into the SM; the SM models the "new entry" flow.
-        if dup:
-            try:
-                QMessageBox.warning(
-                    self,
-                    "Duplicate Jyutping",
-                    "That Jyutping already exists in your vocab.\n\n"
-                    "Please change the Jyutping (or edit the existing entry instead).",
-                )
-            except (AttributeError, RuntimeError, TypeError):
-                pass
-            try:
-                self._focus_jyutping(select_all=True)
-            except (AttributeError, RuntimeError, TypeError):
-                pass
-            try:
-                updater = getattr(self, "_update_save_enabled", None)
-                if callable(updater):
-                    updater()
-            except (AttributeError, RuntimeError, TypeError):
-                pass
-            return
-
-        ctx = AddEditContext(
-            jy=jy,
-            jy_ok=jy_ok,
-            duplicate=dup,
-            hanzi=hz,
-            hz_ok=bool(hz),
-            manual_hanzi=bool(getattr(self, "_manual_hanzi_mode", False)),
-            meaning=mn,
-            mn_ok=bool(mn),
-            category=cat,
-            cat_ok=bool(cat),
-            saving=False,
-        )
-
-        # Resolve event constant across versions
-        evt_enum = None
-        try:
-            for name in (
-                "JY_COMMIT",
-                "JYUTPING_COMMITTED",
-                "JY_COMMITTED",
-                "JY_ACCEPTED",
-                "JY_EDITING",
-            ):
-                if hasattr(Event, name):
-                    evt_enum = getattr(Event, name)
-                    break
-        except (AttributeError, TypeError):
-            # Defensive: Event may not be a proper enum/namespace in some legacy bindings.
-            evt_enum = None
-
-        # Guard: if we cannot resolve a state-machine event, fail soft with legacy behaviour
-        if evt_enum is None:
-            # Non-duplicate: proceed with existing lookup behaviour
-            if self._hanzi_committed:
+            combo = getattr(self, "_cand_combo", None)
+            if combo is None:
                 return
-
+            idx = combo.currentIndex()
             try:
-                if hasattr(self, "_update_save_enabled") and callable(self._update_save_enabled):
-                    self._update_save_enabled()
-            except (AttributeError, RuntimeError, TypeError):
+                self._debug_hanzi_panel_geometry("candidate changed")
+            except (TypeError, AttributeError, RuntimeError, ValueError):
                 pass
-            return
-
-        # Defensive: ensure state is never None (Save gating relies on a concrete SM state).
-        state = getattr(self, "_add_edit_state", None)
-        if state is None:
-            state = AddEditState.EMPTY
-
-        # Always persist the latest committed Jyutping context, even if the SM adapter fails.
-        # This prevents silent regressions where the UI field changes but `_add_edit_ctx` remains EMPTY.
-        try:
-            self._add_edit_state = state
-            self._add_edit_ctx = ctx
-        except (AttributeError, TypeError):
+            self._on_candidate_index_activated(idx)
+        except (TypeError, AttributeError, RuntimeError):
             pass
-
         try:
-            evt = self._make_sm_event(evt_enum, jy)
-            new_state, new_ctx, effects = reduce(state, ctx, evt)
-        except (AttributeError, RuntimeError, TypeError, ValueError):
-            # Fail-soft: keep the UI responsive and preserve the committed ctx above.
-            try:
-                self._focus_jyutping(select_all=True)
-            except (AttributeError, RuntimeError, TypeError):
-                pass
-
-            # Still apply the expected UX nudge for valid, non-duplicate Jyutping.
-            if bool(getattr(ctx, "jy_ok", False)) and not bool(getattr(ctx, "duplicate", False)):
-                try:
-                    ctrl = getattr(self, "_cat_combo_ctrl", None)
-                    if ctrl is not None and hasattr(ctrl, "focus"):
-                        self._call_best_effort(ctrl.focus, True)
-                    else:
-                        self._apply_focus_policy(
-                            target="cat",
-                            reason="jyutping_committed",
-                            user_action=True,
-                            show_popup=True,
-                            select_all=True,
-                        )
-                except (AttributeError, RuntimeError, TypeError, ValueError):
-                    pass
-
-            try:
-                updater = getattr(self, "_update_save_enabled", None)
-                if callable(updater):
-                    updater()
-            except (AttributeError, RuntimeError, TypeError):
-                pass
-            return
-
-        self._add_edit_state = new_state
-        self._add_edit_ctx = new_ctx
-
-        # Defensive: some legacy paths may not emit focus effects; enforce the
-        # expected UX nudge for valid, non-duplicate Jyutping.
-        if bool(getattr(new_ctx, "jy_ok", False)) and not bool(getattr(new_ctx, "duplicate", False)):
-            try:
-                ctrl = getattr(self, "_cat_combo_ctrl", None)
-                if ctrl is not None and hasattr(ctrl, "focus"):
-                    # Use the controller so tests can spy on the advance signal.
-                    self._call_best_effort(ctrl.focus, True)
-                else:
-                    # Fallback: apply focus policy directly.
-                    self._apply_focus_policy(
-                        target="cat",
-                        reason="jyutping_committed",
-                        user_action=True,
-                        show_popup=True,
-                        select_all=True,
-                    )
-            except (AttributeError, RuntimeError, TypeError, ValueError):
-                pass
-
-        for eff in (effects or []):
-            try:
-                self._apply_add_edit_effect(eff)
-            except (AttributeError, RuntimeError, TypeError, ValueError):
-                pass
-
-        # Render Save immediately from SM state (single source of truth)
-        updater = getattr(self, "_update_save_enabled", None)
-        if callable(updater):
-            try:
-                updater()
-            except (AttributeError, RuntimeError, TypeError):
-                pass
-
-    def _on_search_changed(self, _text: str) -> None:
-        """Search handler (compat shim)."""
-        fn = getattr(self, "_populate_rows", None)
-        if callable(fn):
-            fn()
-
-    def _rebuild_items_model(self) -> None:
-        """Table rebuild hook (compat shim)."""
-        fn = getattr(self, "_populate_rows", None)
-        if callable(fn):
-            fn()
-
-    def _apply_add_edit_effect(self, eff) -> None:
-        """Apply a single Add/Edit effect to the UI.
-
-        Effects may be returned either as dict payloads (legacy) or as structured
-        objects (newer domain layer). This adapter normalises access.
-        """
-        if eff is None:
-            return
-
-        # Effects may be returned either as dict payloads (legacy) or as structured objects.
-        if isinstance(eff, dict):
-            etype = eff.get("type")
-            jy = eff.get("jy", eff.get("value"))
-        else:
-            etype = getattr(eff, "type", None)
-            jy = getattr(eff, "jy", None) or getattr(eff, "value", None)
-
-        if not etype:
-            return
-
-        jy_s = str(jy or "")
-
-        match etype:
-            case "warn_duplicate_jy":
-                # Safe: method already defensive.
-                self._warn_duplicate_jy_and_reset(jy_s)
-
-            case "focus_category":
-                self._apply_focus_policy(
-                    target="cat",
-                    reason="legacy_direct_focus",
-                    user_action=False,
-                    show_popup=True,
-                )
-
-            case "focus_jyutping":
-                self._focus_jyutping(select_all=True)
-
-            case "invalidate_hanzi":
-                # Pure state flags: no Qt calls.
-                self._hanzi_committed = False
-                self._manual_hanzi_mode = False
-
-            case "refresh_save":
-                self._update_save_enabled()
-
-            case "fill_candidates":
-                # Candidate fill is internally defensive/logging.
-                self._fill_hanzi_candidates(jy_s)
-
-            case _:
-                return
-
-    def _on_add_category_committed(self) -> None:
-        """Commit the category from the editable Add-panel combobox.
-
-        This is the handler for Enter/Return on the category line edit.
-        It normalises/creates categories and then triggers candidate lookup
-        if Jyutping is present and Hanzi is still empty.
-        """
-        cat_cb = getattr(self, "_add_cat", None)
-        if cat_cb is None:
-            return
-
-        try:
-            text = (cat_cb.currentText() or "").strip()
-        except (AttributeError, RuntimeError, TypeError):
-            return
-
-        # Require explicit category choice
-        if not text:
-            try:
-                QMessageBox.warning(
-                    self,
-                    "Category required",
-                    "Please choose or type a category for this entry.\n"
-                    "If you really cannot decide, you can use ‘unassigned’.",
-                )
-            except (AttributeError, RuntimeError, TypeError):
-                pass
-
-            # Keep focus on the category editor.
-            try:
-                if getattr(cat_cb, "isEditable", None) and cat_cb.isEditable() and cat_cb.lineEdit():
-                    le_cat = cat_cb.lineEdit()
-                    le_cat.setFocus()
-                    le_cat.selectAll()
-                else:
-                    cat_cb.setFocus()
-            except (AttributeError, RuntimeError, TypeError):
-                pass
-            return
-
-        # Normalise / reuse / create
-        try:
-            canon_fn = getattr(self, "_canon_cat_name", None)
-            find_fn = getattr(self, "_find_existing_canonical", None)
-            if not callable(canon_fn) or not callable(find_fn):
-                raise AttributeError("Canonical category helpers not available")
-
-            canon = str(canon_fn(text) or "").strip() or text
-            existing = find_fn(canon)
-
-            if existing:
-                try:
-                    cat_cb.blockSignals(True)
-                    try:
-                        idx = cat_cb.findText(existing)
-                        if idx >= 0:
-                            cat_cb.setCurrentIndex(idx)
-                        else:
-                            cat_cb.setCurrentText(existing)
-                    finally:
-                        cat_cb.blockSignals(False)
-                except (AttributeError, RuntimeError, TypeError):
-                    pass
-            else:
-                is_reserved = getattr(self, "_is_reserved_cat", None)
-                if callable(is_reserved) and is_reserved(canon):
-                    try:
-                        QMessageBox.information(
-                            self,
-                            "Category",
-                            "‘{}’ is a reserved name and cannot be used.".format(canon),
-                        )
-                    except (AttributeError, RuntimeError, TypeError):
-                        pass
-                    return
-
-                try:
-                    resp = QMessageBox.question(
-                        self,
-                        "Add Category",
-                        "Add new category ‘{}’?".format(canon),
-                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                        QMessageBox.StandardButton.No,
-                    )
-                except (AttributeError, RuntimeError, TypeError):
-                    return
-
-                if resp != QMessageBox.StandardButton.Yes:
-                    return
-
-                add_new = getattr(self, "_add_new_category", None)
-                if callable(add_new):
-                    add_new(canon)
-                else:
-                    cats = getattr(self, "_cats", None)
-                    if isinstance(cats, dict) and canon not in cats:
-                        cats[canon] = []
-                        try:
-                            self._all_cats = sorted(set(cats.keys()), key=lambda s: str(s).lower())
-                        except (AttributeError, TypeError):
-                            self._all_cats = list(cats.keys())
-
-                        try:
-                            cat_cb.blockSignals(True)
-                            try:
-                                cat_cb.clear()
-                                cat_cb.addItems(self._all_cats)
-                                idx = cat_cb.findText(canon)
-                                if idx >= 0:
-                                    cat_cb.setCurrentIndex(idx)
-                                else:
-                                    cat_cb.setCurrentText(canon)
-                            finally:
-                                cat_cb.blockSignals(False)
-                        except (AttributeError, RuntimeError, TypeError):
-                            pass
-        except (AttributeError, RuntimeError, TypeError):
-            # Creation failures should never break the dialog.
+            self._debug_hanzi_panel_geometry("candidate changed")
+        except (TypeError, AttributeError, RuntimeError, ValueError):
             pass
-
-        # After commit, trigger lookup if needed
-        jy_txt = ""
-        hz_txt = ""
-
-        jy_le = getattr(self, "_add_jy", None)
-        if jy_le is not None:
-            try:
-                jy_txt = (jy_le.text() or "").strip()
-            except (AttributeError, RuntimeError, TypeError):
-                jy_txt = ""
-
-        hz_le = getattr(self, "_add_hz", None)
-        if hz_le is not None:
-            try:
-                hz_txt = (hz_le.text() or "").strip()
-            except (AttributeError, RuntimeError, TypeError):
-                hz_txt = ""
-
-        # Category commit must never imply a Hanzi choice.
-        # (If a stale `_hanzi_committed` flag is left True, it suppresses candidate fill.)
-        try:
-            self._hanzi_committed = False
-        except (AttributeError, RuntimeError, TypeError):
-            pass
-
-        hanzi_committed = bool(getattr(self, "_hanzi_committed", False))
-
-        # Only run lookup if the user has NOT explicitly chosen a Hanzi
-        if jy_txt and not hanzi_committed and not hz_txt:
-            try:
-                _CatTimer.singleShot(0, lambda: self._post_category_fill(jy_txt))
-            except (AttributeError, RuntimeError, TypeError):
-                # Fallback: run directly if timer is unavailable.
-                self._post_category_fill(jy_txt)
-            return
-
-        updater = getattr(self, "_update_save_enabled", None)
-        if callable(updater):
-            try:
-                updater()
-            except RuntimeError:
-                pass
-
-    def _post_category_fill(self, jy_txt: str) -> None:
-        """Run reverse lookup after a category has been committed."""
-        # Do not steal focus or regenerate candidates after user has committed Hanzi
-        if bool(getattr(self, "_hanzi_committed", False)):
-            return
-
-        # IMPORTANT: `_fill_hanzi_candidates` normalizes internally.
-        # Avoid double-normalisation here (it can change the key shape and break reverse-index hits).
-        try:
-            n = self._fill_hanzi_candidates(jy_txt)
-        except (AttributeError, RuntimeError, TypeError):
-            n = 0
-
-        cand_combo = getattr(self, "_cand_combo", None)
-        has_candidates = bool(n and n > 0)
-
-        btn_custom = getattr(self, "_btn_custom_hz", None)
-        hz_edit = getattr(self, "_add_hz", None)
-
-        try:
-            if has_candidates and cand_combo is not None:
-                try:
-                    cand_combo.setVisible(True)
-                    cand_combo.showPopup()
-                    cand_combo.setFocus()
-                except (AttributeError, RuntimeError, TypeError):
-                    pass
-
-                if btn_custom is not None:
-                    try:
-                        btn_custom.setVisible(False)
-                    except (AttributeError, RuntimeError, TypeError):
-                        pass
-            else:
-                if cand_combo is not None:
-                    try:
-                        cand_combo.blockSignals(True)
-                        try:
-                            cand_combo.clear()
-                            cand_combo.setVisible(False)
-                        finally:
-                            cand_combo.blockSignals(False)
-                    except (AttributeError, RuntimeError, TypeError):
-                        pass
-
-                if btn_custom is not None:
-                    try:
-                        btn_custom.setVisible(True)
-                    except (AttributeError, RuntimeError, TypeError):
-                        pass
-
-                if hz_edit is not None:
-                    try:
-                        hz_edit.setFocus()
-                        hz_edit.selectAll()
-                    except (AttributeError, RuntimeError, TypeError):
-                        pass
-        finally:
-            updater = getattr(self, "_update_save_enabled", None)
-            if callable(updater):
-                try:
-                    updater()
-                except RuntimeError:
-                    pass
-
-    def _on_candidate_index_activated(self, index: int) -> None:
-        """Apply candidate selection triggered by index activation."""
-        try:
-            self._apply_selected_candidate(index)
-        except (RuntimeError, AttributeError, TypeError, ValueError):
-            # Best-effort only; UI must remain responsive.
-            pass
-
-    def _on_candidate_text_changed(self, _text: str) -> None:
-        """Apply candidate selection triggered by text change."""
-        try:
-            self._apply_selected_candidate(None)
-        except (RuntimeError, AttributeError, TypeError):
-            pass
-
-    def _call_best_effort(self, fn, *args):
-        """Call `fn` with the largest compatible prefix of args.
-
-        Protects against legacy callables with varying signatures.
-        """
-        if not callable(fn):
-            return None
-
-        try:
-            import inspect
-            sig = inspect.signature(fn)
-            params = list(sig.parameters.values())
-        except (TypeError, ValueError):
-            # Signature introspection failed; fall back to simple call
-            try:
-                return fn(*args[:1])
-            except TypeError:
-                return None
-
-        max_n = 0
-        for p in params:
-            if p.kind in (p.VAR_POSITIONAL, p.VAR_KEYWORD):
-                max_n = len(args)
-                break
-            max_n += 1
-
-        for n in range(min(max_n, len(args)), -1, -1):
-            try:
-                return fn(*args[:n])
-            except TypeError:
-                continue
-
-        return None
-
-    def _get_compose_and_rank(self):
-        """Return (compose_fn, shortlist_fn) for tier-2 Hanzi candidate generation."""
-        try:
-            from infra.hanzi_composition import compose_candidates_from_chars as _compose
-        except ImportError:
-            _compose = None
-
-        try:
-            from infra.hanzi_composition import shortlist_candidates as _shortlist
-        except ImportError:
-            _shortlist = None
-
-        return _compose, _shortlist

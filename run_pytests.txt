@@ -1,4 +1,0 @@
-.venv/bin/python3 -m pytest -m "not ui"
-QT_QPA_PLATFORM=offscreen .venv/bin/python3 -m pytest -m ui
-python3 -m pytest -q tests/test_domain_imports_pure.py
-python3 -m pytest -q

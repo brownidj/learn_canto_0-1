@@ -444,6 +444,12 @@ def reduce(
 
     # ---- CANDIDATES_AVAILABLE ----
     if state == AddEditState.CANDIDATES_AVAILABLE:
+        if ev == Event.MEANING_CHANGED:
+            mn = _norm(val)
+            new_ctx = replace(ctx, meaning=mn, mn_ok=bool(mn))
+            if _is_ready(new_ctx):
+                return AddEditState.READY_TO_SAVE, new_ctx, [EffectPayload(Effect.ENABLE_SAVE, True)]
+            return state, new_ctx, []
         if ev == Event.CANDIDATE_SELECTED:
             hz = _norm(val)
             new_ctx = replace(ctx, hanzi=hz, hz_ok=bool(hz))
@@ -462,6 +468,12 @@ def reduce(
 
     # ---- MANUAL_HANZI ----
     if state == AddEditState.MANUAL_HANZI:
+        if ev == Event.MEANING_CHANGED:
+            mn = _norm(val)
+            new_ctx = replace(ctx, meaning=mn, mn_ok=bool(mn))
+            if _is_ready(new_ctx):
+                return AddEditState.READY_TO_SAVE, new_ctx, [EffectPayload(Effect.ENABLE_SAVE, True)]
+            return state, new_ctx, []
         if ev == Event.HANZI_CHANGED:
             hz = _norm(val)
             new_ctx = replace(ctx, hanzi=hz, hz_ok=bool(hz))
