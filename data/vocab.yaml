@@ -252,6 +252,13 @@ entries:
       gloss: earthquake
       hanzi: 地震
       register: both
+  din6:
+    jyutping: din6
+    senses:
+    - categories:
+      - technology_media
+      gloss: (noun) electricity, (verb) to get electric shock, (slang) to flirt
+      hanzi: 電
   din6 waa2:
     headword: 電話
     jyutping: din6 waa2

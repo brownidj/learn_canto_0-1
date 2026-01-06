@@ -66,12 +66,13 @@ from typing import cast
 # ----------------------------------------
 # PySide6 imports
 # ----------------------------------------
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QPoint, QTimer
 from PySide6.QtGui import (
     QFont,
     QFontMetrics,
 )
 from PySide6.QtWidgets import (
+    QApplication,
     QDialog,
     QVBoxLayout,
     QHBoxLayout,
@@ -541,6 +542,117 @@ class HanziComboBoxProxyStyle(QProxyStyle):
         return rect
 
 
+# ---- ComboBox subclass to reposition popup below ----
+class PopupBelowComboBox(QComboBox):
+    """QComboBox that repositions its popup so it starts below the control.
+
+    On macOS (and some styles), the popup can overlap the control itself, visually
+    obscuring the focus ring. This class keeps the popup aligned to the combobox
+    bottom-left in global coordinates.
+
+    Best-effort only: must never raise.
+    """
+
+    def showPopup(self) -> None:  # noqa: N802
+        # Let Qt create/show the popup first.
+        try:
+            super().showPopup()
+        except Exception:
+            return
+
+        # Defer repositioning until after Qt has finalised popup geometry.
+        try:
+            QTimer.singleShot(0, self._reposition_popup_below)
+            QTimer.singleShot(20, self._reposition_popup_below)
+        except Exception:
+            return
+
+    def _popup_container(self):
+        """Return the top-level popup container for this combobox's view (best-effort)."""
+        try:
+            view = self.view()
+        except Exception:
+            return None
+
+        w = view
+        try:
+            # Walk up the widget chain to find the actual Qt.Popup window.
+            while w is not None:
+                try:
+                    if w.isWindow() and (w.windowFlags() & Qt.WindowType.Popup):
+                        return w
+                except Exception:
+                    pass
+                try:
+                    w = w.parentWidget()
+                except Exception:
+                    break
+        except Exception:
+            pass
+
+        # Fallback: whatever window() returns.
+        try:
+            return view.window() if view is not None else None
+        except Exception:
+            return None
+
+    def _reposition_popup_below(self) -> None:
+        """Best-effort: keep the popup below the combobox (no overlap) when space permits."""
+        try:
+            view = self.view()
+        except Exception:
+            return
+
+        popup = self._popup_container()
+        if popup is None:
+            return
+
+        try:
+            # Gap to keep the macOS focus ring and popup shadow from touching.
+            gap = 14
+            desired = self.mapToGlobal(QPoint(0, int(self.height() + gap)))
+            desired_x = int(desired.x())
+            desired_y = int(desired.y())
+
+            # If there isn't enough space below, do not force it (Qt will place above).
+            try:
+                screen = self.screen()
+            except Exception:
+                screen = None
+            if screen is None:
+                try:
+                    screen = QApplication.primaryScreen()
+                except Exception:
+                    screen = None
+
+            if screen is not None:
+                try:
+                    avail = screen.availableGeometry()
+                    popup_h = int(popup.frameGeometry().height())
+                    if desired_y + popup_h > int(avail.y() + avail.height()):
+                        return
+                except Exception:
+                    pass
+
+            # Compute decoration offset: frameGeometry top-left vs client top-left.
+            try:
+                frame_tl = popup.frameGeometry().topLeft()
+                client_tl = popup.geometry().topLeft()
+                # For top-level widgets, geometry().topLeft() corresponds to popup.pos().
+                deco_dx = int(frame_tl.x() - client_tl.x())
+                deco_dy = int(frame_tl.y() - client_tl.y())
+            except Exception:
+                deco_dx = 0
+                deco_dy = 0
+
+            # Move the *client* position so that the *frame* starts at (desired_x, desired_y).
+            target_x = int(desired_x - deco_dx)
+            target_y = int(desired_y - deco_dy)
+            popup.move(target_x, target_y)
+        except Exception:
+            return
+
+
 class CategoryManagerDialog(QDialog):
     # ------------------------------
     # Init helpers (non-UI)
@@ -861,8 +973,9 @@ class CategoryManagerDialog(QDialog):
     """
     MAX_HANZI_CANDIDATES = 10
     # Hanzi-specific typography tuning (easy to adjust)
-    _HANZI_TEXT_DELTA_PT = 20       # Hanzi QLineEdit (main display) (increased to avoid tiny Hanzi)
-    _HANZI_COMBO_DELTA_PT = 16      # Hanzi candidate combobox + popup (increased by 10)
+    # NOTE: These are treated as absolute point sizes (pt), not deltas.
+    _HANZI_TEXT_DELTA_PT = 60       # Hanzi main display font size (pt)
+    _HANZI_COMBO_DELTA_PT = 24      # Hanzi candidate combobox font size (pt)
     # Typography deltas for the Add/Edit panel (dialog-local; do not affect the rest of the app)
     _LABEL_FONT_DELTA_PT = 4
     _INPUT_FONT_DELTA_PT = 3
@@ -1034,33 +1147,6 @@ class CategoryManagerDialog(QDialog):
         self._cand_combo = QComboBox(group_hanzi)
         self._cand_combo.setObjectName("comboHanziCandidates")
         self._cand_combo.setVisible(False)
-
-        # Force editable+readonly so closed combobox paints via QLineEdit
-        # (required on macOS to avoid clipped CJK glyphs)
-        try:
-            self._cand_combo.setEditable(True)
-            le = self._cand_combo.lineEdit()
-            if le is not None:
-                le.setReadOnly(True)
-                le.setClearButtonEnabled(False)
-        except (TypeError, AttributeError, RuntimeError):
-            pass
-
-        # Avoid clipped Hanzi / truncated labels in the combobox and its popup.
-        # (The popup view can be wider than the combobox itself.)
-        try:
-            self._cand_combo.setMinimumWidth(260)
-            self._cand_combo.setMaximumWidth(520)
-        except (TypeError, AttributeError, RuntimeError):
-            pass
-
-        try:
-            # Prefer sizing to contents where supported.
-            self._cand_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
-            self._cand_combo.setMinimumContentsLength(6)
-        except (TypeError, AttributeError, RuntimeError):
-            pass
-
         self._cand_combo.setToolTip(HANZI_CANDIDATE_TOOLTIP)
         if self._cand_combo.view() is not None:
             self._cand_combo.view().setToolTip(HANZI_CANDIDATE_TOOLTIP)
@@ -1202,11 +1288,7 @@ class CategoryManagerDialog(QDialog):
         input_entry.setPointSize(input_entry.pointSize() + int(self._INPUT_FONT_DELTA_PT))
 
         input_hanzi = QFont(base_hanzi)
-        input_hanzi.setPointSize(
-            input_hanzi.pointSize()
-            + int(self._INPUT_FONT_DELTA_PT)
-            + int(self._HANZI_TEXT_DELTA_PT)
-        )
+        input_hanzi.setPointSize(int(self._HANZI_TEXT_DELTA_PT))
 
         # Apply label fonts via the QFormLayout label column
         for _r in range(form_hanzi.rowCount()):
@@ -1239,110 +1321,29 @@ class CategoryManagerDialog(QDialog):
                 hz.setFont(input_hanzi)
             except (RuntimeError, TypeError, AttributeError):
                 pass
-            # Ensure the Hanzi display field is tall enough for large glyphs.
+            # Ensure the Hanzi display field is tall enough for the glyphs, but not excessively padded.
             try:
                 m = QFontMetrics(input_hanzi)
-                hz.setMinimumHeight(int(m.height() * 3.2) + 32)
+                target_h = int(m.height() * 1.25) + 12
+                hz.setMinimumHeight(target_h)
+                # Light, commensurate padding for large Hanzi.
+                try:
+                    hz.setTextMargins(10, 6, 10, 6)
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
                 if Qt is not None:
                     hz.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
             except (TypeError, AttributeError, RuntimeError, ValueError):
                 pass
 
-        # Hanzi candidate combobox + popup font
+        # Hanzi candidate combobox: leave platform defaults (no font/stylesheet overrides).
+        # This avoids macOS popup/focus-ring quirks caused by manual sizing.
         combo = getattr(self, "_cand_combo", None)
         if combo is not None:
-            combo_font = QFont(input_hanzi)
-            combo_font.setPointSize(combo_font.pointSize() + int(self._HANZI_COMBO_DELTA_PT))
-
-            # Apply font first
             try:
-                combo.setFont(combo_font)
+                combo.setStyleSheet("")
             except (RuntimeError, TypeError, AttributeError):
                 pass
-
-            # Install proxy style to expand the edit-field rect on macOS
-            try:
-                combo.setStyle(HanziComboBoxProxyStyle(combo.style()))
-            except (TypeError, AttributeError, RuntimeError, ValueError):
-                pass
-
-            # Popup styling (items)
-            try:
-                combo.setStyleSheet(
-                    "QComboBox::drop-down { width: 36px; }"
-                    "QComboBox QAbstractItemView::item { min-height: 84px; padding: 12px 18px; }"
-                )
-            except (RuntimeError, TypeError, AttributeError):
-                pass
-
-            # Apply the same font to the popup view
-            try:
-                view = combo.view()
-            except (RuntimeError, AttributeError):
-                view = None
-
-            if view is not None:
-                try:
-                    view.setFont(combo_font)
-                except (RuntimeError, TypeError, AttributeError):
-                    pass
-
-                try:
-                    from PySide6.QtCore import Qt
-                    if hasattr(view, "setTextElideMode"):
-                        view.setTextElideMode(Qt.TextElideMode.ElideNone)
-                except (ImportError, TypeError, AttributeError, RuntimeError):
-                    pass
-
-                # Ensure the popup is wide enough for the rendered content.
-                try:
-                    view.setMinimumWidth(int(combo.minimumWidth() + 200))
-                except (TypeError, AttributeError, RuntimeError, ValueError):
-                    pass
-
-            # Closed state uses the editable lineEdit; tune its font + height + alignment
-            try:
-                le = combo.lineEdit()
-            except (TypeError, AttributeError, RuntimeError):
-                le = None
-
-            if le is not None:
-                try:
-                    le.setFont(combo_font)
-                    fm = QFontMetrics(combo_font)
-
-                    # Closed combobox should be compact; do not let large popup sizing inflate it.
-                    # Use a conservative closed height and then let `_ensure_combo_closed_height()`
-                    # make a minimal upward adjustment if macOS style rects require it.
-                    base_h = int(fm.height() * 1.35) + 10
-                    le.setMinimumHeight(base_h)
-                    combo.setMinimumHeight(base_h)
-
-                    # Hard cap so layouts cannot expand the closed combobox excessively.
-                    max_h = int(fm.height() * 1.6) + 12
-                    try:
-                        combo.setMaximumHeight(max_h)
-                    except (TypeError, AttributeError, RuntimeError):
-                        pass
-
-                    # Final, bounded adjustment (no runaway growth).
-                    try:
-                        self._ensure_combo_closed_height(combo)
-                    except (TypeError, AttributeError, RuntimeError, ValueError):
-                        pass
-                except (TypeError, AttributeError, RuntimeError, ValueError):
-                    pass
-
-                try:
-                    from PySide6.QtCore import Qt
-                    le.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-                except (ImportError, TypeError, AttributeError, RuntimeError):
-                    pass
-
-                try:
-                    le.setTextMargins(18, 0, 36, 0)
-                except (TypeError, AttributeError, RuntimeError):
-                    pass
         try:
             self._debug_hanzi_panel_geometry("after _apply_add_edit_typography")
         except (TypeError, AttributeError, RuntimeError, ValueError):
