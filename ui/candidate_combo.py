@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Iterable, List, Tuple, Optional
+from typing import Iterable, Tuple, Optional
 
 try:
     from PySide6.QtWidgets import QComboBox

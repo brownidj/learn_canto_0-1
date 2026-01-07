@@ -104,6 +104,7 @@ from domain.jyutping_validation import validate_jyut_syllables
 from domain.meaning_sources import default_facade
 from domain.storage_paths import categories_yaml_path
 from domain.add_edit_sm import AddEditState, AddEditContext
+from ui.candidate_combo import CandidateComboController
 
 from infra.paths import project_root
 
@@ -2219,6 +2220,122 @@ class CategoryManagerDialog(QDialog):
         except (TypeError, AttributeError, RuntimeError):
             pass
 
+    def _reset_add_panel_pre_validation(self) -> None:
+        """Return Add/Edit panel to pre-validation state (placeholders only)."""
+        # Clear dependent fields
+        try:
+            if getattr(self, "_add_mn", None) is not None:
+                self._add_mn.clear()
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+
+        try:
+            if getattr(self, "_add_hz", None) is not None:
+                self._add_hz.clear()
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+
+        try:
+            self._set_notes("", source="auto-default")
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+
+        # Reset category selection to placeholder
+        try:
+            if getattr(self, "_add_cat", None) is not None:
+                try:
+                    self._add_cat.setCurrentIndex(-1)
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+
+        # Hide and clear candidate combobox
+        try:
+            combo = getattr(self, "_cand_combo", None)
+            if combo is not None:
+                try:
+                    combo.blockSignals(True)
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
+                try:
+                    combo.clear()
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
+                try:
+                    combo.setVisible(False)
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
+                try:
+                    combo.blockSignals(False)
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+
+        # Reset intent flags
+        try:
+            self._mark_hanzi_committed(False)
+        except (TypeError, AttributeError, RuntimeError):
+            try:
+                self._hanzi_committed = False
+            except (TypeError, AttributeError, RuntimeError):
+                pass
+
+        try:
+            self._mark_manual_hanzi_mode(False)
+        except (TypeError, AttributeError, RuntimeError):
+            try:
+                self._manual_hanzi_mode = False
+            except (TypeError, AttributeError, RuntimeError):
+                pass
+
+        # Reset SM context best-effort
+        ctx = None
+        try:
+            ctx = getattr(self, "_add_edit_ctx", None)
+        except (TypeError, AttributeError, RuntimeError):
+            ctx = None
+
+        if ctx is not None:
+            for _k, _v in (
+                    ("jy_ok", False),
+                    ("duplicate", None),
+                    ("hanzi", ""),
+                    ("hz_ok", False),
+                    ("manual_hanzi", False),
+                    ("meaning", ""),
+                    ("mn_ok", False),
+                    ("category", ""),
+                    ("cat_ok", False),
+            ):
+                try:
+                    setattr(ctx, _k, _v)
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
+
+        try:
+            if callable(getattr(self, "_update_save_enabled", None)):
+                self._update_save_enabled()
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+
+    def _on_add_jy_user_edited(self, *args, **kwargs) -> None:
+        """Slot: user edited Jyutping; reset dependent fields to placeholders."""
+        try:
+            self._reset_add_panel_pre_validation()
+        except (TypeError, AttributeError, RuntimeError):
+            return
+
+    def _on_add_category_changed(self, *args, **kwargs) -> None:
+        """Slot: user changed category; recompute candidates using current Jyutping."""
+        try:
+            fn = getattr(self, "_on_add_category_committed", None)
+            if callable(fn):
+                fn(user_action=True)
+        except (TypeError, AttributeError, RuntimeError):
+            return
+
     def _focus_jy(self) -> None:
         try:
             w = getattr(self, "_add_jy", None)
@@ -2422,8 +2539,10 @@ class CategoryManagerDialog(QDialog):
 
         # Populate combo
         try:
-            if callable(getattr(self, "_populate_candidate_combobox", None)):
-                self._populate_candidate_combobox(cands, preferred_hz=preferred_hz)
+            ctrl = getattr(self, "_cand_combo_ctrl", None)
+            if ctrl is not None:
+                ctrl.clear()
+                ctrl.populate(cands)
         except (TypeError, AttributeError, RuntimeError):
             pass
 
@@ -2680,6 +2799,7 @@ class CategoryManagerDialog(QDialog):
             except (TypeError, AttributeError, RuntimeError):
                 pass
 
+
             # --- Meaning wiring ---
             w_mn = getattr(self, "_add_mn", None)
             fn_mn_enter = getattr(self, "_on_meaning_enter_committed", None)
@@ -2701,12 +2821,69 @@ class CategoryManagerDialog(QDialog):
             except (TypeError, AttributeError, RuntimeError):
                 pass
 
+            # When the user edits Jyutping, reset dependent fields to pre-validation state.
+            # Use textEdited so programmatic setText() doesn't thrash the UI.
+            try:
+                fn_reset = getattr(self, "_on_add_jy_user_edited", None)
+                if w_jy is not None and callable(fn_reset):
+                    self._try_connect(getattr(w_jy, "textEdited", None), fn_reset)
+            except (TypeError, AttributeError, RuntimeError):
+                pass
+
             # --- Category wiring (best-effort) ---
             w_cat = getattr(self, "_add_cat", None)
             try:
                 self._wire_combo_common(w_cat, on_change=fn_gate)
             except (TypeError, AttributeError, RuntimeError):
                 pass
+
+            # When the user changes category, recompute Hanzi candidates with current Jyutping.
+            try:
+                fn_cat_changed = getattr(self, "_on_add_category_changed", None)
+                if w_cat is not None and callable(fn_cat_changed):
+                    self._try_connect(getattr(w_cat, "currentTextChanged", None), fn_cat_changed)
+            except (TypeError, AttributeError, RuntimeError):
+                pass
+
+            # --- Hanzi candidate combobox wiring ---
+            # Deterministic: prefer the explicit int overload and avoid double-firing
+            # via both index-changed and text-changed signals.
+            try:
+                combo = getattr(self, "_cand_combo", None)
+            except (TypeError, AttributeError, RuntimeError):
+                combo = None
+
+            # Keep the controller (population helper) if available, but wire signals on the real QComboBox.
+            try:
+                if combo is not None:
+                    self._cand_combo_ctrl = CandidateComboController(combo)
+                else:
+                    self._cand_combo_ctrl = None
+            except (TypeError, AttributeError, RuntimeError, ImportError):
+                self._cand_combo_ctrl = None
+
+            if combo is not None:
+                try:
+                    fn_pick = getattr(self, "_on_candidate_index_activated", None)
+                    if callable(fn_pick):
+                        sig = getattr(combo, "currentIndexChanged", None)
+                        if sig is not None:
+                            try:
+                                sig_int = sig[int] if hasattr(sig, "__getitem__") else sig
+                                self._try_connect(sig_int, fn_pick)
+                            except (TypeError, AttributeError, RuntimeError):
+                                self._try_connect(sig, fn_pick)
+
+                        # Optional: allow re-selecting the same index by user action.
+                        sig2 = getattr(combo, "activated", None)
+                        if sig2 is not None:
+                            try:
+                                sig2_int = sig2[int] if hasattr(sig2, "__getitem__") else sig2
+                                self._try_connect(sig2_int, fn_pick)
+                            except (TypeError, AttributeError, RuntimeError):
+                                self._try_connect(sig2, fn_pick)
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
 
             # Ensure Save gating is correct at startup.
             if callable(fn_gate):
@@ -2878,9 +3055,9 @@ class CategoryManagerDialog(QDialog):
 
         if ctx is not None:
             try:
-                ctx.duplicate = bool(dup)
+                ctx.duplicate = jy_s if dup else None
             except (TypeError, AttributeError, RuntimeError):
-                _ctx_replace(duplicate=bool(dup))
+                _ctx_replace(duplicate=jy_s if dup else None)
 
         if dup:
             # Must warn and keep focus on Jyutping (test asserts QMessageBox.warning called)
@@ -2893,13 +3070,6 @@ class CategoryManagerDialog(QDialog):
             except (TypeError, AttributeError, RuntimeError):
                 pass
             return
-
-        # Advance workflow toward category selection
-        try:
-            from domain.add_edit_sm import AddEditState
-            self._add_edit_state = AddEditState.JY_COMMITTED
-        except (TypeError, AttributeError, RuntimeError):
-            pass
 
         try:
             ctrl = getattr(self, "_cat_combo_ctrl", None)
@@ -2982,189 +3152,129 @@ class CategoryManagerDialog(QDialog):
 
         return
 
-    def _populate_candidate_combobox(
-            self,
-            candidates: list[tuple[str, str, int]],
-            preferred_hz: str | None = None,
-    ) -> None:
-        """Populate the Hanzi candidate combobox (best-effort UI helper)."""
-        combo = getattr(self, "_cand_combo", None)
-        if combo is None:
-            return
 
-        try:
-            combo.blockSignals(True)
-        except (TypeError, AttributeError, RuntimeError):
-            pass
+    def _on_candidate_index_activated(self, *args) -> None:
+        """Handler for when a Hanzi candidate is selected from the combo.
 
-        try:
-            combo.clear()
-        except (TypeError, AttributeError, RuntimeError):
-            pass
+        This slot must tolerate both overloaded signal forms (int/str) and must be
+        deterministic in offscreen tests.
 
-        # Normalise candidate items to a tolerant (hz, src, score) shape.
-        items: list[tuple[str, str, int]] = []
-        try:
-            raw = []
-            if isinstance(candidates, list):
-                raw = candidates
-            elif candidates is not None:
-                raw = list(candidates)
+        Contract:
+          - We treat the combo's visible text as the selected Hanzi.
+          - If CandidateComboController populated itemData, we also use that to
+            retrieve the candidate 'src' for meaning resolution.
 
-            for item in list(raw or []):
-                hz = ""
-                src = ""
-                score = 0
-
-                if isinstance(item, (list, tuple)) and len(item) >= 3:
-                    hz, src, score = item[0], item[1], item[2]
-                elif isinstance(item, (list, tuple)) and len(item) == 2:
-                    hz, src = item[0], item[1]
-                    score = 0
-                else:
-                    # Allow a plain string/atom to mean "hz".
-                    hz = item
-                    src = ""
-                    score = 0
-
-                try:
-                    hz_s = str(hz or "").strip()
-                except (TypeError, AttributeError, RuntimeError, ValueError):
-                    hz_s = ""
-
-                if not hz_s:
-                    continue
-
-                try:
-                    src_s = str(src or "").strip()
-                except (TypeError, AttributeError, RuntimeError, ValueError):
-                    src_s = ""
-
-                try:
-                    score_i = int(score)
-                except (TypeError, AttributeError, RuntimeError, ValueError):
-                    try:
-                        score_i = int(float(score))
-                    except (TypeError, AttributeError, RuntimeError, ValueError):
-                        score_i = 0
-
-                items.append((hz_s, src_s, score_i))
-        except (TypeError, AttributeError, RuntimeError, ValueError):
-            items = []
-
-        # Always provide a placeholder if empty.
-        if not items:
-            try:
-                combo.addItem("—")
-                combo.setVisible(False)
-            except (TypeError, AttributeError, RuntimeError):
-                pass
-            try:
-                combo.blockSignals(False)
-            except (TypeError, AttributeError, RuntimeError):
-                pass
-            return
-
-        # Add candidates (display Hanzi only; src/score remain in the reverse index).
-        for hz_s, _src_s, _score_i in items:
-            try:
-                combo.addItem(hz_s)
-            except (TypeError, AttributeError, RuntimeError):
-                pass
-
-        # Select preferred if present
-        if preferred_hz:
-            try:
-                idx = combo.findText(str(preferred_hz).strip())
-                if idx >= 0:
-                    combo.setCurrentIndex(idx)
-            except (TypeError, AttributeError, RuntimeError):
-                pass
-
-        try:
-            combo.setVisible(True)
-        except (TypeError, AttributeError, RuntimeError):
-            pass
-
-        try:
-            combo.blockSignals(False)
-        except (TypeError, AttributeError, RuntimeError):
-            pass
-
-        try:
-            self._debug_hanzi_panel_geometry("after _populate_candidate_combobox")
-        except (TypeError, AttributeError, RuntimeError, ValueError):
-            pass
-        # Force closed-combo repaint via internal line edit
-        try:
-            le = combo.lineEdit()
-            if le is not None:
-                le.setText(combo.currentText())
-        except (TypeError, AttributeError, RuntimeError):
-            pass
-
-    def _on_candidate_index_activated(self, idx: int) -> None:
-        """Handler for when a Hanzi candidate is selected by index from the combo."""
+        This must never raise.
+        """
+        # --- resolve combo + index + selected hanzi ---
         try:
             combo = getattr(self, "_cand_combo", None)
             if combo is None:
                 return
-            # Defensive: get the selected Hanzi string.
-            selected_hz = str(combo.currentText() or "").strip()
+
+            idx = None
+            if args:
+                a0 = args[0]
+                if isinstance(a0, int):
+                    idx = a0
+                elif isinstance(a0, str):
+                    try:
+                        idx = int(combo.findText(a0))
+                    except (TypeError, AttributeError, RuntimeError, ValueError):
+                        idx = None
+
+            if idx is None:
+                try:
+                    idx = int(combo.currentIndex())
+                except (TypeError, AttributeError, RuntimeError, ValueError):
+                    idx = -1
+
+            if idx < 0:
+                return
+
+            # Prefer itemText(idx) because currentText() can lag behind in some
+            # signal-ordering cases (especially offscreen tests).
+            selected_hz = ""
+            try:
+                if hasattr(combo, "itemText"):
+                    selected_hz = str(combo.itemText(idx) or "").strip()
+            except (TypeError, AttributeError, RuntimeError):
+                selected_hz = ""
+
+            if not selected_hz:
+                try:
+                    selected_hz = str(combo.currentText() or "").strip()
+                except (TypeError, AttributeError, RuntimeError):
+                    selected_hz = ""
+
             if not selected_hz:
                 return
-        except (TypeError, AttributeError, RuntimeError):
-            return
 
-        # Set Hanzi field
-        try:
-            if getattr(self, "_add_hz", None) is not None:
-                self._add_hz.setText(selected_hz)
         except (TypeError, AttributeError, RuntimeError):
             pass
 
-        # Attempt to resolve the corresponding candidate's src for meaning lookup
+        # --- pull src from itemData (CandidateComboController) ---
         src = ""
         try:
-            # Get the candidate list from the combo's model
-            # Try to find the matching candidate row for the selected Hanzi
-            jy = ""
+            data = None
+            # QComboBox stores userData under Qt.UserRole; itemData() without role
+            # often returns that, but be explicit when possible.
             try:
-                w_jy = getattr(self, "_add_jy", None)
-                if w_jy is not None:
-                    jy = str((w_jy.text() or "")).strip()
+                data = combo.itemData(idx)
             except (TypeError, AttributeError, RuntimeError):
-                jy = ""
-            cands = []
-            try:
-                cands = self._reverse_candidates_for_jy(jy)
-            except (TypeError, AttributeError, RuntimeError):
-                cands = []
-            for row in cands:
+                data = None
+
+            if (data is None) and (Qt is not None):
                 try:
-                    hz = str(row[0] if isinstance(row, (list, tuple)) and len(row) > 0 else row).strip()
+                    data = combo.itemData(idx, Qt.UserRole)
                 except (TypeError, AttributeError, RuntimeError):
-                    hz = ""
-                if hz == selected_hz:
-                    try:
-                        src = str(row[1] if isinstance(row, (list, tuple)) and len(row) > 1 else "")
-                    except (TypeError, AttributeError, RuntimeError):
-                        src = ""
-                    break
+                    data = None
+
+            # Accept a few tolerant shapes.
+            if isinstance(data, dict):
+                try:
+                    src = str(data.get("src", "") or "").strip()
+                except (TypeError, AttributeError, RuntimeError, ValueError):
+                    src = ""
+            elif isinstance(data, (list, tuple)):
+                # Expected: (hz, src, score?)
+                try:
+                    if len(data) >= 2:
+                        src2 = str(data[1] or "").strip()
+                        if src2:
+                            src = src2
+                except (TypeError, AttributeError, RuntimeError, ValueError):
+                    pass
+            else:
+                # If controller didn't store anything useful, src remains empty.
+                src = src or ""
         except (TypeError, AttributeError, RuntimeError):
             src = ""
 
-        # Set meanings for this candidate
+        # --- apply selection to UI ---
         try:
-            ms = self._resolve_meanings_for_candidate(selected_hz, src)
-            joined = ", ".join([str(x).strip() for x in (ms or []) if str(x).strip()])
-            if getattr(self, "_add_mn", None) is not None:
-                self._add_mn.setText(joined)
+            w_hz = getattr(self, "_add_hz", None)
+            if w_hz is not None and hasattr(w_hz, "setText"):
+                w_hz.setText(selected_hz)
         except (TypeError, AttributeError, RuntimeError):
             pass
 
-        # Update SM ctx hanzi
-        ctx = getattr(self, "_add_edit_ctx", None)
+        # Meanings for this candidate
+        try:
+            ms = self._resolve_meanings_for_candidate(selected_hz, src)
+            joined = ", ".join([str(x).strip() for x in (ms or []) if str(x).strip()])
+            w_mn = getattr(self, "_add_mn", None)
+            if w_mn is not None and hasattr(w_mn, "setText"):
+                w_mn.setText(joined)
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+
+        # Update SM ctx hanzi best-effort
+        try:
+            ctx = getattr(self, "_add_edit_ctx", None)
+        except (TypeError, AttributeError, RuntimeError):
+            ctx = None
+
         if ctx is not None:
             try:
                 ctx.hanzi = selected_hz
@@ -3173,27 +3283,41 @@ class CategoryManagerDialog(QDialog):
 
         # Refresh Save gating
         try:
-            if callable(getattr(self, "_update_save_enabled", None)):
-                self._update_save_enabled()
+            fn_gate = getattr(self, "_update_save_enabled", None)
+            if callable(fn_gate):
+                fn_gate()
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+
+        # Keep focus moving forward (prevents category from stealing focus after
+        # candidate selection). Use a 0ms singleShot to avoid focus races when the
+        # popup closes.
+        try:
+            w_mn = getattr(self, "_add_mn", None)
+            if w_mn is not None and hasattr(w_mn, "setFocus"):
+                try:
+                    QTimer.singleShot(0, w_mn.setFocus)
+                except (TypeError, AttributeError, RuntimeError):
+                    try:
+                        w_mn.setFocus()
+                    except (TypeError, AttributeError, RuntimeError):
+                        pass
         except (TypeError, AttributeError, RuntimeError):
             pass
 
     def _on_candidate_text_changed(self, text: str) -> None:
         """Delegate to index-activated handler for consistent candidate selection logic."""
-        # Try to get the current index and delegate
         try:
             combo = getattr(self, "_cand_combo", None)
             if combo is None:
                 return
-            idx = combo.currentIndex()
-            try:
-                self._debug_hanzi_panel_geometry("candidate changed")
-            except (TypeError, AttributeError, RuntimeError, ValueError):
-                pass
+            idx = int(combo.currentIndex())
+            if idx < 0:
+                return
+        except (TypeError, AttributeError, RuntimeError, ValueError):
+            return
+
+        try:
             self._on_candidate_index_activated(idx)
         except (TypeError, AttributeError, RuntimeError):
-            pass
-        try:
-            self._debug_hanzi_panel_geometry("candidate changed")
-        except (TypeError, AttributeError, RuntimeError, ValueError):
-            pass
+            return
