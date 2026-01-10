@@ -19,10 +19,10 @@ def _perf_start(name: str) -> float:
         t0 = time.perf_counter()
         try:
             logger.debug("PERF start: %s", name)
-        except Exception:
+        except (RuntimeError, AttributeError):
             pass
         return t0
-    except Exception:
+    except (RuntimeError, AttributeError):
         return 0.0
 
 
@@ -33,9 +33,9 @@ def _perf_end(name: str, t0: float) -> None:
         dt_ms = (time.perf_counter() - float(t0)) * 1000.0
         try:
             logger.debug("PERF end: %s (%.1f ms)", name, dt_ms)
-        except Exception:
+        except (RuntimeError, AttributeError):
             pass
-    except Exception:
+    except (RuntimeError, AttributeError):
         pass
 
 from PySide6.QtWidgets import (
@@ -1071,14 +1071,138 @@ if __name__ == "__main__":
         )
 
 
+        def _normalize_categories_yaml_payload(doc) -> dict:
+            """Coerce categories.yaml into a mapping of category -> list[hanzi].
+
+            Supports both:
+              - {category: ["漢字", ...], ...}
+              - {category: {items: ["漢字", ...], ...}, ...}
+            """
+            if not isinstance(doc, dict):
+                return {}
+            out = {}
+            for k, v in doc.items():
+                try:
+                    key = str(k).strip()
+                except Exception:
+                    continue
+                if not key:
+                    continue
+                if isinstance(v, list):
+                    items = []
+                    for hz in v:
+                        try:
+                            s = str(hz).strip()
+                        except Exception:
+                            s = ""
+                        if s:
+                            items.append(s)
+                    out[key] = items
+                    continue
+                if isinstance(v, dict):
+                    raw_items = v.get("items")
+                    if isinstance(raw_items, list):
+                        items = []
+                        for hz in raw_items:
+                            try:
+                                s = str(hz).strip()
+                            except Exception:
+                                s = ""
+                            if s:
+                                items.append(s)
+                        out[key] = items
+                        continue
+                # Unknown shape: keep an empty list so the category still exists
+                out.setdefault(key, [])
+            return out
+
+
+        def _load_categories_from_disk() -> dict:
+            """Load categories from data/categories.yaml (authoritative for category list)."""
+            try:
+                from domain.storage_paths import categories_yaml_path
+            except Exception:
+                categories_yaml_path = None
+
+            if not callable(categories_yaml_path):
+                return {}
+
+            try:
+                p = categories_yaml_path()
+            except Exception:
+                return {}
+
+            try:
+                if p is None:
+                    return {}
+            except Exception:
+                pass
+
+            try:
+                path_s = str(p)
+            except Exception:
+                path_s = ""
+
+            if not path_s:
+                return {}
+
+            try:
+                if not os.path.exists(path_s):
+                    return {}
+            except Exception:
+                return {}
+
+            try:
+                with open(path_s, "r", encoding="utf-8") as fh:
+                    doc = yaml.safe_load(fh) or {}
+            except Exception:
+                return {}
+
+            return _normalize_categories_yaml_payload(doc)
+
+
+        # Prefer authoritative categories.yaml for category list; fall back to vocab-derived.
+        try:
+            cats_disk = _load_categories_from_disk()
+        except Exception:
+            cats_disk = {}
+
+        if isinstance(cats_disk, dict) and cats_disk:
+            categories_map = cats_disk
+            try:
+                logger.debug(
+                    "Loaded categories.yaml: %d categories (authoritative)",
+                    len(categories_map),
+                )
+            except Exception:
+                pass
+
+
         def _load_categories_map() -> dict:
-            """Return the current categories_map (fallback to reloading from vocab.yaml if empty)."""
+            """Return the best-available categories map.
+
+            Source order:
+              1) data/categories.yaml (authoritative list of categories)
+              2) current in-memory `categories_map`
+              3) vocab.yaml-derived categories (legacy fallback)
+            """
+            try:
+                cats_disk = _load_categories_from_disk()
+                if isinstance(cats_disk, dict) and cats_disk:
+                    return cats_disk
+            except Exception:
+                pass
+
             try:
                 if isinstance(categories_map, dict) and categories_map:
                     return categories_map
             except Exception:
                 pass
-            _v, cats = _load_vocab_from_unified_yaml()
+
+            try:
+                _v, cats = _load_vocab_from_unified_yaml()
+            except Exception:
+                cats = {}
             return cats or {}
 
 
@@ -1086,6 +1210,14 @@ if __name__ == "__main__":
         # ensure these exist before category wiring
         saved_category = load_one("category") or "All"
         # Make categories available to other parts of the app (e.g., Add & Edit dialog)
+        try:
+            cats_best = _load_categories_map()
+        except Exception:
+            cats_best = categories_map
+
+        if isinstance(cats_best, dict) and cats_best:
+            categories_map = cats_best
+
         try:
             setattr(window, "_categories_map", categories_map)
             logger.debug("Attached _categories_map to window: %d categories", len(categories_map or {}))
@@ -1682,17 +1814,32 @@ if __name__ == "__main__":
             # Use the already-loaded vocab from this scope
             vocab_dict = vocab if isinstance(vocab, dict) else {}
 
-            # Ensure we have a categories map on the window
+            # Always reload categories from disk before opening the dialog.
+            # This prevents reopening from a stale vocab-derived map.
             try:
-                cats = getattr(window, "_categories_map", None)
-                if not isinstance(cats, dict) or not cats:
-                    cats = _load_categories_map()
-                    try:
-                        setattr(window, "_categories_map", cats)
-                    except Exception:
-                        pass
-            except Exception:
                 cats = _load_categories_map()
+            except (TypeError, AttributeError, RuntimeError):
+                cats = {}
+
+            if isinstance(cats, dict) and cats:
+                try:
+                    setattr(window, "_categories_map", cats)
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
+                try:
+                    # Keep module-level cache coherent for apply_category_filter() and dropdown rebuilds
+                    global categories_map
+                    categories_map = cats
+                except (TypeError, AttributeError, RuntimeError):
+                    # If global fails for any reason, ignore (best-effort)
+                    pass
+            else:
+                try:
+                    cats = getattr(window, "_categories_map", None)
+                except (TypeError, AttributeError, RuntimeError):
+                    cats = None
+                if not isinstance(cats, dict):
+                    cats = {}
 
             logger.debug("_open_category_manager: categories ready -> %d keys", len(cats or {}))
 
@@ -1775,6 +1922,56 @@ if __name__ == "__main__":
             _t_exec = _perf_start("CategoryManagerDialog.exec")
             dlg.exec()
             _perf_end("CategoryManagerDialog.exec", _t_exec)
+
+
+            # After dialog closes: reload authoritative categories.yaml and refresh the main category dropdown.
+            try:
+                cats_after = _load_categories_map()
+            except Exception:
+                cats_after = {}
+
+            if isinstance(cats_after, dict) and cats_after:
+                try:
+                    setattr(window, "_categories_map", cats_after)
+                except Exception:
+                    pass
+                try:
+                    categories_map = cats_after
+                except Exception:
+                    pass
+
+                try:
+                    combo_main = window.findChild(QComboBox, "comboCategory")
+                except Exception:
+                    combo_main = None
+
+                if combo_main is not None:
+                    try:
+                        sel = combo_main.currentText() or "All"
+                    except Exception:
+                        sel = "All"
+
+                    try:
+                        combo_main.blockSignals(True)
+                        combo_main.clear()
+                        combo_main.addItem("All")
+                        for k in sorted((categories_map or {}).keys()):
+                            combo_main.addItem(k)
+                        idx = combo_main.findText(sel)
+                        if idx >= 0:
+                            combo_main.setCurrentIndex(idx)
+                        else:
+                            # If the previous selection disappeared, fall back to All.
+                            idx_all = combo_main.findText("All")
+                            if idx_all >= 0:
+                                combo_main.setCurrentIndex(idx_all)
+                    except Exception:
+                        pass
+                    finally:
+                        try:
+                            combo_main.blockSignals(False)
+                        except Exception:
+                            pass
 
             # After the dialog closes, refresh the current category view so any new items appear.
             try:

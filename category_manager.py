@@ -66,7 +66,8 @@ from typing import cast
 # ----------------------------------------
 # PySide6 imports
 # ----------------------------------------
-from PySide6.QtCore import Qt, QPoint, QTimer
+from PySide6.QtCore import Qt as _Qt
+from PySide6.QtCore import QPoint, QTimer
 from PySide6.QtGui import (
     QFont,
     QFontMetrics,
@@ -558,21 +559,21 @@ class PopupBelowComboBox(QComboBox):
         # Let Qt create/show the popup first.
         try:
             super().showPopup()
-        except Exception:
+        except (TypeError, AttributeError, RuntimeError):
             return
 
         # Defer repositioning until after Qt has finalised popup geometry.
         try:
             QTimer.singleShot(0, self._reposition_popup_below)
             QTimer.singleShot(20, self._reposition_popup_below)
-        except Exception:
+        except (TypeError, AttributeError, RuntimeError):
             return
 
     def _popup_container(self):
         """Return the top-level popup container for this combobox's view (best-effort)."""
         try:
             view = self.view()
-        except Exception:
+        except (TypeError, AttributeError, RuntimeError):
             return None
 
         w = view
@@ -580,28 +581,28 @@ class PopupBelowComboBox(QComboBox):
             # Walk up the widget chain to find the actual Qt.Popup window.
             while w is not None:
                 try:
-                    if w.isWindow() and (w.windowFlags() & Qt.WindowType.Popup):
+                    if w.isWindow() and (w.windowFlags() & _Qt.WindowType.Popup):
                         return w
-                except Exception:
+                except (TypeError, AttributeError, RuntimeError):
                     pass
                 try:
                     w = w.parentWidget()
-                except Exception:
+                except (TypeError, AttributeError, RuntimeError):
                     break
-        except Exception:
+        except (TypeError, AttributeError, RuntimeError):
             pass
 
         # Fallback: whatever window() returns.
         try:
             return view.window() if view is not None else None
-        except Exception:
+        except (TypeError, AttributeError, RuntimeError):
             return None
 
     def _reposition_popup_below(self) -> None:
         """Best-effort: keep the popup below the combobox (no overlap) when space permits."""
         try:
             view = self.view()
-        except Exception:
+        except (TypeError, AttributeError, RuntimeError):
             return
 
         popup = self._popup_container()
@@ -618,12 +619,12 @@ class PopupBelowComboBox(QComboBox):
             # If there isn't enough space below, do not force it (Qt will place above).
             try:
                 screen = self.screen()
-            except Exception:
+            except (TypeError, AttributeError, RuntimeError):
                 screen = None
             if screen is None:
                 try:
                     screen = QApplication.primaryScreen()
-                except Exception:
+                except (TypeError, AttributeError, RuntimeError):
                     screen = None
 
             if screen is not None:
@@ -632,7 +633,7 @@ class PopupBelowComboBox(QComboBox):
                     popup_h = int(popup.frameGeometry().height())
                     if desired_y + popup_h > int(avail.y() + avail.height()):
                         return
-                except Exception:
+                except (TypeError, AttributeError, RuntimeError, ValueError):
                     pass
 
             # Compute decoration offset: frameGeometry top-left vs client top-left.
@@ -642,7 +643,7 @@ class PopupBelowComboBox(QComboBox):
                 # For top-level widgets, geometry().topLeft() corresponds to popup.pos().
                 deco_dx = int(frame_tl.x() - client_tl.x())
                 deco_dy = int(frame_tl.y() - client_tl.y())
-            except Exception:
+            except (TypeError, AttributeError, RuntimeError, ValueError):
                 deco_dx = 0
                 deco_dy = 0
 
@@ -650,7 +651,7 @@ class PopupBelowComboBox(QComboBox):
             target_x = int(desired_x - deco_dx)
             target_y = int(desired_y - deco_dy)
             popup.move(target_x, target_y)
-        except Exception:
+        except (TypeError, AttributeError, RuntimeError, ValueError):
             return
 
 
@@ -693,15 +694,15 @@ class CategoryManagerDialog(QDialog):
     def _init_vocab_and_categories(self, vocab_items: dict, categories_map: dict) -> None:
         """Normalise in-memory vocab + categories and build the stable category list."""
         # --- Persist vocab input under stable attribute names (tests + UI rely on these) ---
-        # Some builds historically used different attribute names; keep them all coherent.
+        # Keep a legacy alias to the caller-provided vocab map, but do not use it as the
+        # authoritative internal store.
         try:
             if isinstance(vocab_items, dict):
-                self._vocab = vocab_items
                 self.vocab_items = vocab_items  # legacy / tests only
         except (AttributeError, TypeError, ValueError, RuntimeError):
             pass
 
-        # In-memory vocab & categories (shallow copies to avoid mutating callers)
+        # In-memory vocab (shallow copy to avoid mutating callers)
         self._vocab = {
             k: (
                 list(v[0]) if isinstance(v, (list, tuple)) and v else [],
@@ -710,11 +711,97 @@ class CategoryManagerDialog(QDialog):
             for k, v in (vocab_items or {}).items()
         }
 
+        # In-memory categories (authoritative). Start as a defensive copy.
         self._cats = {
             str(k).strip(): list(v or [])
             for k, v in (categories_map or {}).items()
             if str(k).strip()
         }
+
+        # Single source of truth: `_cats` is authoritative in this dialog.
+        # `_categories_map` is a legacy alias/view; it must not be consulted as an authority.
+        self._categories_map = self._cats
+
+        # Repo + commit service wiring (UI-free). These modules own invariants and persistence.
+        # IMPORTANT: CategoryRepo currently maintains its own internal dict; therefore, after
+        # constructing it, we must re-point `self._cats` at the repo's internal map so that
+        # UI tests asserting against `dlg._cats` observe the authoritative store.
+        self._cat_repo = None
+        self._cat_commit_svc = None
+
+        try:
+            from category_repo import CategoryRepo
+            from category_commit import CategoryCommitService
+
+            canon_fn = getattr(self, "_canon_cat_name", None)
+
+            # Persistence: repo expects persist(cats_map). Most existing persistence fns are
+            # zero-arg; adapt them rather than changing their signatures.
+            persist_cb = None
+            for name in (
+                "_save_categories_map",
+                "_persist_categories_map",
+                "_save_categories_yaml",
+                "_write_categories_yaml",
+                "_write_categories_file",
+            ):
+                fn = getattr(self, name, None)
+                if callable(fn):
+                    def _persist(_cats_map, _fn=fn):
+                        try:
+                            logger.debug(
+                                "CategoryRepo.persist: invoking %s (cats_n=%s keys_sample=%s)",
+                                getattr(_fn, "__name__", str(_fn)),
+                                (len(_cats_map) if isinstance(_cats_map, dict) else "?"),
+                                (sorted(list(_cats_map.keys()))[:10] if isinstance(_cats_map, dict) else []),
+                            )
+                        except Exception:
+                            pass
+
+                        _fn()
+
+                        try:
+                            logger.debug("CategoryRepo.persist: %s completed", getattr(_fn, "__name__", str(_fn)))
+                        except Exception:
+                            pass
+                    persist_cb = _persist
+                    break
+
+            repo = CategoryRepo(
+                self._cats,
+                canon=canon_fn if callable(canon_fn) else None,
+                persist=persist_cb,
+            )
+
+            # Re-point dialog-authoritative map to the repo's internal store.
+            # This keeps the invariant: after successful add-category flow, `self._cats[cat]` exists.
+            try:
+                repo_map = getattr(repo, "_cats", None)
+            except (TypeError, AttributeError, RuntimeError):
+                repo_map = None
+
+            if isinstance(repo_map, dict):
+                self._cats = repo_map
+                self._categories_map = self._cats
+
+            # Keep any other legacy map coherent if present (best-effort only).
+            try:
+                legacy_map = getattr(self, "_categories_map", None)
+            except (TypeError, AttributeError, RuntimeError):
+                legacy_map = None
+
+            try:
+                if legacy_map is not None and hasattr(repo, "sync_to"):
+                    repo.sync_to(legacy_map)
+            except (TypeError, AttributeError, RuntimeError, ValueError):
+                pass
+
+            self._cat_repo = repo
+            self._cat_commit_svc = CategoryCommitService(repo)
+
+        except (ImportError, ModuleNotFoundError):
+            self._cat_repo = None
+            self._cat_commit_svc = None
 
         # Drop sentinel 'All' if it is the only category
         if len(self._cats) <= 1:
@@ -782,6 +869,98 @@ class CategoryManagerDialog(QDialog):
         if "unassigned" not in (c.lower() for c in self._all_cats):
             self._all_cats.append("unassigned")
             self._all_cats.sort(key=lambda s: s.lower())
+
+    def _refresh_category_dropdown_from_cats(self, *, selected: str = "") -> None:
+        """Refresh the Add/Edit category dropdown from the authoritative in-memory map.
+
+        Contract:
+          - `_cats` is the single source of truth.
+          - `_all_cats` is a sorted view derived from `_cats`.
+          - The Add/Edit category combobox items must reflect `_all_cats`.
+
+        Best-effort only: must never raise.
+        """
+        try:
+            cats_map = getattr(self, "_cats", None)
+        except (TypeError, AttributeError, RuntimeError):
+            cats_map = None
+
+        if not isinstance(cats_map, dict):
+            return
+
+        # Rebuild derived list
+        try:
+            keys = [str(k).strip() for k in cats_map.keys() if str(k).strip()]
+        except Exception:
+            keys = []
+
+        try:
+            keys = [k for k in keys if k.lower() != "all"]
+        except Exception:
+            pass
+
+        if not any((k.lower() == "unassigned") for k in keys):
+            keys.append("unassigned")
+
+        try:
+            self._all_cats = sorted(set(keys), key=lambda s: str(s).lower())
+        except Exception:
+            try:
+                self._all_cats = list(dict.fromkeys(keys))
+            except Exception:
+                return
+
+        # Repopulate combobox items
+        try:
+            combo = getattr(self, "_add_cat", None)
+        except (TypeError, AttributeError, RuntimeError):
+            combo = None
+
+        if combo is None or not hasattr(combo, "clear") or not hasattr(combo, "addItems"):
+            return
+
+        try:
+            combo.blockSignals(True)
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+
+        try:
+            combo.clear()
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+
+        try:
+            combo.addItems(self._all_cats)
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+
+        # Preserve selection where possible
+        sel = (selected or "").strip()
+        if sel:
+            try:
+                if hasattr(combo, "findText") and int(combo.findText(sel)) < 0 and hasattr(combo, "addItem"):
+                    combo.addItem(sel)
+            except Exception:
+                pass
+            try:
+                combo.setCurrentText(sel)
+            except Exception:
+                try:
+                    idx = int(combo.findText(sel))
+                    if idx >= 0:
+                        combo.setCurrentIndex(idx)
+                except Exception:
+                    pass
+        else:
+            try:
+                combo.setCurrentIndex(-1)
+            except Exception:
+                pass
+
+        try:
+            combo.blockSignals(False)
+        except (TypeError, AttributeError, RuntimeError):
+            pass
 
     @staticmethod
     def _perf_start(name: str) -> float:
@@ -1022,13 +1201,6 @@ class CategoryManagerDialog(QDialog):
         self._init_style_and_curator()
         self._init_vocab_and_categories(vocab_items, categories_map)
 
-        try:
-            if isinstance(categories_map, dict):
-                self._categories_map = categories_map
-                self.categories_map = categories_map
-        except (AttributeError, TypeError, ValueError):
-            pass
-
         self._reload_categories_from_disk_if_needed()
         self._init_reverse_lookup_caches()
         self._init_meaning_resolver()
@@ -1047,7 +1219,7 @@ class CategoryManagerDialog(QDialog):
         btn_close.setDefault(False)
         btn_close.setAutoDefault(False)
         btn_close.clicked.connect(self.accept)
-        header.addWidget(btn_close, 0, Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight)
+        header.addWidget(btn_close, 0, _Qt.AlignmentFlag.AlignTop | _Qt.AlignmentFlag.AlignRight)
         self._root.addLayout(header)
 
         # ---- Main row ----
@@ -1072,14 +1244,14 @@ class CategoryManagerDialog(QDialog):
             pass
 
         header_row.addStretch(1)
-        header_row.addWidget(self.btn_save, 0, Qt.AlignmentFlag.AlignRight)
+        header_row.addWidget(self.btn_save, 0, _Qt.AlignmentFlag.AlignRight)
         self._root.addLayout(header_row)
 
         # ---- Entry group ----
         group_entry = QGroupBox("Entry", self)
         form_entry = QFormLayout(group_entry)
-        form_entry.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        form_entry.setFormAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        form_entry.setLabelAlignment(_Qt.AlignmentFlag.AlignRight | _Qt.AlignmentFlag.AlignVCenter)
+        form_entry.setFormAlignment(_Qt.AlignmentFlag.AlignLeft | _Qt.AlignmentFlag.AlignTop)
         form_entry.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
 
         self._add_jy = QLineEdit(group_entry)
@@ -1116,17 +1288,14 @@ class CategoryManagerDialog(QDialog):
         if le_cat is not None:
             le_cat.setPlaceholderText("Type category")
             le_cat.setClearButtonEnabled(True)
-            try:
-                if callable(getattr(self, "_on_add_category_committed", None)):
-                    le_cat.returnPressed.connect(self._on_add_category_committed)
-                    le_cat.editingFinished.connect(self._on_add_category_committed)
-            except (TypeError, AttributeError, RuntimeError):
-                pass
+            # IMPORTANT: do NOT connect returnPressed/editingFinished directly to the dialog handler.
+            # CategoryComboController owns commit wiring and will call `on_commit`.
 
         _on_cat_commit = getattr(self, "_on_add_category_committed", None)
         self._cat_combo_ctrl = CategoryComboController(
             combo=self._add_cat,
             on_commit=_on_cat_commit if callable(_on_cat_commit) else None,
+            on_add_new=None,
         )
 
         form_entry.addRow("Category:", self._add_cat)
@@ -1166,18 +1335,6 @@ class CategoryManagerDialog(QDialog):
         form_hanzi.addWidget(self._btn_custom_hz)
 
         self.comboCandidates = self._cand_combo
-
-        # Declarative, idempotent wiring for Hanzi candidate combobox
-        try:
-            fn_idx = getattr(self, "_on_candidate_index_activated", None)
-            fn_txt = getattr(self, "_on_candidate_text_changed", None)
-            self._wire_combo_common(
-                self._cand_combo,
-                on_activate=fn_idx,
-                on_change=fn_txt,
-            )
-        except (TypeError, AttributeError, RuntimeError):
-            pass
 
         # ---- Layout assembly ----
         group_entry.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
@@ -1530,10 +1687,10 @@ class CategoryManagerDialog(QDialog):
             text_h = 0
             try:
                 text_h = int(fm.lineSpacing())
-            except Exception:
+            except (TypeError, AttributeError, RuntimeError, ValueError):
                 try:
                     text_h = int(fm.height())
-                except Exception:
+                except (TypeError, AttributeError, RuntimeError, ValueError):
                     text_h = 0
 
             # Empirical padding for macOS/Aqua: text + margins + arrow + focus ring.
@@ -1542,22 +1699,22 @@ class CategoryManagerDialog(QDialog):
             try:
                 combo.setMinimumHeight(target)
                 combo.setMaximumHeight(target)
-            except Exception:
+            except (TypeError, AttributeError, RuntimeError, ValueError):
                 # Fallback for older bindings/styles.
                 try:
                     combo.setFixedHeight(target)
-                except Exception:
+                except (TypeError, AttributeError, RuntimeError, ValueError):
                     pass
 
             try:
                 combo.updateGeometry()
-            except Exception:
+            except (TypeError, AttributeError, RuntimeError, ValueError):
                 pass
 
         except Exception as e:
             try:
                 logger.debug("_ensure_combo_closed_height skipped (%s)", e)
-            except Exception:
+            except (TypeError, AttributeError, RuntimeError, ValueError):
                 pass
 
     def _load_hanzi_style_map(self) -> dict:
@@ -1684,10 +1841,7 @@ class CategoryManagerDialog(QDialog):
 
         if on_activate is not None and callable(on_activate):
             self._try_connect(getattr(w, "activated", None), on_activate)
-        else:
-            # Back-compat: if only on_change is provided, also wire activated to it.
-            if on_change is not None and callable(on_change):
-                self._try_connect(getattr(w, "activated", None), on_change)
+        # Do not auto-wire activated to on_change. Activated is a commit signal and must be wired explicitly.
 
     # ---- UI intent / focus policy ----
     def _user_has_committed_hanzi(self) -> bool:
@@ -1957,6 +2111,234 @@ class CategoryManagerDialog(QDialog):
 
         return _clean([str(x) for x in (ms2 or [])])
 
+    def _defer_focus(self, target: str) -> None:
+        """Defer focus movement to the next event-loop tick (best-effort).
+
+        This prevents QComboBox signal churn (activated/currentTextChanged/editingFinished)
+        from overriding our intended focus move.
+
+        target: 'cand' | 'hz' | 'mn' | 'jy' | 'cat'
+        """
+        try:
+            from PySide6.QtCore import QTimer
+        except Exception:
+            QTimer = None
+
+        def _apply() -> None:
+            # --- DEBUG LOGGING: focus state at start ---
+            try:
+                from PySide6.QtWidgets import QApplication
+                fw = QApplication.focusWidget()
+                fw_name = None
+                try:
+                    fw_name = str(fw.objectName() or "") if fw is not None else ""
+                except Exception:
+                    fw_name = ""
+                logger.debug(
+                    "DEFER_FOCUS start: target=%r current_focus=%r name=%r",
+                    target,
+                    type(fw).__name__ if fw else None,
+                    fw_name,
+                )
+            except Exception:
+                pass
+            try:
+                if target == "cand":
+                    combo = getattr(self, "_cand_combo", None)
+                    if combo is not None:
+                        try:
+                            combo.setVisible(True)
+                        except Exception:
+                            pass
+                        try:
+                            combo.setFocus()
+                            # --- DEBUG LOGGING: focus state at end ---
+                            try:
+                                from PySide6.QtWidgets import QApplication
+                                fw2 = QApplication.focusWidget()
+                                fw2_name = None
+                                try:
+                                    fw2_name = str(fw2.objectName() or "") if fw2 is not None else ""
+                                except Exception:
+                                    fw2_name = ""
+                                logger.debug("DEFER_FOCUS end: target=%r final_focus=%r name=%r", target, type(fw2).__name__ if fw2 else None, fw2_name)
+                            except Exception:
+                                pass
+                            return
+                        except Exception:
+                            pass
+                    # fall back
+                    target2 = "hz"
+                else:
+                    target2 = target
+
+                if target2 == "hz":
+                    # Prefer the Hanzi field, but if it is read-only (common in candidate-driven flow),
+                    # do not dead-end the user: move focus to the manual Hanzi button instead.
+                    self._focus_hanzi(select_all=True)
+
+                    try:
+                        hz = getattr(self, "_add_hz", None)
+                    except Exception:
+                        hz = None
+
+                    hz_ro = False
+                    try:
+                        if hz is not None and callable(getattr(hz, "isReadOnly", None)):
+                            hz_ro = bool(hz.isReadOnly())
+                    except Exception:
+                        hz_ro = False
+
+                    if hz_ro:
+                        # If the Hanzi field is read-only and we have no candidate list,
+                        # auto-enter manual Hanzi mode rather than focusing a button (dead-end).
+                        did_manual = False
+
+                        # Prefer an explicit handler if the dialog provides one.
+                        for name in (
+                            "_on_custom_hanzi_clicked",
+                            "_on_enter_custom_hanzi",
+                            "_enter_manual_hanzi_mode",
+                            "_on_btn_custom_hz_clicked",
+                        ):
+                            try:
+                                fn = getattr(self, name, None)
+                            except Exception:
+                                fn = None
+                            if callable(fn):
+                                try:
+                                    fn()
+                                    did_manual = True
+                                    break
+                                except Exception:
+                                    did_manual = False
+
+                        # Fallback: click the existing button if present.
+                        if not did_manual:
+                            try:
+                                btn = getattr(self, "_btn_custom_hz", None)
+                            except Exception:
+                                btn = None
+                            try:
+                                if btn is not None and bool(btn.isEnabled()) and bool(btn.isVisible()):
+                                    try:
+                                        btn.click()
+                                    except Exception:
+                                        try:
+                                            # Some bindings prefer animateClick
+                                            btn.animateClick(0)
+                                        except Exception:
+                                            pass
+                                    did_manual = True
+                            except Exception:
+                                did_manual = False
+
+                        # After entering manual mode, try to focus Hanzi again so typing can begin.
+                        try:
+                            self._focus_hanzi(select_all=True)
+                        except Exception:
+                            pass
+
+                    # --- DEBUG LOGGING: focus state at end ---
+                    try:
+                        from PySide6.QtWidgets import QApplication
+                        fw2 = QApplication.focusWidget()
+                        fw2_name = None
+                        try:
+                            fw2_name = str(fw2.objectName() or "") if fw2 is not None else ""
+                        except Exception:
+                            fw2_name = ""
+                        logger.debug(
+                            "DEFER_FOCUS end: target=%r final_focus=%r name=%r",
+                            target,
+                            type(fw2).__name__ if fw2 else None,
+                            fw2_name,
+                        )
+                    except Exception:
+                        pass
+                    return
+                if target2 == "mn":
+                    self._focus_meanings(select_all=True)
+                    # --- DEBUG LOGGING: focus state at end ---
+                    try:
+                        from PySide6.QtWidgets import QApplication
+                        fw2 = QApplication.focusWidget()
+                        fw2_name = None
+                        try:
+                            fw2_name = str(fw2.objectName() or "") if fw2 is not None else ""
+                        except Exception:
+                            fw2_name = ""
+                        logger.debug("DEFER_FOCUS end: target=%r final_focus=%r name=%r", target, type(fw2).__name__ if fw2 else None, fw2_name)
+                    except Exception:
+                        pass
+                    return
+                if target2 == "jy":
+                    self._focus_jyutping(select_all=True)
+                    # --- DEBUG LOGGING: focus state at end ---
+                    try:
+                        from PySide6.QtWidgets import QApplication
+                        fw2 = QApplication.focusWidget()
+                        fw2_name = None
+                        try:
+                            fw2_name = str(fw2.objectName() or "") if fw2 is not None else ""
+                        except Exception:
+                            fw2_name = ""
+                        logger.debug("DEFER_FOCUS end: target=%r final_focus=%r name=%r", target, type(fw2).__name__ if fw2 else None, fw2_name)
+                    except Exception:
+                        pass
+                    return
+                if target2 == "cat":
+                    self._focus_category(select_all=True, show_popup=True)
+                    # --- DEBUG LOGGING: focus state at end ---
+                    try:
+                        from PySide6.QtWidgets import QApplication
+                        fw2 = QApplication.focusWidget()
+                        fw2_name = None
+                        try:
+                            fw2_name = str(fw2.objectName() or "") if fw2 is not None else ""
+                        except Exception:
+                            fw2_name = ""
+                        logger.debug("DEFER_FOCUS end: target=%r final_focus=%r name=%r", target, type(fw2).__name__ if fw2 else None, fw2_name)
+                    except Exception:
+                        pass
+                    return
+            except Exception:
+                # --- DEBUG LOGGING: focus state at end (exceptional) ---
+                try:
+                    from PySide6.QtWidgets import QApplication
+                    fw2 = QApplication.focusWidget()
+                    fw2_name = None
+                    try:
+                        fw2_name = str(fw2.objectName() or "") if fw2 is not None else ""
+                    except Exception:
+                        fw2_name = ""
+                    logger.debug("DEFER_FOCUS end: target=%r final_focus=%r name=%r", target, type(fw2).__name__ if fw2 else None, fw2_name)
+                except Exception:
+                    pass
+                return
+            # --- DEBUG LOGGING: focus state at end (normal fallthrough) ---
+            try:
+                from PySide6.QtWidgets import QApplication
+                fw2 = QApplication.focusWidget()
+                fw2_name = None
+                try:
+                    fw2_name = str(fw2.objectName() or "") if fw2 is not None else ""
+                except Exception:
+                    fw2_name = ""
+                logger.debug("DEFER_FOCUS end: target=%r final_focus=%r name=%r", target, type(fw2).__name__ if fw2 else None, fw2_name)
+            except Exception:
+                pass
+
+        if QTimer is not None and hasattr(QTimer, "singleShot"):
+            try:
+                QTimer.singleShot(0, _apply)
+                return
+            except Exception:
+                pass
+
+        # Fallback: apply immediately.
+        _apply()
+
     def _on_save_clicked(self) -> None:
         """Legacy inline Save button handler.
 
@@ -1994,96 +2376,605 @@ class CategoryManagerDialog(QDialog):
         # Absolute last resort: do nothing.
         return
 
+    def _ensure_category_services(self):
+        """Ensure CategoryRepo + CategoryCommitService are available (UI-free, best-effort).
+
+        Returns:
+            (repo, svc) or (None, None) if unavailable.
+        """
+        try:
+            repo = getattr(self, "_cat_repo", None)
+        except (TypeError, AttributeError, RuntimeError):
+            repo = None
+
+        try:
+            svc = getattr(self, "_cat_commit_svc", None)
+        except (TypeError, AttributeError, RuntimeError):
+            svc = None
+
+        if repo is not None and svc is not None:
+            return repo, svc
+
+        # Lazy import so domain modules remain optional in some test modes.
+        try:
+            from category_repo import CategoryRepo
+            from category_commit import CategoryCommitService
+        except (ImportError, ModuleNotFoundError):
+            return None, None
+
+        # Canonicaliser is optional.
+        try:
+            canon_fn = getattr(self, "_canon_cat_name", None)
+            canon_cb = canon_fn if callable(canon_fn) else None
+        except (TypeError, AttributeError, RuntimeError):
+            canon_cb = None
+
+        # Persist callback: prefer existing dialog persistence hooks; fall back to writing categories.yaml.
+        def _persist_cb(_cats_map):
+            # Prefer existing best-effort persistence hooks if present.
+            for name in (
+                "_do_autosave",
+                "_queue_autosave",
+                "_write_categories_yaml",
+                "_save_categories_yaml",
+                "_persist_categories",
+                "_persist_categories_map",
+                "_save_categories_map",
+            ):
+                try:
+                    fn = getattr(self, name, None)
+                except (TypeError, AttributeError, RuntimeError):
+                    fn = None
+
+                if callable(fn):
+                    try:
+                        # Some hooks accept the map; others are zero-arg.
+                        try:
+                            fn(_cats_map)
+                        except TypeError:
+                            fn()
+                        return
+                    except (TypeError, AttributeError, RuntimeError, ValueError, OSError):
+                        return
+
+            # Final fallback: write categories.yaml directly.
+            try:
+                from domain.storage_paths import categories_yaml_path
+                import yaml
+
+                p = categories_yaml_path()
+                with open(p, "w", encoding="utf-8") as fh:
+                    yaml.safe_dump(_cats_map, fh, allow_unicode=True, sort_keys=True)
+            except (TypeError, AttributeError, RuntimeError, ValueError, OSError):
+                return
+
+        # Authoritative map is always self._cats.
+        try:
+            cats_map = getattr(self, "_cats", None)
+        except (TypeError, AttributeError, RuntimeError):
+            cats_map = None
+
+        if not isinstance(cats_map, dict):
+            cats_map = {}
+            try:
+                setattr(self, "_cats", cats_map)
+            except (TypeError, AttributeError, RuntimeError):
+                pass
+
+        try:
+            repo = CategoryRepo(cats_map, canon=canon_cb, persist=_persist_cb)
+            svc = CategoryCommitService(repo)
+        except Exception:
+            return None, None
+
+        try:
+            self._cat_repo = repo
+            self._cat_commit_svc = svc
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+
+        return repo, svc
+
+    def _add_new_category(self, cat: str) -> bool:
+        """Add a new category via the authoritative CategoryRepo (best-effort, never raise)."""
+        try:
+            cat_s = str(cat or "").strip()
+        except Exception:
+            cat_s = ""
+
+        if not cat_s:
+            return False
+
+        # Prefer repo-based mutation (single source of truth: self._cats).
+        repo = getattr(self, "_cat_repo", None)
+        if repo is not None and hasattr(repo, "add"):
+            try:
+                try:
+                    logger.debug("_add_new_category: repo.add(%r) starting", str(cat_s or ""))
+                except Exception:
+                    pass
+
+                ok = bool(repo.add(cat_s))
+
+                try:
+                    logger.debug("_add_new_category: repo.add(%r) -> ok=%s", str(cat_s or ""), bool(ok))
+                except Exception:
+                    pass
+            except Exception as e:
+                ok = False
+                try:
+                    logger.debug("_add_new_category: repo.add(%r) raised: %s", str(cat_s or ""), e)
+                except Exception:
+                    pass
+
+            # Ensure the UI dropdown contains it (UI-only effect; repo is the authority).
+            if ok:
+                try:
+                    w_cat = getattr(self, "_add_cat", None)
+                except Exception:
+                    w_cat = None
+
+                if w_cat is not None:
+                    try:
+                        if hasattr(w_cat, "findText") and hasattr(w_cat, "addItem"):
+                            if int(w_cat.findText(repo.canon(cat_s))) < 0:
+                                w_cat.addItem(repo.canon(cat_s))
+                    except Exception:
+                        pass
+
+            return ok
+
+        # Fallback (should be rare): minimal in-memory add to self._cats.
+        try:
+            cats_map = getattr(self, "_cats", None)
+        except Exception:
+            cats_map = None
+
+        if not isinstance(cats_map, dict):
+            return False
+
+        try:
+            canon = getattr(self, "_canon_cat_name", None)
+            cat_key = str(canon(cat_s) if callable(canon) else cat_s).strip()
+        except Exception:
+            cat_key = cat_s
+
+        if not cat_key:
+            return False
+
+        if cat_key not in cats_map:
+            cats_map[cat_key] = []
+        return True
+
     def _on_add_category_committed(self, *args, user_action: bool = False, **kwargs) -> None:
         """Commit the Add/Edit category selection.
 
-        This handler is used by both the category line-edit Enter key and
-        editingFinished. It must be safe to call in UI tests (offscreen) and
-        must never raise.
+        UI prompting for unknown categories is delegated to the CategoryComboController
+        (ui/category_combo.py). This method must remain best-effort and must never raise.
 
-        Best-effort behaviour:
-          - Normalize/commit the current category text
-          - Update Add/Edit SM context category flags
-          - If we already have Jyutping, populate Hanzi candidates (category-aware)
-          - Refresh Save gating
+        Adapter responsibilities (Qt boundary):
+          - Read widget text
+          - If category is unknown, ask the controller to confirm/add
+          - Call CategoryCommitService for the core decision + repo mutation
+          - Apply UI effects (set text, fill candidates, focus)
         """
-        # Read category text
+        # Guard against re-entrant / duplicate commits caused by QComboBox signal churn.
         try:
-            w_cat = getattr(self, "_add_cat", None)
-            cat_raw = (w_cat.currentText() or "").strip() if w_cat is not None else ""
-        except (TypeError, AttributeError, RuntimeError):
-            cat_raw = ""
-
-        # No category -> nothing to do
-        if not cat_raw:
-            try:
-                if callable(getattr(self, "_update_save_enabled", None)):
-                    self._update_save_enabled()
-            except (TypeError, AttributeError, RuntimeError):
-                pass
-            return
-
-        # Canonicalise category if the dialog provides a normaliser
-        try:
-            canon = getattr(self, "_canon_cat_name", None)
-            cat = str(canon(cat_raw) if callable(canon) else cat_raw).strip()
-        except (TypeError, AttributeError, RuntimeError, ValueError):
-            cat = str(cat_raw or "").strip()
-
-        # Commit text back into combo (best-effort)
-        try:
-            w_cat2 = getattr(self, "_add_cat", None)
-            if w_cat2 is not None and hasattr(w_cat2, "setCurrentText"):
-                w_cat2.setCurrentText(cat)
-        except (TypeError, AttributeError, RuntimeError):
+            if bool(getattr(self, "_in_cat_commit", False)):
+                try:
+                    logger.debug("Add/Edit category commit: re-entrant call suppressed")
+                except Exception:
+                    pass
+                return
+        except Exception:
+            # If we cannot read the guard flag, remain conservative and proceed.
             pass
 
-        # Update SM context (best-effort)
-        ctx = None
         try:
-            ctx = getattr(self, "_add_edit_ctx", None)
-        except (TypeError, AttributeError, RuntimeError):
-            ctx = None
+            self._in_cat_commit = True
+        except Exception:
+            pass
 
-        cat_ok = False
         try:
-            cat_l = str(cat or "").strip().lower()
-            cat_ok = bool(cat) and cat_l not in ("unassigned", "all")
-        except (TypeError, AttributeError, RuntimeError, ValueError):
-            cat_ok = False
+            # 1) Read category text
+            try:
+                w_cat = getattr(self, "_add_cat", None)
+            except (TypeError, AttributeError, RuntimeError):
+                w_cat = None
 
-        if ctx is not None:
-            for _k, _v in (("category", cat), ("cat_ok", bool(cat_ok))):
+            try:
+                cat_raw = (w_cat.currentText() or "").strip() if w_cat is not None else ""
+            except (TypeError, AttributeError, RuntimeError):
+                cat_raw = ""
+
+            if (not cat_raw) and (w_cat is not None):
                 try:
-                    setattr(ctx, _k, _v)
+                    le = w_cat.lineEdit() if hasattr(w_cat, "lineEdit") else None
+                except (TypeError, AttributeError, RuntimeError):
+                    le = None
+                if le is not None:
+                    try:
+                        cat_raw = (le.text() or "").strip()
+                    except (TypeError, AttributeError, RuntimeError):
+                        cat_raw = cat_raw or ""
+
+            if not cat_raw:
+                try:
+                    logger.debug(
+                        "Add/Edit category commit: raw=%r user_action=%s",
+                        str(cat_raw or ""),
+                        bool(user_action),
+                    )
                 except (TypeError, AttributeError, RuntimeError):
                     pass
 
-        # If Jyutping is already present, populate candidates (category-aware)
-        try:
-            w_jy = getattr(self, "_add_jy", None)
-            jy = (w_jy.text() or "").strip() if w_jy is not None else ""
-        except (TypeError, AttributeError, RuntimeError):
-            jy = ""
+                try:
+                    fn_gate = getattr(self, "_update_save_enabled", None)
+                    if callable(fn_gate):
+                        fn_gate()
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
+                return
 
-        if jy:
+            # 2) Jyutping present?
             try:
-                fn_fill = getattr(self, "_fill_hanzi_candidates", None)
-                if callable(fn_fill):
+                w_jy = getattr(self, "_add_jy", None)
+                jy = (w_jy.text() or "").strip() if w_jy is not None else ""
+            except (TypeError, AttributeError, RuntimeError):
+                jy = ""
+            has_jy = bool(jy)
+
+            # 3) Acquire repo + service (lazy init; UI-free). If unavailable, fail safe.
+            try:
+                repo, svc = self._ensure_category_services()
+            except (TypeError, AttributeError, RuntimeError, ValueError):
+                repo, svc = None, None
+
+            if repo is None or svc is None:
+                try:
+                    fn_gate = getattr(self, "_update_save_enabled", None)
+                    if callable(fn_gate):
+                        fn_gate()
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
+                return
+
+            # UI-only helper: clear category input and refocus
+            def _clear_and_refocus() -> None:
+                try:
+                    ctrl2 = getattr(self, "_cat_combo_ctrl", None)
+                except (TypeError, AttributeError, RuntimeError):
+                    ctrl2 = None
+
+                if ctrl2 is not None and hasattr(ctrl2, "clear_and_refocus"):
                     try:
-                        fn_fill(jy, category=cat)
-                    except TypeError:
-                        # Back-compat signature
-                        fn_fill(jy)
+                        ctrl2.clear_and_refocus()
+                        return
+                    except (TypeError, AttributeError, RuntimeError, ValueError):
+                        pass
+
+                try:
+                    w = getattr(self, "_add_cat", None)
+                except (TypeError, AttributeError, RuntimeError):
+                    w = None
+
+                if w is not None:
+                    try:
+                        w.blockSignals(True)
+                    except (TypeError, AttributeError, RuntimeError):
+                        pass
+
+                    try:
+                        le2 = w.lineEdit() if hasattr(w, "lineEdit") else None
+                    except (TypeError, AttributeError, RuntimeError):
+                        le2 = None
+
+                    if le2 is not None:
+                        try:
+                            le2.clear()
+                        except (TypeError, AttributeError, RuntimeError):
+                            pass
+
+                    try:
+                        w.setCurrentIndex(-1)
+                    except (TypeError, AttributeError, RuntimeError):
+                        try:
+                            w.setCurrentText("")
+                        except (TypeError, AttributeError, RuntimeError):
+                            pass
+
+                    try:
+                        w.blockSignals(False)
+                    except (TypeError, AttributeError, RuntimeError):
+                        pass
+
+                try:
+                    self._focus_category(select_all=True, show_popup=True)
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
+
+            # 4) Determine confirmation only if unknown
+            user_confirmed_add = False
+
+            try:
+                canon = repo.canon(cat_raw)
+            except (TypeError, AttributeError, RuntimeError, ValueError):
+                canon = str(cat_raw or "").strip()
+
+            try:
+                exists_now = bool(canon) and bool(repo.exists(canon))
+            except (TypeError, AttributeError, RuntimeError, ValueError):
+                exists_now = False
+
+            try:
+                logger.debug(
+                    "Add/Edit category commit: canon=%r exists_now=%s",
+                    str(canon or ""),
+                    bool(exists_now),
+                )
+            except (TypeError, AttributeError, RuntimeError):
+                pass
+
+            if not exists_now:
+                # UI confirmation lives at the adapter boundary (tests monkeypatch QMessageBox.question).
+                user_confirmed_add = False
+                try:
+                    from PySide6.QtWidgets import QMessageBox
+                except (ImportError, ModuleNotFoundError):
+                    QMessageBox = None
+
+                if QMessageBox is not None:
+                    try:
+                        resp = QMessageBox.question(
+                            self,
+                            "Add category?",
+                            "Add new category ‘{0}’?".format(str(canon or "")),
+                            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                            QMessageBox.StandardButton.Yes,
+                        )
+                        user_confirmed_add = bool(resp == QMessageBox.StandardButton.Yes)
+                    except (TypeError, AttributeError, RuntimeError, ValueError):
+                        user_confirmed_add = False
+
+                try:
+                    logger.debug(
+                        "Add/Edit category commit: unknown category confirmation -> confirmed=%s (canon=%r)",
+                        bool(user_confirmed_add),
+                        str(canon or ""),
+                    )
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
+
+            # 5) Core commit (pure decision + repo mutation)
+            try:
+                logger.debug(
+                    "Add/Edit category commit: calling svc.commit(requested=%r has_jy=%s confirmed_add=%s)",
+                    str(cat_raw or ""),
+                    bool(has_jy),
+                    bool(user_confirmed_add),
+                )
+            except Exception:
+                pass
+            try:
+                res = svc.commit(
+                    requested=str(cat_raw or ""),
+                    has_jyutping=bool(has_jy),
+                    user_confirmed_add=bool(user_confirmed_add),
+                )
+            except (TypeError, AttributeError, RuntimeError, ValueError):
+                _clear_and_refocus()
+                try:
+                    fn_gate = getattr(self, "_update_save_enabled", None)
+                    if callable(fn_gate):
+                        fn_gate()
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
+                return
+
+            try:
+                logger.debug(
+                    "Add/Edit category commit: svc result ok=%s category=%r should_fill=%s",
+                    bool(getattr(res, "ok", False)),
+                    str(getattr(res, "category", "") or ""),
+                    bool(getattr(res, "should_fill_candidates", False)),
+                )
+            except Exception:
+                pass
+
+            if not bool(getattr(res, "ok", False)):
+                _clear_and_refocus()
+                try:
+                    fn_gate = getattr(self, "_update_save_enabled", None)
+                    if callable(fn_gate):
+                        fn_gate()
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
+                return
+
+            try:
+                cat = str(getattr(res, "category", "") or "").strip()
+            except (TypeError, AttributeError, RuntimeError, ValueError):
+                cat = ""
+
+            if not cat:
+                _clear_and_refocus()
+                try:
+                    fn_gate = getattr(self, "_update_save_enabled", None)
+                    if callable(fn_gate):
+                        fn_gate()
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
+                return
+
+            # ---- UI list sync (ensure new categories appear in the dropdown) ----
+            try:
+                all_cats = getattr(self, "_all_cats", None)
+            except (TypeError, AttributeError, RuntimeError):
+                all_cats = None
+
+            try:
+                if isinstance(all_cats, list) and cat and (cat not in all_cats):
+                    all_cats.append(cat)
+                    all_cats.sort(key=lambda s: str(s).lower())
             except (TypeError, AttributeError, RuntimeError, ValueError):
                 pass
 
-        # Refresh Save gating/rendering
-        try:
-            if callable(getattr(self, "_update_save_enabled", None)):
-                self._update_save_enabled()
-        except (TypeError, AttributeError, RuntimeError):
-            pass
+            # Ensure the combobox model contains the category as an item (not just edit text).
+            if w_cat is not None:
+                try:
+                    existing = []
+                    try:
+                        n = int(w_cat.count())
+                    except (TypeError, AttributeError, RuntimeError, ValueError):
+                        n = 0
+                    for i in range(max(0, n)):
+                        try:
+                            t = str(w_cat.itemText(i) or "").strip()
+                        except (TypeError, AttributeError, RuntimeError, ValueError):
+                            t = ""
+                        if t:
+                            existing.append(t)
+
+                    if cat and (cat not in existing):
+                        # Rebuild items in sorted order (keeps list stable with InsertPolicy.NoInsert).
+                        merged = sorted(set(existing + [cat]), key=lambda s: str(s).lower())
+                        try:
+                            w_cat.blockSignals(True)
+                        except (TypeError, AttributeError, RuntimeError):
+                            pass
+                        try:
+                            w_cat.clear()
+                            w_cat.addItems(list(merged))
+                        except (TypeError, AttributeError, RuntimeError):
+                            pass
+                        try:
+                            w_cat.setEditable(True)
+                        except (TypeError, AttributeError, RuntimeError):
+                            pass
+                        try:
+                            w_cat.blockSignals(False)
+                        except (TypeError, AttributeError, RuntimeError):
+                            pass
+                except (TypeError, AttributeError, RuntimeError, ValueError):
+                    pass
+
+            # Debug: verify repo/_cats now contains the committed category
+            try:
+                cats_map_dbg = getattr(self, "_cats", None)
+                in_cats = bool(isinstance(cats_map_dbg, dict) and cat in cats_map_dbg)
+                logger.debug(
+                    "Add/Edit category commit: after commit cat=%r in _cats=%s cats_n=%s",
+                    str(cat or ""),
+                    bool(in_cats),
+                    (len(cats_map_dbg) if isinstance(cats_map_dbg, dict) else "?"),
+                )
+                if isinstance(cats_map_dbg, dict) and not in_cats:
+                    logger.debug(
+                        "Add/Edit category commit: _cats keys sample=%s",
+                        sorted(list(cats_map_dbg.keys()))[:30],
+                    )
+            except Exception:
+                pass
+
+            try:
+                logger.debug(
+                    "Add/Edit category commit: repo.exists(%r)=%s",
+                    str(cat or ""),
+                    bool(repo.exists(cat) if hasattr(repo, "exists") else False),
+                )
+            except Exception:
+                pass
+
+            # 6) Apply success effects
+            try:
+                if w_cat is not None and hasattr(w_cat, "setCurrentText"):
+                    w_cat.setCurrentText(cat)
+            except (TypeError, AttributeError, RuntimeError):
+                pass
+
+            # If we just created a new category, refresh the derived list + dropdown
+            # from the authoritative map so it remains available after field clears.
+            try:
+                if not bool(exists_now):
+                    self._refresh_category_dropdown_from_cats(selected=cat)
+            except (TypeError, AttributeError, RuntimeError, ValueError):
+                pass
+
+            try:
+                ctx = getattr(self, "_add_edit_ctx", None)
+            except (TypeError, AttributeError, RuntimeError):
+                ctx = None
+
+            try:
+                cat_l = cat.lower()
+                cat_ok = bool(cat) and cat_l not in ("unassigned", "all")
+            except Exception:
+                cat_ok = False
+
+            if ctx is not None:
+                try:
+                    setattr(ctx, "category", cat)
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
+                try:
+                    setattr(ctx, "cat_ok", bool(cat_ok))
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
+
+            # Candidate fill is non-optional when service requests it.
+            try:
+                should_fill = bool(getattr(res, "should_fill_candidates", False))
+            except (TypeError, AttributeError, RuntimeError):
+                should_fill = False
+
+            if has_jy and should_fill:
+                try:
+                    fn_fill = getattr(self, "_fill_hanzi_candidates", None)
+                    if callable(fn_fill):
+                        try:
+                            fn_fill(jy, category=cat)
+                        except TypeError:
+                            fn_fill(jy)
+                except (TypeError, AttributeError, RuntimeError, ValueError):
+                    pass
+
+            try:
+                fn_gate = getattr(self, "_update_save_enabled", None)
+                if callable(fn_gate):
+                    fn_gate()
+            except (TypeError, AttributeError, RuntimeError):
+                pass
+
+            # 7) Focus advance
+            # If candidate Hanzi are available, show + focus the candidate combobox.
+            # Otherwise, fall back to the Hanzi field.
+            try:
+                combo = getattr(self, "_cand_combo", None)
+            except (TypeError, AttributeError, RuntimeError):
+                combo = None
+
+            focused = False
+            n_items = 0
+            if combo is not None:
+                try:
+                    n_items = int(combo.count())
+                except (TypeError, AttributeError, RuntimeError, ValueError):
+                    n_items = 0
+
+            if n_items > 0:
+                focused = True
+                # Defer focus so later QComboBox signals don't steal it back.
+                self._defer_focus("cand")
+            else:
+                # Candidate list empty (or missing): move to the Hanzi field so the user can proceed.
+                self._defer_focus("hz")
+
+        finally:
+            try:
+                self._in_cat_commit = False
+            except Exception:
+                pass
+
         return
 
     def _build_add_entry_preview(self) -> dict:
@@ -2099,11 +2990,11 @@ class CategoryManagerDialog(QDialog):
 
         Returns: 'save' | 'edit' | 'cancel'
         """
-        try:
-            from PySide6.QtWidgets import QMessageBox
-        except (ImportError, ModuleNotFoundError, AttributeError, TypeError, RuntimeError):
-            # If Qt is not available, preserve legacy behavior.
-            return "edit"
+        # try:
+        #     from PySide6.QtWidgets import QMessageBox
+        # except (ImportError, ModuleNotFoundError, AttributeError, TypeError, RuntimeError):
+        #     # If Qt is not available, preserve legacy behavior.
+        #     return "edit"
 
         jy = str((preview.get("jyutping") or "")).strip()
         hz = str((preview.get("hanzi") or "")).strip()
@@ -2216,7 +3107,12 @@ class CategoryManagerDialog(QDialog):
 
         try:
             if callable(getattr(self, "_update_save_enabled", None)):
-                self._update_save_enabled()
+                try:
+                    fn_gate = getattr(self, "_update_save_enabled", None)
+                    if callable(fn_gate):
+                        fn_gate()
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
         except (TypeError, AttributeError, RuntimeError):
             pass
 
@@ -2316,7 +3212,12 @@ class CategoryManagerDialog(QDialog):
 
         try:
             if callable(getattr(self, "_update_save_enabled", None)):
-                self._update_save_enabled()
+                try:
+                    fn_gate = getattr(self, "_update_save_enabled", None)
+                    if callable(fn_gate):
+                        fn_gate()
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
         except (TypeError, AttributeError, RuntimeError):
             pass
 
@@ -2328,13 +3229,14 @@ class CategoryManagerDialog(QDialog):
             return
 
     def _on_add_category_changed(self, *args, **kwargs) -> None:
-        """Slot: user changed category; recompute candidates using current Jyutping."""
-        try:
-            fn = getattr(self, "_on_add_category_committed", None)
-            if callable(fn):
-                fn(user_action=True)
-        except (TypeError, AttributeError, RuntimeError):
-            return
+        """Category text changed while typing.
+
+        IMPORTANT: Do NOT treat this as a commit. Users must be able to type-to-select
+        categories without triggering candidate recomputation or focus changes.
+
+        Commit happens via Enter / editingFinished / activated.
+        """
+        return
 
     def _focus_jy(self) -> None:
         try:
@@ -2420,7 +3322,12 @@ class CategoryManagerDialog(QDialog):
         # ---- apply result ----
         if show_save:
             self._set_save_button_visible(True)
-            self._update_save_enabled()
+            try:
+                fn_gate = getattr(self, "_update_save_enabled", None)
+                if callable(fn_gate):
+                    fn_gate()
+            except (TypeError, AttributeError, RuntimeError):
+                pass
             return
 
         if clear_fields:
@@ -2496,39 +3403,71 @@ class CategoryManagerDialog(QDialog):
         except (TypeError, AttributeError, RuntimeError):
             return "", "", "", ""
 
+    def _ensure_category_combo_editable(self) -> None:
+        """Ensure the Add/Edit category combobox is editable (best-effort)."""
+        try:
+            w_cat = getattr(self, "_add_cat", None)
+            if w_cat is not None and hasattr(w_cat, "setEditable"):
+                w_cat.setEditable(True)
+        except (TypeError, AttributeError, RuntimeError):
+            return
+
     def _fill_hanzi_candidates(self, jy: str, category: str | None = None) -> None:
-        """Populate Hanzi candidates for a Jyutping (deterministic, test-friendly).
-        Only auto-select the first candidate on initial population, not after user interaction.
-        """
         jy_s = str(jy or "").strip()
         if not jy_s:
             return
+        try:
+            logger.debug(
+                "_fill_hanzi_candidates: start jy=%r category=%r",
+                str(jy_s or ""),
+                str(category or ""),
+            )
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+
+        # ---- gather Tier-1 candidates (order must remain deterministic) ----
         try:
             cands = self._reverse_candidates_for_jy(jy_s)
         except (TypeError, AttributeError, RuntimeError):
             cands = []
 
-        preferred_hz = None
+        try:
+            cands_list = list(cands or [])
+        except (TypeError, AttributeError, RuntimeError):
+            cands_list = []
+
+        try:
+            logger.debug(
+                "_fill_hanzi_candidates: raw candidates n=%d (jy=%r)",
+                int(len(cands_list or [])),
+                str(jy_s or ""),
+            )
+        except Exception:
+            pass
+
+        # ---- find preferred Hanzi within category (if provided) ----
+        preferred_hz = ""
         try:
             cat_s = str(category or "").strip()
         except (TypeError, AttributeError, RuntimeError, ValueError):
             cat_s = ""
 
         if cat_s:
+            members = None
             try:
                 cats_map = getattr(self, "_cats", None)
                 members = cats_map.get(cat_s) if isinstance(cats_map, dict) else None
             except (TypeError, AttributeError, RuntimeError):
                 members = None
 
-            if isinstance(members, (list, tuple, set)) and cands:
+            if isinstance(members, (list, tuple, set)) and cands_list:
                 try:
                     member_set = set([str(x).strip() for x in list(members) if str(x).strip()])
                 except (TypeError, AttributeError, RuntimeError, ValueError):
                     member_set = set()
 
                 if member_set:
-                    for row in list(cands or []):
+                    for row in cands_list:
                         try:
                             hz0 = str((row[0] if isinstance(row, (list, tuple)) and len(row) >= 1 else row) or "").strip()
                         except (TypeError, AttributeError, RuntimeError, ValueError):
@@ -2537,61 +3476,261 @@ class CategoryManagerDialog(QDialog):
                             preferred_hz = hz0
                             break
 
-        # Populate combo
+        # ---- widgets / controller ----
         try:
+            combo = getattr(self, "_cand_combo", None)
+        except (TypeError, AttributeError, RuntimeError):
+            combo = None
+
+        # Ensure controller exists when combo exists (populate helper)
+        try:
+            if combo is not None:
+                self._cand_combo_ctrl = CandidateComboController(combo)
+            else:
+                self._cand_combo_ctrl = None
+        except (TypeError, AttributeError, RuntimeError, ImportError):
+            self._cand_combo_ctrl = None
+
+        # ---- ctx helpers ----
+        try:
+            ctx = getattr(self, "_add_edit_ctx", None)
+        except (TypeError, AttributeError, RuntimeError):
+            ctx = None
+
+        def _ctx_set(name: str, value) -> None:
+            if ctx is None:
+                return
+            try:
+                setattr(ctx, name, value)
+            except (TypeError, AttributeError, RuntimeError):
+                pass
+
+        # Block signals while we repopulate to prevent accidental double-firing.
+        if combo is not None:
+            try:
+                combo.blockSignals(True)
+            except (TypeError, AttributeError, RuntimeError):
+                pass
+
+        try:
+            # Populate combo via controller
             ctrl = getattr(self, "_cand_combo_ctrl", None)
             if ctrl is not None:
-                ctrl.clear()
-                ctrl.populate(cands)
-        except (TypeError, AttributeError, RuntimeError):
-            pass
-
-        # Only auto-select the first candidate if this is initial population (not after user selection).
-        # This method is only called on jyutping/category commit, not on candidate selection.
-        top_hz = ""
-        if preferred_hz:
-            top_hz = str(preferred_hz or "").strip()
-        elif cands:
-            try:
-                top_hz = str(cands[0][0] or "").strip()
-            except (TypeError, IndexError):
-                top_hz = ""
-
-        if top_hz:
-            try:
-                if getattr(self, "_add_hz", None) is not None:
-                    self._add_hz.setText(top_hz)
-            except (TypeError, AttributeError, RuntimeError):
-                pass
-
-            # Populate meaning via the single resolver
-            try:
-                ms = self._resolve_meanings_for_candidate(top_hz, cands[0][1] if len(cands[0]) > 1 else "")
-                joined = ", ".join([str(x).strip() for x in (ms or []) if str(x).strip()])
-                if getattr(self, "_add_mn", None) is not None:
-                    self._add_mn.setText(joined)
-            except (TypeError, AttributeError, RuntimeError):
-                pass
-
-            # Keep SM ctx coherent
-            ctx = getattr(self, "_add_edit_ctx", None)
-            if ctx is not None:
                 try:
-                    ctx.hanzi = top_hz
+                    ctrl.clear()
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
+                try:
+                    ctrl.populate(cands_list)
                 except (TypeError, AttributeError, RuntimeError):
                     pass
 
+            try:
+                if combo is not None:
+                    try:
+                        _n = int(combo.count())
+                    except Exception:
+                        _n = -1
+                    try:
+                        _vis = bool(combo.isVisible())
+                    except Exception:
+                        _vis = False
+                    logger.debug(
+                        "_fill_hanzi_candidates: after populate combo.count=%s visible=%s preferred_hz=%r",
+                        _n,
+                        bool(_vis),
+                        str(preferred_hz or ""),
+                    )
+            except (TypeError, AttributeError, RuntimeError):
+                pass
+
+            # Empty: hide combo and clear dependent fields
+            if not cands_list:
+                try:
+                    if combo is not None:
+                        try:
+                            logger.debug(
+                                "_fill_hanzi_candidates: no candidates -> hiding cand combo (had_combo=%s)",
+                                bool(combo is not None),
+                            )
+                        except Exception:
+                            pass
+                        combo.setVisible(False)
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
+
+                try:
+                    w_hz = getattr(self, "_add_hz", None)
+                    if w_hz is not None:
+                        w_hz.clear()
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
+
+                try:
+                    w_mn = getattr(self, "_add_mn", None)
+                    if w_mn is not None:
+                        w_mn.clear()
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
+
+                _ctx_set("hanzi", "")
+                _ctx_set("hz_ok", False)
+                _ctx_set("meaning", "")
+                _ctx_set("mn_ok", False)
+
+                try:
+                    self._mark_hanzi_committed(False)
+                except (TypeError, AttributeError, RuntimeError):
+                    try:
+                        self._hanzi_committed = False
+                    except (TypeError, AttributeError, RuntimeError):
+                        pass
+                return
+
+            # Non-empty: show combo
+            try:
+                if combo is not None:
+                    combo.setVisible(True)
+            except (TypeError, AttributeError, RuntimeError):
+                pass
+
+            # Choose selection index (preferred or first)
+            sel_idx = 0
+            if preferred_hz and combo is not None:
+                try:
+                    i = int(combo.findText(str(preferred_hz).strip()))
+                    if i >= 0:
+                        sel_idx = i
+                except (TypeError, AttributeError, RuntimeError, ValueError):
+                    sel_idx = 0
+
+            # Apply selection (signals blocked)
+            try:
+                if combo is not None:
+                    combo.setCurrentIndex(int(sel_idx))
+            except (TypeError, AttributeError, RuntimeError, ValueError):
+                pass
+
+            # Resolve selected_hz and src aligned to candidate list order
+            selected_hz = ""
+            selected_src = ""
+            try:
+                row = cands_list[int(sel_idx)] if int(sel_idx) < len(cands_list) else None
+            except (TypeError, AttributeError, RuntimeError, ValueError, IndexError):
+                row = None
+
+            if row is not None:
+                try:
+                    selected_hz = str((row[0] if isinstance(row, (list, tuple)) and len(row) >= 1 else row) or "").strip()
+                except (TypeError, AttributeError, RuntimeError, ValueError):
+                    selected_hz = ""
+                try:
+                    if isinstance(row, (list, tuple)) and len(row) > 1:
+                        selected_src = str(row[1] or "").strip()
+                except (TypeError, AttributeError, RuntimeError, ValueError):
+                    selected_src = ""
+
+            if not selected_hz and combo is not None:
+                try:
+                    selected_hz = str(combo.currentText() or "").strip()
+                except (TypeError, AttributeError, RuntimeError):
+                    selected_hz = ""
+
+            # Set Hanzi field
+            try:
+                w_hz2 = getattr(self, "_add_hz", None)
+                if w_hz2 is not None:
+                    if selected_hz:
+                        w_hz2.setText(selected_hz)
+                    else:
+                        w_hz2.clear()
+            except (TypeError, AttributeError, RuntimeError):
+                pass
+
+            _ctx_set("hanzi", selected_hz)
+            _ctx_set("hz_ok", bool(selected_hz))
+
+            # Meaning autofill policy (test + UX compatible):
+            #   - Always prefer vocab-backed meanings (via _resolve_meanings_for_candidate),
+            #     even when there are multiple candidates.
+            #   - If there is exactly one candidate, allow a secondary fallback
+            #     (_meanings_for_hanzi) if the resolver returns nothing.
+            #   - If there are multiple candidates and the resolver returns nothing,
+            #     leave Meaning blank until the user explicitly selects a candidate.
+            joined = ""
+            if selected_hz:
+                try:
+                    ms = self._resolve_meanings_for_candidate(selected_hz, selected_src)
+                    joined = ", ".join([str(x).strip() for x in (ms or []) if str(x).strip()])
+                except (TypeError, AttributeError, RuntimeError):
+                    joined = ""
+
+            if (not str(joined or "").strip()) and (len(cands_list) == 1) and selected_hz:
+                try:
+                    ms2 = self._meanings_for_hanzi(selected_hz)
+                    joined = ", ".join([str(x).strip() for x in (ms2 or []) if str(x).strip()])
+                except (TypeError, AttributeError, RuntimeError):
+                    joined = ""
+
+            # Only set the meaning field when we have something concrete to show.
+            # For multi-candidate lists with no resolver meaning, keep it blank.
+            try:
+                w_mn2 = getattr(self, "_add_mn", None)
+                if w_mn2 is not None:
+                    if str(joined or "").strip():
+                        w_mn2.setText(joined)
+                    else:
+                        w_mn2.clear()
+            except (TypeError, AttributeError, RuntimeError):
+                pass
+
+            _ctx_set("meaning", joined)
+            _ctx_set("mn_ok", bool(str(joined or "").strip()))
+
+            # Mark committed only when there is exactly one candidate
+            if len(cands_list) == 1 and bool(selected_hz):
+                try:
+                    self._mark_hanzi_committed(True)
+                except (TypeError, AttributeError, RuntimeError):
+                    try:
+                        self._hanzi_committed = True
+                    except (TypeError, AttributeError, RuntimeError):
+                        pass
+            else:
+                try:
+                    self._mark_hanzi_committed(False)
+                except (TypeError, AttributeError, RuntimeError):
+                    try:
+                        self._hanzi_committed = False
+                    except (TypeError, AttributeError, RuntimeError):
+                        pass
+
+        finally:
+            if combo is not None:
+                try:
+                    combo.blockSignals(False)
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
+
+        # Refresh Save gating
         try:
-            if callable(getattr(self, "_update_save_enabled", None)):
-                self._update_save_enabled()
+            fn_gate = getattr(self, "_update_save_enabled", None)
+            if callable(fn_gate):
+                fn_gate()
         except (TypeError, AttributeError, RuntimeError):
             pass
 
-        # Move focus forward to Meaning to avoid category stealing focus
+        # Focus behaviour:
+        #   - single candidate -> proceed to Meaning
+        #   - multiple candidates -> focus candidate combo (never steal to Meaning)
         try:
-            w_mn = getattr(self, "_add_mn", None)
-            if w_mn is not None:
-                w_mn.setFocus()
+            if len(cands_list) == 1:
+                w_mn3 = getattr(self, "_add_mn", None)
+                if w_mn3 is not None:
+                    w_mn3.setFocus()
+            else:
+                if combo is not None and hasattr(combo, "setFocus"):
+                    combo.setFocus()
         except (TypeError, AttributeError, RuntimeError):
             pass
 
@@ -2773,11 +3912,9 @@ class CategoryManagerDialog(QDialog):
           - Wiring is idempotent via _add_edit_wired to avoid duplicate connects.
         """
 
-        # Idempotent wiring: do this once per dialog instance.
         if bool(getattr(self, "_add_edit_wired", False)):
             return
 
-        # Mark wired at the end no matter what; wiring is best-effort.
         try:
             # --- Hide legacy inline Save by default ---
             try:
@@ -2799,19 +3936,17 @@ class CategoryManagerDialog(QDialog):
             except (TypeError, AttributeError, RuntimeError):
                 pass
 
+            # Reset dependent fields only on genuine user edits (not programmatic setText)
+            try:
+                fn_reset = getattr(self, "_on_add_jy_user_edited", None)
+                if w_jy is not None and callable(fn_reset):
+                    self._try_connect(getattr(w_jy, "textEdited", None), fn_reset)
+            except (TypeError, AttributeError, RuntimeError):
+                pass
 
             # --- Meaning wiring ---
             w_mn = getattr(self, "_add_mn", None)
             fn_mn_enter = getattr(self, "_on_meaning_enter_committed", None)
-            fn_mn_legacy = getattr(self, "_on_meanings_enter", None)
-
-            # Legacy handler remains wired (distinct) for backward compatibility.
-            if w_mn is not None and callable(fn_mn_legacy) and fn_mn_legacy is not fn_mn_enter:
-                try:
-                    self._try_connect(getattr(w_mn, "returnPressed", None), fn_mn_legacy)
-                except (TypeError, AttributeError, RuntimeError):
-                    pass
-
             try:
                 self._wire_line_edit_common(
                     w_mn,
@@ -2821,39 +3956,66 @@ class CategoryManagerDialog(QDialog):
             except (TypeError, AttributeError, RuntimeError):
                 pass
 
-            # When the user edits Jyutping, reset dependent fields to pre-validation state.
-            # Use textEdited so programmatic setText() doesn't thrash the UI.
+            # --- Category wiring ---
+            w_cat = getattr(self, "_add_cat", None)
+
+            # Ensure editable (required for new category entry)
             try:
-                fn_reset = getattr(self, "_on_add_jy_user_edited", None)
-                if w_jy is not None and callable(fn_reset):
-                    self._try_connect(getattr(w_jy, "textEdited", None), fn_reset)
+                if w_cat is not None and hasattr(w_cat, "setEditable"):
+                    w_cat.setEditable(True)
             except (TypeError, AttributeError, RuntimeError):
                 pass
 
-            # --- Category wiring (best-effort) ---
-            w_cat = getattr(self, "_add_cat", None)
+            # Ensure we have the UI-only controller. It owns Return/Enter wiring and the add-category popup.
+            try:
+                ctrl = getattr(self, "_cat_combo_ctrl", None)
+            except (TypeError, AttributeError, RuntimeError):
+                ctrl = None
+
+            if ctrl is None:
+                try:
+                    from ui.category_combo import CategoryComboController
+                except Exception:
+                    CategoryComboController = None
+
+                try:
+                    if CategoryComboController is not None and w_cat is not None:
+                        self._cat_combo_ctrl = CategoryComboController(
+                            combo=w_cat,
+                            on_commit=(lambda: self._on_add_category_committed(user_action=True)),
+                            on_add_new=None,
+                        )
+                    else:
+                        self._cat_combo_ctrl = None
+                except Exception:
+                    self._cat_combo_ctrl = None
+
+            # Save gating can observe changes; must not commit or move focus.
             try:
                 self._wire_combo_common(w_cat, on_change=fn_gate)
             except (TypeError, AttributeError, RuntimeError):
                 pass
 
-            # When the user changes category, recompute Hanzi candidates with current Jyutping.
-            try:
-                fn_cat_changed = getattr(self, "_on_add_category_changed", None)
-                if w_cat is not None and callable(fn_cat_changed):
-                    self._try_connect(getattr(w_cat, "currentTextChanged", None), fn_cat_changed)
-            except (TypeError, AttributeError, RuntimeError):
-                pass
+            # Commit only when the user explicitly selects from popup (activated).
+            fn_cat_commit = getattr(self, "_on_add_category_committed", None)
+            if w_cat is not None and callable(fn_cat_commit):
+                try:
+                    sig = getattr(w_cat, "activated", None)
+                    if sig is not None:
+                        try:
+                            sig_int = sig[int] if hasattr(sig, "__getitem__") else sig
+                            self._try_connect(sig_int, fn_cat_commit)
+                        except (TypeError, AttributeError, RuntimeError):
+                            self._try_connect(sig, fn_cat_commit)
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
 
             # --- Hanzi candidate combobox wiring ---
-            # Deterministic: prefer the explicit int overload and avoid double-firing
-            # via both index-changed and text-changed signals.
             try:
                 combo = getattr(self, "_cand_combo", None)
             except (TypeError, AttributeError, RuntimeError):
                 combo = None
 
-            # Keep the controller (population helper) if available, but wire signals on the real QComboBox.
             try:
                 if combo is not None:
                     self._cand_combo_ctrl = CandidateComboController(combo)
@@ -2874,7 +4036,6 @@ class CategoryManagerDialog(QDialog):
                             except (TypeError, AttributeError, RuntimeError):
                                 self._try_connect(sig, fn_pick)
 
-                        # Optional: allow re-selecting the same index by user action.
                         sig2 = getattr(combo, "activated", None)
                         if sig2 is not None:
                             try:
@@ -2885,14 +4046,13 @@ class CategoryManagerDialog(QDialog):
                 except (TypeError, AttributeError, RuntimeError):
                     pass
 
-            # Ensure Save gating is correct at startup.
             if callable(fn_gate):
                 try:
                     fn_gate()
                 except (TypeError, AttributeError, RuntimeError):
                     pass
+
         finally:
-            # One-time wiring guard.
             self._add_edit_wired = True
 
         return
@@ -3011,7 +4171,12 @@ class CategoryManagerDialog(QDialog):
                 except (TypeError, AttributeError, RuntimeError):
                     _ctx_replace(jy_ok=False)
             try:
-                self._update_save_enabled()
+                try:
+                    fn_gate = getattr(self, "_update_save_enabled", None)
+                    if callable(fn_gate):
+                        fn_gate()
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
             except (TypeError, AttributeError, RuntimeError):
                 pass
             return
@@ -3031,7 +4196,12 @@ class CategoryManagerDialog(QDialog):
 
         if not jy_ok:
             try:
-                self._update_save_enabled()
+                try:
+                    fn_gate = getattr(self, "_update_save_enabled", None)
+                    if callable(fn_gate):
+                        fn_gate()
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
             except (TypeError, AttributeError, RuntimeError):
                 pass
             return
@@ -3066,7 +4236,12 @@ class CategoryManagerDialog(QDialog):
             except ():
                 pass
             try:
-                self._update_save_enabled()
+                try:
+                    fn_gate = getattr(self, "_update_save_enabled", None)
+                    if callable(fn_gate):
+                        fn_gate()
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
             except (TypeError, AttributeError, RuntimeError):
                 pass
             return
@@ -3079,7 +4254,12 @@ class CategoryManagerDialog(QDialog):
             pass
 
         try:
-            self._update_save_enabled()
+            try:
+                fn_gate = getattr(self, "_update_save_enabled", None)
+                if callable(fn_gate):
+                    fn_gate()
+            except (TypeError, AttributeError, RuntimeError):
+                pass
         except (TypeError, AttributeError, RuntimeError):
             pass
         return
@@ -3224,9 +4404,9 @@ class CategoryManagerDialog(QDialog):
             except (TypeError, AttributeError, RuntimeError):
                 data = None
 
-            if (data is None) and (Qt is not None):
+            if (data is None) and (_Qt is not None):
                 try:
-                    data = combo.itemData(idx, Qt.UserRole)
+                    data = combo.itemData(idx, _Qt.ItemDataRole.UserRole)
                 except (TypeError, AttributeError, RuntimeError):
                     data = None
 

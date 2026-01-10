@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Iterable, Tuple, Optional
 
 try:
-    from PySide6.QtWidgets import QComboBox
+    from PySide6.QtWidgets import QComboBox, QMessageBox
 except Exception:  # pragma: no cover
     QComboBox = None  # type: ignore
 
@@ -92,3 +92,22 @@ class CandidateComboController:
         except Exception:
             pass
         combo.setFocus()
+
+    def confirm_add_new_category(self, *, text: str | None = None) -> bool:
+        """UI-only: ask whether to add a brand-new category. Does not mutate any maps."""
+        cat = (text or self.current_text() or "").strip()
+        if not cat:
+            return False
+
+        try:
+            res = QMessageBox.question(
+                self._combo,
+                "Add new category?",
+                "The category ‘{0}’ does not exist.\n\nAdd it now?".format(cat),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes,
+            )
+        except (TypeError, AttributeError, RuntimeError):
+            return False
+
+        return bool(res == QMessageBox.StandardButton.Yes)

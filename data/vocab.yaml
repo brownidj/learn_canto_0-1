@@ -215,6 +215,13 @@ entries:
       - colors
       gloss: light blue
       hanzi: 淺藍
+  cin4:
+    jyutping: cin4
+    senses:
+    - categories:
+      - direction
+      gloss: front, forward
+      hanzi: 前
   cing2:
     headword: 請
     jyutping: cing2
