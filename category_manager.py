@@ -34,7 +34,8 @@ import logging
 import os
 import time
 from dataclasses import dataclass
-from typing import Callable, Literal, Optional
+
+from domain.add_edit_controller import AddEditInputs, AddEditController
 
 # ------------------------------
 # Candidate source labels (UI)
@@ -178,188 +179,6 @@ def _save_button(self) -> QPushButton | None:
 # Add/Edit controller (pure)
 # ---------------------------
 
-FocusTarget = Literal["jy", "hz", "mn", "cat"]
-
-
-@dataclass(frozen=True)
-class AddEditInputs:
-    jyutping: str
-    hanzi: str
-    meaning: str
-    category: str
-    saving: bool = False
-
-    # Optional environment
-    validate_jy: Optional[Callable[[str], bool]] = None
-    valid_categories: Optional[set[str]] = None
-
-
-@dataclass(frozen=True)
-class AddEditResult:
-    preview: dict
-    ready: bool
-    show_save: bool = False
-    clear_fields: bool = False
-    focus_target: Optional[FocusTarget] = None
-    commit: bool = False
-
-    def to_dict(self) -> dict:
-        """Return a stable, test-friendly dict contract."""
-        preview_payload = self.preview if isinstance(self.preview, dict) else {}
-        commit_payload = preview_payload if self.commit else None
-        return {
-            "preview_payload": preview_payload,
-            "commit_payload": commit_payload,
-            "ready": bool(self.ready),
-            "show_save": bool(self.show_save),
-            "clear_fields": bool(self.clear_fields),
-            "focus_target": self.focus_target,
-            "commit": bool(self.commit),
-        }
-
-
-class AddEditController:
-    """
-    Pure decision-making for the Add/Edit flow.
-    No Qt. No side effects. Deterministic.
-    """
-
-    # ---------- core validity ----------
-
-    @staticmethod
-    def is_ready(inp: AddEditInputs) -> bool:
-        if inp.saving:
-            return False
-
-        if not inp.jyutping or not inp.hanzi or not inp.meaning or not inp.category:
-            return False
-
-        if inp.valid_categories is not None:
-            if inp.category not in inp.valid_categories:
-                return False
-
-        if inp.validate_jy is not None:
-            try:
-                if not inp.validate_jy(inp.jyutping):
-                    return False
-            except (TypeError, ValueError):
-                return False
-
-        return True
-
-    # ---------- meaning-enter decision ----------
-
-    @staticmethod
-    def on_meaning_enter(
-            *args,
-            fields: dict | None = None,
-            vocab: dict | None = None,
-            cats: dict | None = None,
-            decision: str = "edit",
-            preview: dict | None = None,
-            inp: AddEditInputs | None = None,
-            **kwargs,
-    ) -> dict:
-        """
-        Decisioning for Meaning-Enter.
-
-        Supports both call styles:
-          - UI style: on_meaning_enter(preview=..., decision=..., inp=...)
-          - Test style: on_meaning_enter(fields=..., cats=..., decision=...)
-        """
-
-        # Positional tolerance: on_meaning_enter(fields_dict, ...)
-        if fields is None and args:
-            if isinstance(args[0], dict):
-                fields = args[0]
-
-        # Normalise decision
-        try:
-            decision = str(decision or "edit").strip().lower()
-        except (TypeError, AttributeError, ValueError):
-            decision = "edit"
-
-        # If tests provided fields, build canonical preview from canonical keys only.
-        # IMPORTANT: do NOT accept aliases here (no 'gloss', no 'categories').
-        if fields is not None and isinstance(fields, dict):
-            try:
-                jy = str(fields.get("jyutping", "") or "").strip()
-            except (TypeError, AttributeError, ValueError):
-                jy = ""
-            try:
-                hz = str(fields.get("hanzi", "") or "").strip()
-            except (TypeError, AttributeError, ValueError):
-                hz = ""
-            try:
-                mn = str(fields.get("meaning", "") or "").strip()
-            except (TypeError, AttributeError, ValueError):
-                mn = ""
-            try:
-                cat = str(fields.get("category", "") or "").strip()
-            except (TypeError, AttributeError, ValueError):
-                cat = ""
-
-            preview = {"jyutping": jy, "hanzi": hz, "meaning": mn, "category": cat}
-
-        if preview is None:
-            preview = {}
-
-        # If the caller didn't provide AddEditInputs, synthesise it (pure-python safe).
-        if inp is None:
-            try:
-                valid_categories = set((cats or {}).keys()) if isinstance(cats, dict) else None
-            except (TypeError, AttributeError):
-                valid_categories = None
-
-            # If AddEditInputs exists in this file already, use it.
-            inp = AddEditInputs(
-                jyutping=str(preview.get("jyutping", "") or "").strip(),
-                hanzi=str(preview.get("hanzi", "") or "").strip(),
-                meaning=str(preview.get("meaning", "") or "").strip(),
-                category=str(preview.get("category", "") or "").strip(),
-                saving=bool(kwargs.get("saving", False)),
-                validate_jy=kwargs.get("validate_jy"),
-                valid_categories=valid_categories,
-            )
-
-        # It should continue to use: preview, decision, inp
-
-        ready = AddEditController.is_ready(inp)
-
-        if decision == "edit":
-            return AddEditResult(
-                preview=preview,
-                ready=ready,
-                show_save=True,
-                focus_target=None,
-            ).to_dict()
-
-        if decision == "cancel":
-            return AddEditResult(
-                preview=preview,
-                ready=False,
-                clear_fields=True,
-                focus_target="jy",
-            ).to_dict()
-
-        # decision == "save"
-        if ready:
-            return AddEditResult(
-                preview=preview,
-                ready=True,
-                commit=True,
-                clear_fields=True,
-                focus_target="jy",
-            ).to_dict()
-
-        # Save requested but not ready → fall back to edit
-        return AddEditResult(
-            preview=preview,
-            ready=False,
-            show_save=True,
-        ).to_dict()
-
-
 @dataclass(frozen=True)
 class AddEntryPreview:
     jyutping: str = ""
@@ -436,6 +255,7 @@ class AddEntryPreviewBuilder:
         """
         # 1) Primary: legacy safe reader (widgets)
         jy = hz = mn = cat = ""
+        selected_hz = ""
         try:
             fn = getattr(dialog, "_read_add_fields", None)
             if callable(fn):
@@ -737,35 +557,17 @@ class CategoryManagerDialog(QDialog):
 
             # Persistence: repo expects persist(cats_map). Most existing persistence fns are
             # zero-arg; adapt them rather than changing their signatures.
-            persist_cb = None
-            for name in (
-                "_save_categories_map",
-                "_persist_categories_map",
-                "_save_categories_yaml",
-                "_write_categories_yaml",
-                "_write_categories_file",
-            ):
-                fn = getattr(self, name, None)
-                if callable(fn):
-                    def _persist(_cats_map, _fn=fn):
-                        try:
-                            logger.debug(
-                                "CategoryRepo.persist: invoking %s (cats_n=%s keys_sample=%s)",
-                                getattr(_fn, "__name__", str(_fn)),
-                                (len(_cats_map) if isinstance(_cats_map, dict) else "?"),
-                                (sorted(list(_cats_map.keys()))[:10] if isinstance(_cats_map, dict) else []),
-                            )
-                        except Exception:
-                            pass
+            # Persistence: write categories.yaml directly.
+            # Domain repo/service own mutation; the dialog owns the file-write boundary.
+            def _persist_cb(_cats_map: dict) -> None:
+                try:
+                    p = categories_yaml_path()
+                    with open(p, "w", encoding="utf-8") as fh:
+                        yaml.safe_dump(_cats_map, fh, allow_unicode=True, sort_keys=True)
+                except (TypeError, AttributeError, RuntimeError, ValueError, OSError):
+                    return
 
-                        _fn()
-
-                        try:
-                            logger.debug("CategoryRepo.persist: %s completed", getattr(_fn, "__name__", str(_fn)))
-                        except Exception:
-                            pass
-                    persist_cb = _persist
-                    break
+            persist_cb = _persist_cb
 
             repo = CategoryRepo(
                 self._cats,
@@ -880,6 +682,8 @@ class CategoryManagerDialog(QDialog):
 
         Best-effort only: must never raise.
         """
+        combo = None
+        idx = -1
         try:
             cats_map = getattr(self, "_cats", None)
         except (TypeError, AttributeError, RuntimeError):
@@ -891,12 +695,12 @@ class CategoryManagerDialog(QDialog):
         # Rebuild derived list
         try:
             keys = [str(k).strip() for k in cats_map.keys() if str(k).strip()]
-        except Exception:
+        except (TypeError, ValueError):
             keys = []
 
         try:
             keys = [k for k in keys if k.lower() != "all"]
-        except Exception:
+        except (TypeError, ValueError):
             pass
 
         if not any((k.lower() == "unassigned") for k in keys):
@@ -904,10 +708,10 @@ class CategoryManagerDialog(QDialog):
 
         try:
             self._all_cats = sorted(set(keys), key=lambda s: str(s).lower())
-        except Exception:
+        except (TypeError, ValueError):
             try:
                 self._all_cats = list(dict.fromkeys(keys))
-            except Exception:
+            except (TypeError, ValueError):
                 return
 
         # Repopulate combobox items
@@ -940,21 +744,21 @@ class CategoryManagerDialog(QDialog):
             try:
                 if hasattr(combo, "findText") and int(combo.findText(sel)) < 0 and hasattr(combo, "addItem"):
                     combo.addItem(sel)
-            except Exception:
+            except (TypeError, AttributeError, RuntimeError, ValueError):
                 pass
             try:
                 combo.setCurrentText(sel)
-            except Exception:
+            except (TypeError, AttributeError, RuntimeError, ValueError):
                 try:
                     idx = int(combo.findText(sel))
                     if idx >= 0:
                         combo.setCurrentIndex(idx)
-                except Exception:
+                except (TypeError, AttributeError, RuntimeError, ValueError):
                     pass
         else:
             try:
                 combo.setCurrentIndex(-1)
-            except Exception:
+            except (TypeError, AttributeError, RuntimeError, ValueError):
                 pass
 
         try:
@@ -2121,7 +1925,7 @@ class CategoryManagerDialog(QDialog):
         """
         try:
             from PySide6.QtCore import QTimer
-        except Exception:
+        except (ImportError, TypeError):
             QTimer = None
 
         def _apply() -> None:
@@ -2132,7 +1936,7 @@ class CategoryManagerDialog(QDialog):
                 fw_name = None
                 try:
                     fw_name = str(fw.objectName() or "") if fw is not None else ""
-                except Exception:
+                except (TypeError, AttributeError, RuntimeError):
                     fw_name = ""
                 logger.debug(
                     "DEFER_FOCUS start: target=%r current_focus=%r name=%r",
@@ -2140,7 +1944,7 @@ class CategoryManagerDialog(QDialog):
                     type(fw).__name__ if fw else None,
                     fw_name,
                 )
-            except Exception:
+            except (TypeError, AttributeError, RuntimeError):
                 pass
             try:
                 if target == "cand":
@@ -2148,7 +1952,7 @@ class CategoryManagerDialog(QDialog):
                     if combo is not None:
                         try:
                             combo.setVisible(True)
-                        except Exception:
+                        except (TypeError, AttributeError, RuntimeError):
                             pass
                         try:
                             combo.setFocus()
@@ -2159,13 +1963,13 @@ class CategoryManagerDialog(QDialog):
                                 fw2_name = None
                                 try:
                                     fw2_name = str(fw2.objectName() or "") if fw2 is not None else ""
-                                except Exception:
+                                except (TypeError, AttributeError, RuntimeError):
                                     fw2_name = ""
                                 logger.debug("DEFER_FOCUS end: target=%r final_focus=%r name=%r", target, type(fw2).__name__ if fw2 else None, fw2_name)
-                            except Exception:
+                            except (TypeError, AttributeError, RuntimeError):
                                 pass
                             return
-                        except Exception:
+                        except (TypeError, AttributeError, RuntimeError):
                             pass
                     # fall back
                     target2 = "hz"
@@ -2179,14 +1983,14 @@ class CategoryManagerDialog(QDialog):
 
                     try:
                         hz = getattr(self, "_add_hz", None)
-                    except Exception:
+                    except (TypeError, AttributeError, RuntimeError):
                         hz = None
 
                     hz_ro = False
                     try:
                         if hz is not None and callable(getattr(hz, "isReadOnly", None)):
                             hz_ro = bool(hz.isReadOnly())
-                    except Exception:
+                    except (TypeError, AttributeError, RuntimeError):
                         hz_ro = False
 
                     if hz_ro:
@@ -2203,11 +2007,15 @@ class CategoryManagerDialog(QDialog):
                         ):
                             try:
                                 fn = getattr(self, name, None)
-                            except Exception:
+                            except (TypeError, AttributeError, RuntimeError):
                                 fn = None
+
                             if callable(fn):
                                 try:
-                                    fn()
+                                    from typing import cast
+                                    from collections.abc import Callable
+                                    _fn = cast(Callable[[], object], fn)
+                                    _fn()
                                     did_manual = True
                                     break
                                 except Exception:
@@ -2217,7 +2025,7 @@ class CategoryManagerDialog(QDialog):
                         if not did_manual:
                             try:
                                 btn = getattr(self, "_btn_custom_hz", None)
-                            except Exception:
+                            except (TypeError, AttributeError, RuntimeError):
                                 btn = None
                             try:
                                 if btn is not None and bool(btn.isEnabled()) and bool(btn.isVisible()):
@@ -2230,13 +2038,13 @@ class CategoryManagerDialog(QDialog):
                                         except Exception:
                                             pass
                                     did_manual = True
-                            except Exception:
+                            except (TypeError, AttributeError, RuntimeError):
                                 did_manual = False
 
                         # After entering manual mode, try to focus Hanzi again so typing can begin.
                         try:
                             self._focus_hanzi(select_all=True)
-                        except Exception:
+                        except (TypeError, AttributeError, RuntimeError):
                             pass
 
                     # --- DEBUG LOGGING: focus state at end ---
@@ -2246,7 +2054,7 @@ class CategoryManagerDialog(QDialog):
                         fw2_name = None
                         try:
                             fw2_name = str(fw2.objectName() or "") if fw2 is not None else ""
-                        except Exception:
+                        except (TypeError, AttributeError, RuntimeError):
                             fw2_name = ""
                         logger.debug(
                             "DEFER_FOCUS end: target=%r final_focus=%r name=%r",
@@ -2254,7 +2062,7 @@ class CategoryManagerDialog(QDialog):
                             type(fw2).__name__ if fw2 else None,
                             fw2_name,
                         )
-                    except Exception:
+                    except (TypeError, AttributeError, RuntimeError):
                         pass
                     return
                 if target2 == "mn":
@@ -2266,10 +2074,10 @@ class CategoryManagerDialog(QDialog):
                         fw2_name = None
                         try:
                             fw2_name = str(fw2.objectName() or "") if fw2 is not None else ""
-                        except Exception:
+                        except (TypeError, AttributeError, RuntimeError):
                             fw2_name = ""
                         logger.debug("DEFER_FOCUS end: target=%r final_focus=%r name=%r", target, type(fw2).__name__ if fw2 else None, fw2_name)
-                    except Exception:
+                    except (TypeError, AttributeError, RuntimeError):
                         pass
                     return
                 if target2 == "jy":
@@ -2281,10 +2089,10 @@ class CategoryManagerDialog(QDialog):
                         fw2_name = None
                         try:
                             fw2_name = str(fw2.objectName() or "") if fw2 is not None else ""
-                        except Exception:
+                        except (TypeError, AttributeError, RuntimeError):
                             fw2_name = ""
                         logger.debug("DEFER_FOCUS end: target=%r final_focus=%r name=%r", target, type(fw2).__name__ if fw2 else None, fw2_name)
-                    except Exception:
+                    except (TypeError, AttributeError, RuntimeError):
                         pass
                     return
                 if target2 == "cat":
@@ -2296,13 +2104,13 @@ class CategoryManagerDialog(QDialog):
                         fw2_name = None
                         try:
                             fw2_name = str(fw2.objectName() or "") if fw2 is not None else ""
-                        except Exception:
+                        except (TypeError, AttributeError, RuntimeError):
                             fw2_name = ""
                         logger.debug("DEFER_FOCUS end: target=%r final_focus=%r name=%r", target, type(fw2).__name__ if fw2 else None, fw2_name)
-                    except Exception:
+                    except (TypeError, AttributeError, RuntimeError):
                         pass
                     return
-            except Exception:
+            except (TypeError, AttributeError, RuntimeError):
                 # --- DEBUG LOGGING: focus state at end (exceptional) ---
                 try:
                     from PySide6.QtWidgets import QApplication
@@ -2310,10 +2118,10 @@ class CategoryManagerDialog(QDialog):
                     fw2_name = None
                     try:
                         fw2_name = str(fw2.objectName() or "") if fw2 is not None else ""
-                    except Exception:
+                    except (TypeError, AttributeError, RuntimeError):
                         fw2_name = ""
                     logger.debug("DEFER_FOCUS end: target=%r final_focus=%r name=%r", target, type(fw2).__name__ if fw2 else None, fw2_name)
-                except Exception:
+                except (TypeError, AttributeError, RuntimeError):
                     pass
                 return
             # --- DEBUG LOGGING: focus state at end (normal fallthrough) ---
@@ -2409,39 +2217,10 @@ class CategoryManagerDialog(QDialog):
         except (TypeError, AttributeError, RuntimeError):
             canon_cb = None
 
-        # Persist callback: prefer existing dialog persistence hooks; fall back to writing categories.yaml.
-        def _persist_cb(_cats_map):
-            # Prefer existing best-effort persistence hooks if present.
-            for name in (
-                "_do_autosave",
-                "_queue_autosave",
-                "_write_categories_yaml",
-                "_save_categories_yaml",
-                "_persist_categories",
-                "_persist_categories_map",
-                "_save_categories_map",
-            ):
-                try:
-                    fn = getattr(self, name, None)
-                except (TypeError, AttributeError, RuntimeError):
-                    fn = None
-
-                if callable(fn):
-                    try:
-                        # Some hooks accept the map; others are zero-arg.
-                        try:
-                            fn(_cats_map)
-                        except TypeError:
-                            fn()
-                        return
-                    except (TypeError, AttributeError, RuntimeError, ValueError, OSError):
-                        return
-
-            # Final fallback: write categories.yaml directly.
+        # Persist callback: write categories.yaml directly.
+        # The repo/service layer owns mutation; the dialog owns the file write boundary.
+        def _persist_cb(_cats_map: dict) -> None:
             try:
-                from domain.storage_paths import categories_yaml_path
-                import yaml
-
                 p = categories_yaml_path()
                 with open(p, "w", encoding="utf-8") as fh:
                     yaml.safe_dump(_cats_map, fh, allow_unicode=True, sort_keys=True)
@@ -2611,7 +2390,8 @@ class CategoryManagerDialog(QDialog):
                 try:
                     fn_gate = getattr(self, "_update_save_enabled", None)
                     if callable(fn_gate):
-                        fn_gate()
+                        _gate = fn_gate  # type-narrow for linters
+                        _gate()
                 except (TypeError, AttributeError, RuntimeError):
                     pass
                 return
@@ -2634,7 +2414,8 @@ class CategoryManagerDialog(QDialog):
                 try:
                     fn_gate = getattr(self, "_update_save_enabled", None)
                     if callable(fn_gate):
-                        fn_gate()
+                        _gate = fn_gate  # type-narrow for linters
+                        _gate()
                 except (TypeError, AttributeError, RuntimeError):
                     pass
                 return
@@ -2766,7 +2547,8 @@ class CategoryManagerDialog(QDialog):
                 try:
                     fn_gate = getattr(self, "_update_save_enabled", None)
                     if callable(fn_gate):
-                        fn_gate()
+                        _gate = fn_gate  # type-narrow for linters
+                        _gate()
                 except (TypeError, AttributeError, RuntimeError):
                     pass
                 return
@@ -2786,7 +2568,8 @@ class CategoryManagerDialog(QDialog):
                 try:
                     fn_gate = getattr(self, "_update_save_enabled", None)
                     if callable(fn_gate):
-                        fn_gate()
+                        _gate = fn_gate  # type-narrow for linters
+                        _gate()
                 except (TypeError, AttributeError, RuntimeError):
                     pass
                 return
@@ -2941,7 +2724,8 @@ class CategoryManagerDialog(QDialog):
             try:
                 fn_gate = getattr(self, "_update_save_enabled", None)
                 if callable(fn_gate):
-                    fn_gate()
+                    _gate = fn_gate  # type-narrow for linters
+                    _gate()
             except (TypeError, AttributeError, RuntimeError):
                 pass
 
@@ -3716,7 +3500,8 @@ class CategoryManagerDialog(QDialog):
         try:
             fn_gate = getattr(self, "_update_save_enabled", None)
             if callable(fn_gate):
-                fn_gate()
+                _gate = fn_gate  # type-narrow for linters
+                _gate()
         except (TypeError, AttributeError, RuntimeError):
             pass
 
@@ -3863,16 +3648,8 @@ class CategoryManagerDialog(QDialog):
         except (TypeError, AttributeError, RuntimeError):
             pass
 
-        # Locate Save button defensively (attribute names vary across builds)
-        btn = None
-        for name in ("btn_save",):
-            try:
-                b = getattr(self, name, None)
-            except (TypeError, AttributeError, RuntimeError):
-                b = None
-            if b is not None:
-                btn = b
-                break
+        # Locate Save button (canonical)
+        btn = getattr(self, "btn_save", None)
 
         if btn is None:
             if QPushButton is not None:
@@ -4048,7 +3825,8 @@ class CategoryManagerDialog(QDialog):
 
             if callable(fn_gate):
                 try:
-                    fn_gate()
+                    _gate = fn_gate  # type-narrow for linters
+                    _gate()
                 except (TypeError, AttributeError, RuntimeError):
                     pass
 
@@ -4347,6 +4125,9 @@ class CategoryManagerDialog(QDialog):
         This must never raise.
         """
         # --- resolve combo + index + selected hanzi ---
+        combo = None
+        idx = -1
+        selected_hz = ""
         try:
             combo = getattr(self, "_cand_combo", None)
             if combo is None:
@@ -4392,6 +4173,10 @@ class CategoryManagerDialog(QDialog):
 
         except (TypeError, AttributeError, RuntimeError):
             pass
+
+        # Guard: if resolution failed, bail out before continuing.
+        if combo is None or idx < 0 or (not selected_hz):
+            return
 
         # --- pull src from itemData (CandidateComboController) ---
         src = ""
