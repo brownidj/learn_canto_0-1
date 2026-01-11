@@ -5,11 +5,11 @@ import shlex
 import sys
 import tempfile
 import time
-from typing import Any, cast
+from typing import Any, cast, Optional
 
 import yaml
 from infra.paths import project_root, data_path, ui_path
-
+from persistence.categories_store import load_categories as _load_categories
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +51,58 @@ from PySide6.QtGui import QFontMetrics
 
 from settings import load_all, save_one, reset_all, bounds
 from category_manager import CategoryManagerDialog
+
+# ---- Test helper: construct the Add/Edit dialog deterministically ----
+# Several UI integration tests expect `main._load_add_dialog()` to exist.
+# This must be safe to call when `main` is imported as a module (i.e., without
+# executing the `__main__` block).
+
+def _load_add_dialog(parent: Optional[QWidget] = None) -> CategoryManagerDialog:
+    """Create and return the Add/Edit dialog (CategoryManagerDialog).
+
+    This helper is intended for tests. It avoids reliance on globals initialised
+    in the `__main__` block.
+
+    Args:
+        parent: Optional Qt parent widget.
+
+    Returns:
+        A constructed CategoryManagerDialog instance.
+    """
+    # Ensure a QApplication exists (tests sometimes construct dialogs directly).
+    try:
+        app = QApplication.instance()
+    except Exception:
+        app = None
+
+    if app is None:
+        # Best-effort: create a local application for the dialog.
+        # Use an empty argv to avoid consuming pytest args.
+        try:
+            QApplication([])
+        except Exception:
+            # If we cannot create an application, allow the constructor to raise
+            # in the calling test.
+            pass
+
+    # Load a vocab snapshot (used for duplicate checks / preview behaviour).
+    try:
+        vocab_dict, vocab_categories_map = _load_vocab_from_unified_yaml()
+    except Exception:
+        vocab_dict, vocab_categories_map = {}, {}
+
+    # Load authoritative categories from categories.yaml when available.
+    cats_map = None
+    try:
+        cats_map = _load_categories()
+    except Exception:
+        cats_map = None
+
+    if not isinstance(cats_map, dict) or not cats_map:
+        cats_map = vocab_categories_map if isinstance(vocab_categories_map, dict) else {}
+
+    # Construct the dialog.
+    return CategoryManagerDialog(parent, vocab_dict if isinstance(vocab_dict, dict) else {}, cats_map)
 
 
 # ---- settings shim: provide load_one via load_all if not exported ----

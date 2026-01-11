@@ -191,14 +191,20 @@ class AddEntryPreview:
         hz = (self.hanzi or "").strip()
         mn = (self.meaning or "").strip()
         cat = (self.category or "").strip()
-        return {
+
+        # Canonical keys are always present.
+        payload = {
             "jyutping": jy,
             "hanzi": hz,
             "meaning": mn,
-            "gloss": mn,                 # legacy/test alias
             "category": cat,
-            "categories": ([cat] if cat else []),  # test expects list form
         }
+
+        # Required legacy/test aliases.
+        payload["gloss"] = mn
+        payload["categories"] = ([cat] if cat else [])
+
+        return payload
 
 
 class AddEntryPreviewBuilder:
@@ -332,10 +338,33 @@ class AddEntryPreviewBuilder:
             except (TypeError, AttributeError, RuntimeError, ValueError):
                 hz = hz or ""
 
-        # 4) Enrich meaning from vocab only (single well-defined source)
+        # 4) Enrich meaning using the dialog's single-authority resolver when available.
+        # Only fall back to vocab-derived meanings if the resolver is unavailable.
         if not mn and hz:
-            vocab = AddEntryPreviewBuilder._resolve_vocab(dialog)
-            mn = AddEntryPreviewBuilder._meaning_from_vocab(vocab, hz)
+            resolved = []
+            try:
+                fn_resolve = getattr(dialog, "_resolve_meanings_for_candidate", None)
+            except (TypeError, AttributeError, RuntimeError):
+                fn_resolve = None
+
+            if callable(fn_resolve):
+                try:
+                    resolved = fn_resolve(hz, "") or []
+                except (TypeError, AttributeError, RuntimeError, ValueError):
+                    resolved = []
+
+            if isinstance(resolved, (list, tuple)):
+                try:
+                    parts = [str(x).strip() for x in resolved if str(x).strip()]
+                except (TypeError, AttributeError, RuntimeError, ValueError):
+                    parts = []
+                if parts:
+                    mn = ", ".join(parts)
+
+            # Final fallback: vocab-derived meanings.
+            if not mn:
+                vocab = AddEntryPreviewBuilder._resolve_vocab(dialog)
+                mn = AddEntryPreviewBuilder._meaning_from_vocab(vocab, hz)
 
         return AddEntryPreview(jyutping=jy, hanzi=hz, meaning=mn, category=cat)
 
@@ -1130,10 +1159,9 @@ class CategoryManagerDialog(QDialog):
         self._btn_custom_hz = QPushButton("Enter my own Hanzi", self)
         self._btn_custom_hz.setDefault(False)
         self._btn_custom_hz.setAutoDefault(False)
+        # Always wire the Manual Hanzi button. Handler is best-effort and must never raise.
         try:
-            fn_custom = getattr(self, "_on_custom_hanzi_clicked", None)
-            if callable(fn_custom):
-                self._btn_custom_hz.clicked.connect(fn_custom)
+            self._btn_custom_hz.clicked.connect(self._on_btn_custom_hz_clicked)
         except (TypeError, AttributeError, RuntimeError):
             pass
         form_hanzi.addWidget(self._btn_custom_hz)
@@ -1998,28 +2026,12 @@ class CategoryManagerDialog(QDialog):
                         # auto-enter manual Hanzi mode rather than focusing a button (dead-end).
                         did_manual = False
 
-                        # Prefer an explicit handler if the dialog provides one.
-                        for name in (
-                            "_on_custom_hanzi_clicked",
-                            "_on_enter_custom_hanzi",
-                            "_enter_manual_hanzi_mode",
-                            "_on_btn_custom_hz_clicked",
-                        ):
-                            try:
-                                fn = getattr(self, name, None)
-                            except (TypeError, AttributeError, RuntimeError):
-                                fn = None
-
-                            if callable(fn):
-                                try:
-                                    from typing import cast
-                                    from collections.abc import Callable
-                                    _fn = cast(Callable[[], object], fn)
-                                    _fn()
-                                    did_manual = True
-                                    break
-                                except Exception:
-                                    did_manual = False
+                        # We have a single canonical entrypoint for manual Hanzi mode.
+                        try:
+                            self._on_btn_custom_hz_clicked()
+                            did_manual = True
+                        except Exception:
+                            did_manual = False
 
                         # Fallback: click the existing button if present.
                         if not did_manual:
@@ -2146,6 +2158,122 @@ class CategoryManagerDialog(QDialog):
 
         # Fallback: apply immediately.
         _apply()
+
+    def _on_btn_custom_hz_clicked(self) -> None:
+        """Enter manual Hanzi mode (user types their own Hanzi).
+
+        Must not add UI elements; best-effort and never raise.
+        """
+        try:
+            logger.debug("ManualHanzi: button clicked")
+        except Exception:
+            pass
+
+        # Prefer extracted controller if you created one.
+        try:
+            ctrl = getattr(self, "_manual_hanzi_controller", None)
+        except (TypeError, AttributeError, RuntimeError):
+            ctrl = None
+
+        if ctrl is not None:
+            try:
+                enter = getattr(ctrl, "enter_manual_mode", None)
+            except (TypeError, AttributeError, RuntimeError):
+                enter = None
+
+            if callable(enter):
+                try:
+                    enter()
+                    return
+                except Exception:
+                    pass
+
+        # Local best-effort behaviour.
+        try:
+            self._manual_hanzi_mode = True
+        except Exception:
+            pass
+
+        # Clear any existing auto-selected Hanzi so Save gating requires an explicit manual entry.
+        try:
+            self._mark_hanzi_committed(False)
+        except Exception:
+            pass
+
+        try:
+            ctx = getattr(self, "_add_edit_ctx", None)
+        except (TypeError, AttributeError, RuntimeError):
+            ctx = None
+
+        if ctx is not None:
+            try:
+                ctx.manual_hanzi = True
+            except Exception:
+                pass
+            try:
+                ctx.hanzi = ""
+            except Exception:
+                pass
+            try:
+                ctx.hz_ok = False
+            except Exception:
+                pass
+
+        try:
+            hz = getattr(self, "_add_hz", None)
+        except (TypeError, AttributeError, RuntimeError):
+            hz = None
+
+        if hz is not None:
+            try:
+                hz.setReadOnly(False)
+            except Exception:
+                pass
+            try:
+                hz.clear()
+            except Exception:
+                pass
+            try:
+                hz.setPlaceholderText("Type Hanzi…")
+            except (TypeError, AttributeError, RuntimeError):
+                pass
+
+        try:
+            combo = getattr(self, "_cand_combo", None)
+        except (TypeError, AttributeError, RuntimeError):
+            combo = None
+
+        if combo is not None:
+            try:
+                combo.setVisible(False)
+            except (TypeError, AttributeError, RuntimeError):
+                pass
+            try:
+                combo.setCurrentIndex(-1)
+            except ():
+                pass
+
+        # Focus Hanzi for typing.
+        try:
+            self._focus_hanzi(select_all=True)
+        except (TypeError, AttributeError, RuntimeError):
+            try:
+                if hz is not None and hasattr(hz, "setFocus"):
+                    hz.setFocus()
+            except (TypeError, AttributeError, RuntimeError):
+                pass
+
+        # Refresh Save gating.
+        try:
+            fn_gate = getattr(self, "_update_save_enabled", None)
+        except (TypeError, AttributeError, RuntimeError):
+            fn_gate = None
+
+        if callable(fn_gate):
+            try:
+                fn_gate()
+            except Exception:
+                pass
 
     def _on_save_clicked(self) -> None:
         """Legacy inline Save button handler.
@@ -2888,6 +3016,61 @@ class CategoryManagerDialog(QDialog):
                         pass
         except (TypeError, AttributeError, RuntimeError):
             pass
+
+        # Reset manual-Hanzi state so candidates behave normally for the next entry.
+        try:
+            self._mark_manual_hanzi_mode(False)
+        except Exception:
+            try:
+                self._manual_hanzi_mode = False
+            except Exception:
+                pass
+
+        try:
+            ctx = getattr(self, "_add_edit_ctx", None)
+        except (TypeError, AttributeError, RuntimeError):
+            ctx = None
+
+        if ctx is not None:
+            try:
+                ctx.manual_hanzi = False
+            except Exception:
+                pass
+            try:
+                ctx.hanzi = ""
+            except Exception:
+                pass
+            try:
+                ctx.hz_ok = False
+            except Exception:
+                pass
+
+        try:
+            hz = getattr(self, "_add_hz", None)
+        except (TypeError, AttributeError, RuntimeError):
+            hz = None
+
+        if hz is not None:
+            try:
+                hz.setReadOnly(True)
+            except Exception:
+                pass
+            try:
+                hz.setPlaceholderText("Auto, after reverse lookup")
+            except Exception:
+                pass
+
+        try:
+            combo = getattr(self, "_cand_combo", None)
+        except (TypeError, AttributeError, RuntimeError):
+            combo = None
+
+        if combo is not None:
+            # Do not force visibility here; the next category commit will decide.
+            try:
+                combo.setCurrentIndex(-1)
+            except Exception:
+                pass
 
         try:
             if callable(getattr(self, "_update_save_enabled", None)):

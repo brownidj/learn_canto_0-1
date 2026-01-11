@@ -14,6 +14,7 @@ categories:
   direction:
     description: Spatial terms like up, down, here, there.
     label: Direction & location words
+  emotions_feelings: {}
   family:
     description: Family members and kinship terms.
     label: Family & relations
@@ -86,6 +87,7 @@ categories:
   weekdays:
     description: Days of the week and related expressions.
     label: Weekdays
+  work: {}
   zodiac:
     description: Zodiac animals and related words.
     label: Chinese zodiac
@@ -473,6 +475,13 @@ entries:
       gloss: speak; say
       hanzi: 講
       register: colloquial
+  gung1 zok3:
+    jyutping: gung1 zok3
+    senses:
+    - categories:
+      - work
+      gloss: work
+      hanzi: 工作
   gwong2 dung1 waa2:
     headword: 廣東話
     jyutping: gwong2 dung1 waa2
@@ -1028,6 +1037,13 @@ entries:
       gloss: boy
       hanzi: 男仔
       register: colloquial
+  naan4 gwo3:
+    jyutping: naan4 gwo3
+    senses:
+    - categories:
+      - emotions_feelings
+      gloss: sad, feel sorry
+      hanzi: 難過
   nei5:
     headword: 你
     jyutping: nei5
@@ -1684,6 +1700,13 @@ entries:
       gloss: good morning
       hanzi: 早晨
       register: colloquial
+  zou6 je5:
+    jyutping: zou6 je5
+    senses:
+    - categories:
+      - work
+      gloss: to work on, to work (action-focussed)
+      hanzi: 做嘢
   zung1:
     jyutping: zung1
     senses:
