@@ -113,11 +113,8 @@ from infra.paths import project_root
 from ui.focus_policy import should_steal_focus
 from ui.category_combo import CategoryComboController
 
-# New scroll + search panel (table + vertical slider)
-try:
-    from table_scroll_slider_controller import TableScrollSliderController
-except Exception:
-    TableScrollSliderController = None  # type: ignore
+from persistence.categories_store import persist_categories_yaml
+from table_scroll_slider_controller import TableScrollSliderController
 
 logger = logging.getLogger(__name__)
 
@@ -594,15 +591,16 @@ class CategoryManagerDialog(QDialog):
             # zero-arg; adapt them rather than changing their signatures.
             # Persistence: write categories.yaml directly.
             # Domain repo/service own mutation; the dialog owns the file-write boundary.
-            def _persist_cb(_cats_map: dict) -> None:
-                try:
-                    p = categories_yaml_path()
-                    with open(p, "w", encoding="utf-8") as fh:
-                        yaml.safe_dump(_cats_map, fh, allow_unicode=True, sort_keys=True)
-                except (TypeError, AttributeError, RuntimeError, ValueError, OSError):
-                    return
 
-            persist_cb = _persist_cb
+            persist_cb = None
+            try:
+                def persist_cb(_cats_map: dict) -> None:
+                    try:
+                        persist_categories_yaml(_cats_map)
+                    except ():
+                        return
+            except (AttributeError, TypeError, RuntimeError):
+                persist_cb = None
 
             repo = CategoryRepo(
                 self._cats,
@@ -1212,13 +1210,13 @@ class CategoryManagerDialog(QDialog):
                     # Tests and existing dialog code refer to `self._search` and `self._table`.
                     try:
                         self._search = self._table_panel.findChild(QLineEdit, "editTableSearch")
-                    except Exception:
+                    except ():
                         self._search = None
 
                     # The panel may provide either QTableWidget or QTableView; keep it generic.
                     try:
                         self._table = self._table_panel.findChild(object, "tableVocab")
-                    except Exception:
+                    except ():
                         self._table = None
 
                     # Wire legacy search handler if present.
@@ -1226,7 +1224,7 @@ class CategoryManagerDialog(QDialog):
                         fn_search = getattr(self, "_on_search_changed", None)
                         if callable(fn_search) and self._search is not None and hasattr(self._search, "textChanged"):
                             self._search.textChanged.connect(fn_search)
-                    except Exception:
+                    except (TypeError, AttributeError, RuntimeError):
                         pass
 
                     # Populate panel data.
@@ -1266,21 +1264,16 @@ class CategoryManagerDialog(QDialog):
                                         fn()
                                         populated = True
                                         break
-                                    except Exception:
+                                    except (TypeError, AttributeError, RuntimeError):
                                         pass
-                            except Exception:
+                            except ():
                                 # Best-effort: keep trying other hooks.
                                 pass
 
                         # 2) Fallback: if the panel actually contains a QTableWidget, reuse legacy rebuild.
                         if not populated:
                             tbl = getattr(self, "_table", None)
-                            try:
-                                from PySide6.QtWidgets import QTableWidget as _QTableWidget
-                            except Exception:
-                                _QTableWidget = None  # type: ignore
-
-                            if _QTableWidget is not None and isinstance(tbl, _QTableWidget):
+                            if isinstance(tbl, QTableWidget):
                                 fn_rebuild = getattr(self, "_rebuild_items_model", None)
                                 if callable(fn_rebuild):
                                     fn_rebuild()
@@ -1296,14 +1289,14 @@ class CategoryManagerDialog(QDialog):
                                     # QTableWidget
                                     if hasattr(tbl, "rowCount"):
                                         rows = int(tbl.rowCount())
-                                except Exception:
+                                except (TypeError, AttributeError, RuntimeError):
                                     rows = None
                                 if rows is None:
                                     try:
                                         # QTableView-like
                                         m = tbl.model() if hasattr(tbl, "model") else None
                                         rows = int(m.rowCount()) if m is not None and hasattr(m, "rowCount") else None
-                                    except Exception:
+                                    except (TypeError, AttributeError, RuntimeError):
                                         rows = None
                                 logger.debug(
                                     "Table panel populated=%s table=%s rows=%s",
@@ -1311,13 +1304,12 @@ class CategoryManagerDialog(QDialog):
                                     cls,
                                     rows if rows is not None else "?",
                                 )
-                        except Exception:
+                        except (TypeError, AttributeError, RuntimeError):
                             pass
 
-                    except Exception:
+                    except (TypeError, AttributeError, RuntimeError):
                         pass
-
-            except Exception:
+            except (TypeError, AttributeError, RuntimeError):
                 # Controller failed: fall back to legacy widgets.
                 self._table_panel_ctrl = None
                 self._table_panel = None
@@ -1349,7 +1341,7 @@ class CategoryManagerDialog(QDialog):
             if callable(fn_populate):
                 try:
                     fn_populate()
-                except Exception:
+                except (TypeError, AttributeError, RuntimeError):
                     # If the newer path fails for any reason, fall back to the legacy rebuild.
                     fn_populate = None
 
@@ -1363,14 +1355,14 @@ class CategoryManagerDialog(QDialog):
                 if self._table is not None and hasattr(self._table, "rowCount"):
                     try:
                         rows = str(int(self._table.rowCount()))
-                    except Exception:
+                    except (TypeError, AttributeError, RuntimeError):
                         rows = "?"
                 logger.debug(
                     "Legacy table ready: type=%s rows=%s",
                     type(self._table).__name__ if self._table is not None else "None",
                     rows,
                 )
-            except Exception:
+            except (TypeError, AttributeError, RuntimeError):
                 pass
 
         # Final back-compat: ensure attributes exist even if the panel did not expose widgets as expected.
@@ -2520,10 +2512,8 @@ class CategoryManagerDialog(QDialog):
         # The repo/service layer owns mutation; the dialog owns the file write boundary.
         def _persist_cb(_cats_map: dict) -> None:
             try:
-                p = categories_yaml_path()
-                with open(p, "w", encoding="utf-8") as fh:
-                    yaml.safe_dump(_cats_map, fh, allow_unicode=True, sort_keys=True)
-            except (TypeError, AttributeError, RuntimeError, ValueError, OSError):
+                persist_categories_yaml(_cats_map)
+            except Exception:
                 return
 
         # Authoritative map is always self._cats.

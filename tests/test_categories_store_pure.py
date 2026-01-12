@@ -17,7 +17,10 @@ def test_save_categories_merge_on_write_preserves_existing_and_adds_new(tmp_path
     def _fake_categories_yaml_path(*args, **kwargs):
         return p
 
-    monkeypatch.setattr(cs, "categories_yaml_path", _fake_categories_yaml_path)
+    monkeypatch.setattr(
+        "domain.storage_paths.categories_yaml_path",
+        _fake_categories_yaml_path,
+    )
 
     # Existing on-disk categories (simulate a "real" file already in data/)
     existing = {
@@ -71,7 +74,10 @@ def test_save_categories_with_non_dict_is_noop(tmp_path, monkeypatch):
     def _fake_categories_yaml_path(*args, **kwargs):
         return p
 
-    monkeypatch.setattr(cs, "categories_yaml_path", _fake_categories_yaml_path)
+    monkeypatch.setattr(
+        "domain.storage_paths.categories_yaml_path",
+        _fake_categories_yaml_path,
+    )
 
     existing = {"direction": ["=D1"], "unassigned": []}
     with p.open("w", encoding="utf-8") as fh:

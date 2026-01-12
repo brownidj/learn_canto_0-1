@@ -1,3 +1,9 @@
+abstract_nouns:
+- =D209
+- =D237
+- =D247
+- =D249
+- =D250
 animals:
 - 兔
 - 牛
@@ -13,15 +19,21 @@ animals:
 - 馬
 - 鯊魚
 - 鼠
+basic_verbs:
+- =D230
+- =D232
+- =D233
+- =D241
+- =D243
 body_parts:
-  - 口
-  - 手
-  - 頭
+- 口
+- 手
+- 頭
 colors:
-  - 紅
-  - 藍
-  - 黑
-  - 白
+- 紅
+- 藍
+- 黑
+- 白
 communication:
 - 今日係
 - 你好 我係 好高興認識你
@@ -57,12 +69,7 @@ descriptions_adjectives:
 - 好
 - 少少
 - 開心
-direction:
-- 上
-- 下
-- 呢度
-- 嗰度
-- 邊到
+direction: []
 family:
 - 先生
 - 哥哥
@@ -84,6 +91,12 @@ food_drink_eating_drinking:
 - 我想飲
 - 我鐘意食
 - 飲野
+grammatical_particles:
+- =D19
+- =D55
+- =D79
+- =D93
+- =D114
 greetings:
 - 你好
 - 你好 我係 好高興認識你
@@ -180,6 +193,11 @@ pronouns_possessive:
 - 我係
 - 我哋
 - 我嘅
+pronouns_quantifiers:
+- =D159
+- =D175
+- =D177
+- =D227
 roles_titles: []
 school_tests:
 - 假期
@@ -224,37 +242,10 @@ time_calendar:
 - 秋
 - 秒
 - 週末
-unassigned:
-- 係
-- 冇
-- 去見面
-- 可以
-- 可能
-- 呢個係咩
-- 呢度
-- 呢本書
-- 唔可以
-- 唔得
-- 唔駛客氣
-- 嗰度
-- 好
-- 宜家
-- 幾
-- 我係
-- 放假
-- 有
-- 未來
-- 泳衣
-- 請
-- 邊個
-- 邊個嘅
-- 邊到
-- 針
-- 鐘
-- 閂門
-- 開心
+unassigned: []
 vehicle:
 - 飛機
+verbs_actions: []
 weather:
 - 乾燥
 - 好凍
@@ -272,9 +263,6 @@ weekdays:
 - 週末
 work:
 - 返工
-- 搵工
-- 做嘢
-- 工作
 zodiac:
 - 兔
 - 牛
@@ -288,32 +276,3 @@ zodiac:
 - 馬
 - 鼠
 - 龍
-basic_verbs:
-- =D230
-- =D232
-- =D233
-- =D241
-- =D243
-abstract_nouns:
-- =D209
-- =D237
-- =D247
-- =D249
-- =D250
-grammatical_particles:
-- =D19
-- =D55
-- =D79
-- =D93
-- =D114
-verbs_actions:
-- =D40
-- =D41
-- =D76
-- =D138
-- =D142
-pronouns_quantifiers:
-- =D159
-- =D175
-- =D177
-- =D227

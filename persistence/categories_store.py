@@ -7,10 +7,11 @@ It must not import any UI or Qt code.
 
 # --- Category persistence API ---
 from typing import Dict, Any
-from pathlib import Path
 import yaml
-from domain.storage_paths import categories_yaml_path
+import logging
+import domain.storage_paths as _paths
 
+logger = logging.getLogger(__name__)
 # Public type alias for categories map
 CatsMap = Dict[str, Any]
 
@@ -20,7 +21,7 @@ def load_categories() -> CatsMap:
     Returns an empty dict if the file does not exist.
     Raises TypeError if the file does not contain a mapping.
     """
-    path = categories_yaml_path()
+    path = _paths.categories_yaml_path()
     if not path.exists():
         return {}
     with path.open("r", encoding="utf-8") as f:
@@ -33,15 +34,21 @@ def load_categories() -> CatsMap:
 
 def save_categories(cats: CatsMap) -> None:
     """
-    Save categories.yaml using merge-on-write to prevent accidental truncation.
-    """
-    if not isinstance(cats, dict):
-        return
+    Save the given categories map to categories.yaml.
+    Ensures the parent directory exists.
 
-    path = categories_yaml_path()
+    Safety-by-construction: merge-on-write.
+      - Reads existing categories.yaml first (if present)
+      - Overlays/updates keys from `cats`
+      - Preserves existing keys not present in `cats`
+      - For list values, appends new items (deduped) instead of replacing
+
+    This prevents accidental truncation when callers hold a partial in-memory map.
+    """
+    path = _paths.categories_yaml_path()
     path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Load existing
+    # Load existing mapping (best-effort)
     existing: CatsMap = {}
     try:
         if path.exists():
@@ -50,26 +57,42 @@ def save_categories(cats: CatsMap) -> None:
             if isinstance(obj, dict):
                 existing = dict(obj)
     except Exception:
-        # If we cannot read the existing file, do not write (best-effort safety).
+        # If we cannot load the existing file, do not risk overwriting it.
         return
 
-    # Merge overlay
+    def _as_list(v: Any) -> list:
+        if v is None:
+            return []
+        if isinstance(v, list):
+            return list(v)
+        try:
+            return list(v)
+        except Exception:
+            return [str(v)]
+
     merged: CatsMap = dict(existing)
-    for k, v in cats.items():
-        key = str(k).strip() if k is not None else ""
+
+    # Overlay merge (append for lists)
+    for k, v in (cats or {}).items():
+        try:
+            key = str(k).strip()
+        except Exception:
+            key = ""
         if not key:
             continue
-        if isinstance(v, list):
-            merged[key] = list(v)
-        elif v is None:
-            merged[key] = []
-        else:
-            try:
-                merged[key] = list(v)
-            except Exception:
-                merged[key] = [str(v)]
 
-    # Write merged
+        incoming = _as_list(v)
+
+        prev = merged.get(key)
+        if isinstance(prev, list):
+            out = list(prev)
+            for item in incoming:
+                if item not in out:
+                    out.append(item)
+            merged[key] = out
+        else:
+            merged[key] = incoming
+
     with path.open("w", encoding="utf-8") as f:
         yaml.safe_dump(merged, f, allow_unicode=True, sort_keys=True)
 
