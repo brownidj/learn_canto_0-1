@@ -152,3 +152,25 @@ def pytest_sessionfinish(session, exitstatus):
     # Bypass fragile native teardown paths (Qt/Shiboken) while keeping accurate exit codes.
     # Note: os._exit avoids atexit handlers and interpreter finalization.
     os._exit(int(exitstatus))
+
+import pytest
+from pathlib import Path
+
+@pytest.fixture(autouse=True)
+def _isolate_categories_yaml(monkeypatch, tmp_path: Path):
+    """
+    Ensure tests never touch the real data/categories.yaml.
+    """
+    try:
+        import categories_store
+    except Exception:
+        # If categories_store isn't importable in some test contexts, do nothing.
+        return
+
+    test_file = tmp_path / "categories.yaml"
+
+    def _fake_categories_yaml_path(*, project_dir=None):
+        return test_file
+
+    # Patch the function *as used by categories_store*.
+    monkeypatch.setattr(categories_store, "categories_yaml_path", _fake_categories_yaml_path, raising=True)
