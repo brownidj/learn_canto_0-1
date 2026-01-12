@@ -1897,6 +1897,11 @@ if __name__ == "__main__":
 
             _t_dlg = _perf_start("CategoryManagerDialog(create)")
             dlg = CategoryManagerDialog(window, vocab_dict, cats)
+            try:
+                edits = dlg.findChildren(QLineEdit)
+                logger.debug("LIVE dlg QLineEdits: %r", [e.objectName() for e in edits])
+            except Exception as e:
+                logger.debug("Probe failed: %r", e)
             _perf_end("CategoryManagerDialog(create)", _t_dlg)
 
             # --- DEBUG: log actual Add/Edit dialog sizing ---

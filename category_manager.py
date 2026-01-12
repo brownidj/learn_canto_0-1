@@ -113,6 +113,12 @@ from infra.paths import project_root
 from ui.focus_policy import should_steal_focus
 from ui.category_combo import CategoryComboController
 
+# New scroll + search panel (table + vertical slider)
+try:
+    from table_scroll_slider_controller import TableScrollSliderController
+except Exception:
+    TableScrollSliderController = None  # type: ignore
+
 logger = logging.getLogger(__name__)
 
 
@@ -1183,30 +1189,195 @@ class CategoryManagerDialog(QDialog):
             form_hanzi=form_hanzi,
         )
 
-        # ---- Search ----
-        self._search = QLineEdit(self)
-        self._search.setPlaceholderText("Search (Hanzi / Jyutping / meaning)…")
-        self._search.setClearButtonEnabled(True)
-        try:
-            fn_search = getattr(self, "_on_search_changed", None)
-            if callable(fn_search):
-                self._search.textChanged.connect(fn_search)
-        except (TypeError, AttributeError, RuntimeError):
-            pass
-        self._root.addWidget(self._search)
+        # ---- Vocab table scroll panel (preferred) ----
+        self._table_panel_ctrl = None
+        self._table_panel = None
 
-        # ---- Table ----
-        self._table = QTableWidget(self)
-        self._table.setColumnCount(4)
-        self._table.setHorizontalHeaderLabels(["Hanzi", "Jyutping", "Meanings", "Categories"])
-        self._table.horizontalHeader().setStretchLastSection(True)
-        self._table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self._table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self._root.addWidget(self._table, 1)
+        if TableScrollSliderController is not None:
+            try:
+                # Controller owns the panel widget; keep it as the single table/search surface.
+                # `create()` is optional; if not present, fall back to direct construction.
+                create_fn = getattr(TableScrollSliderController, "create", None)
+                if callable(create_fn):
+                    self._table_panel_ctrl = create_fn(parent=self)
+                else:
+                    self._table_panel_ctrl = TableScrollSliderController(parent=self)
 
-        fn_rebuild = getattr(self, "_rebuild_items_model", None)
-        if callable(fn_rebuild):
-            fn_rebuild()
+                self._table_panel = getattr(self._table_panel_ctrl, "widget", None)
+
+                if self._table_panel is not None:
+                    self._root.addWidget(self._table_panel, 1)
+
+                    # Back-compat aliases: expose search/table under the dialog's legacy names.
+                    # Tests and existing dialog code refer to `self._search` and `self._table`.
+                    try:
+                        self._search = self._table_panel.findChild(QLineEdit, "editTableSearch")
+                    except Exception:
+                        self._search = None
+
+                    # The panel may provide either QTableWidget or QTableView; keep it generic.
+                    try:
+                        self._table = self._table_panel.findChild(object, "tableVocab")
+                    except Exception:
+                        self._table = None
+
+                    # Wire legacy search handler if present.
+                    try:
+                        fn_search = getattr(self, "_on_search_changed", None)
+                        if callable(fn_search) and self._search is not None and hasattr(self._search, "textChanged"):
+                            self._search.textChanged.connect(fn_search)
+                    except Exception:
+                        pass
+
+                    # Populate panel data.
+                    # IMPORTANT: legacy `_rebuild_items_model()` targets a QTableWidget.
+                    # The new panel may expose QTableView/QAbstractItemView, so prefer the
+                    # controller's explicit population API when available.
+                    try:
+                        populated = False
+
+                        # 1) Preferred: controller population hooks (single source of truth)
+                        # Try a small, explicit set of method names (no broad guessing ladders).
+                        for meth in (
+                            "set_vocab_and_categories",
+                            "set_data",
+                            "set_maps",
+                            "populate_from_maps",
+                            "populate",
+                            "refresh",
+                        ):
+                            fn = getattr(self._table_panel_ctrl, meth, None)
+                            if not callable(fn):
+                                continue
+                            try:
+                                # Most likely signature: (vocab, cats)
+                                fn(getattr(self, "_vocab", {}), getattr(self, "_cats", {}))
+                                populated = True
+                                break
+                            except TypeError:
+                                try:
+                                    # Alternate: accept just vocab
+                                    fn(getattr(self, "_vocab", {}))
+                                    populated = True
+                                    break
+                                except TypeError:
+                                    try:
+                                        # Alternate: zero-arg refresh
+                                        fn()
+                                        populated = True
+                                        break
+                                    except Exception:
+                                        pass
+                            except Exception:
+                                # Best-effort: keep trying other hooks.
+                                pass
+
+                        # 2) Fallback: if the panel actually contains a QTableWidget, reuse legacy rebuild.
+                        if not populated:
+                            tbl = getattr(self, "_table", None)
+                            try:
+                                from PySide6.QtWidgets import QTableWidget as _QTableWidget
+                            except Exception:
+                                _QTableWidget = None  # type: ignore
+
+                            if _QTableWidget is not None and isinstance(tbl, _QTableWidget):
+                                fn_rebuild = getattr(self, "_rebuild_items_model", None)
+                                if callable(fn_rebuild):
+                                    fn_rebuild()
+                                    populated = True
+
+                        # Diagnostics: log what we ended up with (must never raise)
+                        try:
+                            tbl = getattr(self, "_table", None)
+                            if tbl is not None:
+                                cls = type(tbl).__name__
+                                rows = None
+                                try:
+                                    # QTableWidget
+                                    if hasattr(tbl, "rowCount"):
+                                        rows = int(tbl.rowCount())
+                                except Exception:
+                                    rows = None
+                                if rows is None:
+                                    try:
+                                        # QTableView-like
+                                        m = tbl.model() if hasattr(tbl, "model") else None
+                                        rows = int(m.rowCount()) if m is not None and hasattr(m, "rowCount") else None
+                                    except Exception:
+                                        rows = None
+                                logger.debug(
+                                    "Table panel populated=%s table=%s rows=%s",
+                                    bool(populated),
+                                    cls,
+                                    rows if rows is not None else "?",
+                                )
+                        except Exception:
+                            pass
+
+                    except Exception:
+                        pass
+
+            except Exception:
+                # Controller failed: fall back to legacy widgets.
+                self._table_panel_ctrl = None
+                self._table_panel = None
+
+        # ---- Legacy Search + Table (fallback) ----
+        if self._table_panel is None:
+            self._search = QLineEdit(self)
+            self._search.setPlaceholderText("Search (Hanzi / Jyutping / meaning)…")
+            self._search.setClearButtonEnabled(True)
+            try:
+                fn_search = getattr(self, "_on_search_changed", None)
+                if callable(fn_search):
+                    self._search.textChanged.connect(fn_search)
+            except (TypeError, AttributeError, RuntimeError):
+                pass
+            self._root.addWidget(self._search)
+
+            self._table = QTableWidget(self)
+            self._table.setColumnCount(4)
+            self._table.setHorizontalHeaderLabels(["Hanzi", "Jyutping", "Meanings", "Categories"])
+            self._table.horizontalHeader().setStretchLastSection(True)
+            self._table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+            self._table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+            self._root.addWidget(self._table, 1)
+
+            # Populate rows immediately.
+            # Prefer the newer row-population path when present; fall back to the legacy rebuild.
+            fn_populate = getattr(self, "_populate_rows", None)
+            if callable(fn_populate):
+                try:
+                    fn_populate()
+                except Exception:
+                    # If the newer path fails for any reason, fall back to the legacy rebuild.
+                    fn_populate = None
+
+            if fn_populate is None:
+                fn_rebuild = getattr(self, "_rebuild_items_model", None)
+                if callable(fn_rebuild):
+                    fn_rebuild()
+
+            try:
+                rows = "?"
+                if self._table is not None and hasattr(self._table, "rowCount"):
+                    try:
+                        rows = str(int(self._table.rowCount()))
+                    except Exception:
+                        rows = "?"
+                logger.debug(
+                    "Legacy table ready: type=%s rows=%s",
+                    type(self._table).__name__ if self._table is not None else "None",
+                    rows,
+                )
+            except Exception:
+                pass
+
+        # Final back-compat: ensure attributes exist even if the panel did not expose widgets as expected.
+        if not hasattr(self, "_search"):
+            self._search = None
+        if not hasattr(self, "_table"):
+            self._table = None
 
         # ---- Finalise init ----
         logger.debug("CategoryManagerDialog: init complete")
