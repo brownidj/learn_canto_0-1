@@ -1,31 +1,36 @@
 # -----------------------------------------------------------------------------
-# Developer note: Single Meaning Resolver Rule
+# category_manager.py - Add & Edit Vocabulary Dialog (Refactored Architecture)
 #
-# The UI must NEVER:
-#   - call pipeline gloss resolvers directly
-#   - call CCCanto / CEDICT helpers
-#   - clean or filter glosses itself
+# This dialog coordinates 12+ specialized controllers to manage vocabulary
+# and category operations. The main dialog class acts as a thin orchestrator,
+# delegating all business logic to domain/UI controllers.
 #
-# All meaning resolution flows through:
-#   MeaningFacade.select_candidate(...)
-#   MeaningFacade.meanings_for_display(...)
+# Architecture principles:
+#   - Single Meaning Resolver Rule: All meaning resolution flows through
+#     MeaningFacade.select_candidate(...) or MeaningFacade.meanings_for_display(...)
+#   - No inline business logic in the dialog class
+#   - Best-effort UI operations (never raise, always degrade gracefully)
+#   - State management via AddEditContext and controllers
 #
-# This guarantees:
-#   - consistent gloss selection
-#   - consistent filtering/formatting
-#   - testable, domain-owned behaviour
+# Controller breakdown:
+#   - CategoryManagerInitializer: Data/cache initialization
+#   - CategoryManagerFocusController: Focus management and policy
+#   - CategoryManagerTypographyController: Font/typography setup
+#   - CategoryManagerAddEditFlowController: Add/Edit workflow orchestration
+#   - CategoryManagerMeaningResolver: Meaning resolution facade adapter
+#   - CategoryManagerCategoryOpsController: Category CRUD operations
+#   - CategoryManagerCandidatePipeline: Hanzi candidate ranking
+#   - CategoryManagerManualHanziController: Manual Hanzi entry mode
+#   - CategoryManagerFieldResetController: Field clear/reset operations
+#   - CategoryManagerSaveCommitController: Save/commit orchestration
+#   - CategoryManagerPreviewConfirmController: Preview/confirmation dialogs
+#   - CategoryManagerSignalWiring: Qt signal/slot wiring
+#   - CategoryManagerUIBuilder: Widget construction
+#   - CategoryManagerHelpers: Standalone utility functions
+#   - CategoryManagerVocabDisplay: Table/vocab display operations
 #
-# Any future meaning logic belongs in the facade, not the dialog.
-# ---------------------------------------------------------------------
-# Developer note (ARCH-MEANINGS)
-# ---------------------------------------------------------------------
-# Single resolver rule:
-#   CategoryManagerDialog must not resolve/clean meanings in multiple places.
-#   Any UI display of meanings (candidate preview, selection, autofill, tooltips)
-#   must go through `_resolve_meanings_for_candidate(...)` (authoritative) or
-#   `_meanings_for_hanzi(...)` (Hanzi-only fallback), which apply the ONE
-#   display-cleaning policy.
-# ---------------------------------------------------------------------
+# See docs/category_manager_architecture.md for detailed design documentation.
+# -----------------------------------------------------------------------------
 
 # ----------------------------------------
 # Standard library imports
@@ -132,33 +137,8 @@ from category_commit import CategoryCommitService
 logger = logging.getLogger(__name__)
 
 
-# ------------------------------
-# Internal helpers (UI-free)
-# ------------------------------
-
-
-# Minimal state diagram (conceptual)
-#
-#   [Idle]  --open dialog-->  [AddMode, table loaded]
-#
-#   AddMode:
-#       type Jyutping + Enter  --> candidates loaded (Hanzi + glosses)
-#       edit meanings/category --> Save (valid) --> vocab + cats mutated,
-#                                          files persisted,
-#                                          table repopulated, back to AddMode
-#
-#   EditMode:
-#       select row in table     --> fields pushed into Add panel
-#       change cats in combos   --> _on_combo_changed() -> live resort + autosave
-#       modify Jy/Meanings/Cat  --> same Save path as AddMode
-#
-#   Close dialog:
-#       Accept/Cancel --> control returns to main window, which refreshes
-#       its own category combobox from categories.yaml.
-
-
 # ---------------------------
-# Add/Edit controller (pure)
+# Add/Edit preview dataclasses
 # ---------------------------
 
 @dataclass(frozen=True)
@@ -639,7 +619,6 @@ class CategoryManagerDialog(QDialog):
 
         # ---- Typography controller ----
         from ui.category_manager_typography import CategoryManagerTypographyController
-        from ui.category_manager_helpers import CategoryManagerHelpers
         self._typography_ctrl = CategoryManagerTypographyController(self)
 
         # ---- Add/Edit flow controller ----
