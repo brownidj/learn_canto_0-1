@@ -8,7 +8,7 @@ categories:
   communication:
     description: Verbs and phrases about speaking, asking, understanding, and information.
     label: Communication & questions
-  descriptions_adjectives:
+  adjectives:
     description: Adjectives or short descriptive expressions.
     label: Descriptions & adjectives
   direction:
@@ -305,7 +305,7 @@ entries:
     jyutping: dyun2
     senses:
     - categories:
-      - descriptions_adjectives
+      - adjectives
       gloss: (adjective) short, deficient
       hanzi: 短
   faa1:
@@ -580,7 +580,7 @@ entries:
     jyutping: hoi1 sam1
     senses:
     - categories:
-      - descriptions_adjectives
+      - adjectives
       gloss: happy
       hanzi: 開心
       register: colloquial
@@ -607,7 +607,7 @@ entries:
     jyutping: hou2
     senses:
     - categories:
-      - descriptions_adjectives
+      - adjectives
       gloss: good
       hanzi: 好
       register: colloquial
@@ -801,7 +801,7 @@ entries:
     jyutping: leng4
     senses:
     - categories:
-      - descriptions_adjectives
+      - adjectives
       gloss: (adjective) pretty, beautiful, young
       hanzi: 靚
   leot6 sik1:
@@ -933,7 +933,7 @@ entries:
     jyutping: maan6
     senses:
     - categories:
-      - descriptions_adjectives
+      - adjectives
       gloss: slowly
       hanzi: 慢
   mai5 sik1:
@@ -970,7 +970,7 @@ entries:
     jyutping: ming4
     senses:
     - categories:
-      - descriptions_adjectives
+      - adjectives
       gloss: (adjective) bright, obvious
       hanzi: 明
   miu5:
@@ -989,7 +989,7 @@ entries:
     senses:
     - categories:
       - communication
-      - descriptions_adjectives
+      - adjectives
       gloss: not have; there is not
       hanzi: 冇
       register: colloquial
@@ -1370,7 +1370,7 @@ entries:
     jyutping: sai3
     senses:
     - categories:
-      - descriptions_adjectives
+      - adjectives
       gloss: small, tiny, fine
       hanzi: 細
   sam1:
@@ -1562,7 +1562,7 @@ entries:
     senses:
     - categories:
       - measurements
-      - descriptions_adjectives
+      - adjectives
       gloss: a little; a bit
       hanzi: 少少
       register: colloquial
@@ -1598,7 +1598,7 @@ entries:
     jyutping: taai3
     senses:
     - categories:
-      - descriptions_adjectives
+      - adjectives
       gloss: great, great-grand mother or father
       hanzi: 太
   taai3 joeng4:
@@ -1711,7 +1711,7 @@ entries:
     jyutping: zung1
     senses:
     - categories:
-      - descriptions_adjectives
+      - adjectives
       gloss: end, finish
       hanzi: 終
   zung1 gwok3:

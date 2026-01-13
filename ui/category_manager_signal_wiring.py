@@ -88,6 +88,15 @@ class CategoryManagerSignalWiring:
             except (TypeError, AttributeError, RuntimeError):
                 pass
 
+            # Debug: log when category text changes to track unwanted clears
+            if w_cat is not None:
+                def _debug_cat_change(text):
+                    logger.debug("CATDBG: currentTextChanged to %r", text)
+                try:
+                    self._try_connect(getattr(w_cat, "currentTextChanged", None), _debug_cat_change)
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
+
             # Commit only when user explicitly selects from popup (activated)
             fn_cat_commit = getattr(self.dialog, "_on_add_category_committed", None)
             if w_cat is not None and callable(fn_cat_commit):

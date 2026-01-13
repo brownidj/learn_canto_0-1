@@ -211,25 +211,77 @@ class AddEntryPreviewBuilder:
                 out.append(s)
         return ", ".join(out)
 
+
     @staticmethod
     def build(dialog) -> AddEntryPreview:
         """Canonical Add/Edit preview builder.
 
         Pipeline:
-          1) Read raw UI fields (widgets only)
+          1) Read raw UI fields directly from widgets (captures latest user edits)
           2) Normalise (strip; Jyutping via dialog normaliser when available)
-          3) Enrich (only from SM context and vocab meaning lookup)
+          3) Enrich (only from SM context if widgets are blank)
           4) Emit AddEntryPreview (canonical keys)
         """
-        # 1) Primary: legacy safe reader (widgets)
+        # 1) Primary: Read directly from widgets to capture latest user edits
         jy = hz = mn = cat = ""
-        selected_hz = ""
+
+        # Direct widget read - highest priority for capturing user edits
         try:
-            fn = getattr(dialog, "_read_add_fields", None)
-            if callable(fn):
-                jy, hz, mn, cat = fn()
-        except (TypeError, AttributeError, RuntimeError, ValueError):
-            jy = hz = mn = cat = ""
+            from ui.widget_utils import WidgetAccessor
+
+            # Try WidgetAccessor first
+            jy_widget = getattr(dialog, "_add_jy", None)
+            hz_widget = getattr(dialog, "_add_hz", None)
+            mn_widget = getattr(dialog, "_add_mn", None)
+            cat_widget = getattr(dialog, "_add_cat", None)
+
+            if jy_widget is not None:
+                jy = WidgetAccessor.get_text(jy_widget) or ""
+            if hz_widget is not None:
+                hz = WidgetAccessor.get_text(hz_widget) or ""
+            if mn_widget is not None:
+                mn = WidgetAccessor.get_text(mn_widget) or ""
+            if cat_widget is not None:
+                cat = WidgetAccessor.get_text(cat_widget) or ""
+
+        except (TypeError, AttributeError, RuntimeError, ValueError, ImportError):
+            pass
+
+        # Fallback: direct widget text() method
+        if not jy and not hz and not mn and not cat:
+            try:
+                jy_w = getattr(dialog, "_add_jy", None)
+                if jy_w is not None and hasattr(jy_w, "text"):
+                    jy = jy_w.text() or ""
+
+                hz_w = getattr(dialog, "_add_hz", None)
+                if hz_w is not None and hasattr(hz_w, "text"):
+                    hz = hz_w.text() or ""
+
+                mn_w = getattr(dialog, "_add_mn", None)
+                if mn_w is not None:
+                    if hasattr(mn_w, "toPlainText"):
+                        mn = mn_w.toPlainText() or ""
+                    elif hasattr(mn_w, "text"):
+                        mn = mn_w.text() or ""
+
+                cat_w = getattr(dialog, "_add_cat", None)
+                if cat_w is not None:
+                    if hasattr(cat_w, "currentText"):
+                        cat = cat_w.currentText() or ""
+                    elif hasattr(cat_w, "text"):
+                        cat = cat_w.text() or ""
+            except (TypeError, AttributeError, RuntimeError):
+                pass
+
+        # Final fallback: legacy reader
+        if not jy and not hz and not mn and not cat:
+            try:
+                fn = getattr(dialog, "_read_add_fields", None)
+                if callable(fn):
+                    jy, hz, mn, cat = fn()
+            except (TypeError, AttributeError, RuntimeError, ValueError):
+                jy = hz = mn = cat = ""
 
         # Normalise raw strings
         try:
@@ -250,15 +302,30 @@ class AddEntryPreviewBuilder:
             cat = ""
 
         # 2) Normalise Jyutping using the dialog normaliser when available
+        # if jy:
+        #     try:
+        #         norm = getattr(dialog, "_normalize_jy", None)
+        #         if callable(norm):
+        #             jy = str(norm(jy) or "").strip()
+        #         else:
+        #             jy = " ".join(jy.lower().split())
+        #     except (TypeError, AttributeError, RuntimeError, ValueError):
+        #         jy = " ".join(str(jy or "").strip().lower().split())
+
         if jy:
             try:
-                norm = getattr(dialog, "_normalize_jy", None)
-                if callable(norm):
-                    jy = str(norm(jy) or "").strip()
-                else:
-                    jy = " ".join(jy.lower().split())
-            except (TypeError, AttributeError, RuntimeError, ValueError):
-                jy = " ".join(str(jy or "").strip().lower().split())
+                # Explicit normalization
+                norm = getattr(dialog, "_normalize_jy", lambda x: x)
+                normalized_jy = norm(jy).strip().lower()
+
+                # Ensure tone is preserved
+                tone_match = next((char for char in jy if char.isdigit()), '')
+                if tone_match and not any(char.isdigit() for char in normalized_jy):
+                    normalized_jy += tone_match
+
+                jy = normalized_jy
+            except Exception:
+                jy = ""
 
         # 3) Enrich from SM context only when widgets are blank
         ctx = None
@@ -300,8 +367,8 @@ class AddEntryPreviewBuilder:
             except (TypeError, AttributeError, RuntimeError, ValueError):
                 hz = hz or ""
 
-        # 4) Enrich meaning using the dialog's single-authority resolver when available.
-        # Only fall back to vocab-derived meanings if the resolver is unavailable.
+        # 4) Enrich meaning ONLY if the widget is completely blank
+        # (Don't override user edits with auto-resolved meanings)
         if not mn and hz:
             resolved = []
             try:
@@ -323,7 +390,7 @@ class AddEntryPreviewBuilder:
                 if parts:
                     mn = ", ".join(parts)
 
-            # Final fallback: vocab-derived meanings.
+            # Final fallback: vocab-derived meanings (only if still blank)
             if not mn:
                 vocab = AddEntryPreviewBuilder._resolve_vocab(dialog)
                 mn = AddEntryPreviewBuilder._meaning_from_vocab(vocab, hz)
@@ -567,7 +634,7 @@ class CategoryManagerDialog(QDialog):
     # Typography deltas for the Add/Edit panel (dialog-local; do not affect the rest of the app)
     _LABEL_FONT_DELTA_PT = 4
     _INPUT_FONT_DELTA_PT = 3
-    _FORM_VERTICAL_SPACING_PX = 12
+    _FORM_VERTICAL_SPACING_PX = 40
 
     def __init__(self, parent, vocab_items: dict, categories_map: dict):
         super().__init__(parent)
@@ -881,11 +948,11 @@ class CategoryManagerDialog(QDialog):
         return " ".join(text.split())
 
     def _update_save_enabled(self) -> None:
-        """Enable/disable Save based on current Add/Edit validity.
+        """Update validity state for Add/Edit form.
 
-        Single source of truth for Save gating.
-        Must work even when some events/signals are missed (offscreen tests,
-        programmatic setText, etc.).
+        Note: The inline Save button is no longer part of the normal workflow.
+        Entry confirmation happens via the Enter-triggered dialog.
+        This method maintains state consistency for any legacy code paths.
         """
         # Read current UI fields (authoritative)
         try:
@@ -976,11 +1043,11 @@ class CategoryManagerDialog(QDialog):
                 except (TypeError, AttributeError, RuntimeError):
                     pass
 
-        # Ensure state reflects readiness (READY_TO_SAVE should make the inline Save button enabled when visible)
+        # Ensure state reflects readiness
         try:
             if ready:
                 self._add_edit_state = AddEditState.READY_TO_SAVE
-                # Treat any non-empty Hanzi as committed for Save gating.
+                # Treat any non-empty Hanzi as committed for state tracking
                 try:
                     if hz_ok:
                         self._hanzi_committed = True
@@ -998,62 +1065,6 @@ class CategoryManagerDialog(QDialog):
                     self._add_edit_state = AddEditState.CATEGORY_COMMITTED
         except (TypeError, AttributeError, RuntimeError):
             pass
-
-        # Locate Save button (canonical)
-        btn = getattr(self, "btn_save", None)
-
-        if btn is None:
-            if QPushButton is not None:
-                try:
-                    # Common objectNames
-                    for obj_name in ("btnSave", "btn_save", "buttonSave", "saveButton"):
-                        b = self.findChild(QPushButton, obj_name)
-                        if b is not None:
-                            btn = b
-                            break
-                except (TypeError, AttributeError, RuntimeError):
-                    pass
-
-        # --- Fallback enablement (regression guard) ---
-        # If the fields are plainly valid, do not allow a missed signal/ctx flag to keep Save disabled.
-        try:
-            btn = getattr(self, "btn_save", None)
-        except Exception:
-            btn = None
-
-        if btn is not None:
-            try:
-                jy2, hz2, mn2, cat2 = CategoryManagerHelpers.read_add_fields(self)()
-            except Exception:
-                jy2 = hz2 = mn2 = cat2 = ""
-
-            jy2s = str(jy2 or "").strip()
-            hz2s = str(hz2 or "").strip()
-            mn2s = str(mn2 or "").strip()
-            cat2s = str(cat2 or "").strip()
-
-            try:
-                cat2ok = bool(cat2s) and str(cat2s).lower() not in ("unassigned", "all")
-            except Exception:
-                cat2ok = False
-
-            try:
-                if jy2s and hz2s and mn2s and cat2ok and not bool(getattr(self, "_saving_now", False)):
-                    btn.setEnabled(True)
-            except Exception:
-                pass
-
-        # Apply enabled state
-        if btn is not None:
-            try:
-                btn.setEnabled(bool(ready))
-            except (TypeError, AttributeError, RuntimeError):
-                pass
-            try:
-                btn.setDefault(bool(ready))
-                btn.setAutoDefault(bool(ready))
-            except (TypeError, AttributeError, RuntimeError):
-                pass
 
     # ---- Add/Edit UI wiring (delegated to signal wiring controller) ----
     # Note: _setup_add_edit_ui is now called automatically during __init__
@@ -1096,6 +1107,228 @@ class CategoryManagerDialog(QDialog):
             pass
 
         return []
+
+    # ---- Add/Edit signal handler delegation methods ----
+    # These delegate to the flow controller and are wired by CategoryManagerSignalWiring
+
+    def _on_jyut_enter(self) -> None:
+        """Delegate Jyutping Enter to flow controller."""
+        try:
+            flow = getattr(self, "_add_edit_flow", None)
+            if flow is not None and hasattr(flow, "on_jyut_enter"):
+                flow.on_jyut_enter()
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+
+    def _on_meaning_enter_committed(self) -> None:
+        """Delegate Meaning Enter to flow controller."""
+        try:
+            flow = getattr(self, "_add_edit_flow", None)
+            if flow is not None and hasattr(flow, "on_meaning_enter_committed"):
+                flow.on_meaning_enter_committed()
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+
+    def _on_candidate_index_activated(self, *args) -> None:
+        """Delegate candidate selection to flow controller."""
+        try:
+            flow = getattr(self, "_add_edit_flow", None)
+            if flow is not None and hasattr(flow, "on_candidate_index_activated"):
+                flow.on_candidate_index_activated(*args)
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+
+    def _on_add_category_committed(self, *args, **kwargs) -> None:
+        """Delegate category commit to category ops controller."""
+        try:
+            cat_ops = getattr(self, "_category_ops", None)
+            if cat_ops is not None and hasattr(cat_ops, "on_add_category_committed"):
+                cat_ops.on_add_category_committed(*args, **kwargs)
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+
+    def _on_add_category_changed(self, *args, **kwargs) -> None:
+        """Delegate category text change to category ops controller."""
+        try:
+            cat_ops = getattr(self, "_category_ops", None)
+            if cat_ops is not None and hasattr(cat_ops, "on_add_category_changed"):
+                cat_ops.on_add_category_changed(*args, **kwargs)
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+
+    def _fill_hanzi_candidates(self, jy: str, category: str | None = None) -> None:
+        """Delegate Hanzi candidate filling to flow controller."""
+        try:
+            logger.debug("_fill_hanzi_candidates called: jy=%r category=%r", jy, category)
+            flow = getattr(self, "_add_edit_flow", None)
+            if flow is not None and hasattr(flow, "fill_hanzi_candidates"):
+                flow.fill_hanzi_candidates(jy, category)
+            else:
+                logger.debug("_fill_hanzi_candidates: flow controller not available")
+        except (TypeError, AttributeError, RuntimeError) as e:
+            logger.debug("_fill_hanzi_candidates failed: %s", e)
+
+    def _mark_hanzi_committed(self, committed: bool = True) -> None:
+        """Mark whether the Hanzi has been committed by the user.
+
+        This tracks whether the user has explicitly selected a Hanzi candidate,
+        which affects whether the Save button should be enabled.
+        """
+        try:
+            self._hanzi_committed = bool(committed)
+            logger.debug("_mark_hanzi_committed: %s", committed)
+        except (TypeError, AttributeError, RuntimeError) as e:
+            logger.debug("_mark_hanzi_committed failed: %s", e)
+
+    def _read_add_fields(self) -> tuple[str, str, str, str]:
+        """Read current Add/Edit field values (jyutping, hanzi, meaning, category)."""
+        try:
+            return CategoryManagerHelpers.read_add_fields(self)()
+        except (TypeError, AttributeError, RuntimeError):
+            return "", "", "", ""
+
+    def _check_duplicate_jyutping(self, jyutping: str) -> tuple[bool, str | None]:
+        """Check if jyutping already exists in vocabulary.
+
+        Args:
+            jyutping: Jyutping to check
+
+        Returns:
+            Tuple of (is_duplicate, existing_hanzi)
+        """
+        if not jyutping:
+            return False, None
+
+        normalized_jy = self._normalize_jy(jyutping)
+
+        try:
+            vocab = getattr(self, "_vocab", None)
+            if not isinstance(vocab, dict):
+                return False, None
+
+            # Check in existing vocab
+            for hanzi, entry in vocab.items():
+                if not isinstance(entry, (list, tuple)) or len(entry) < 2:
+                    continue
+
+                existing_jy = entry[1]
+                normalized_existing = self._normalize_jy(existing_jy)
+
+                if normalized_existing == normalized_jy:
+                    return True, hanzi
+
+        except (TypeError, AttributeError, RuntimeError, ValueError):
+            pass
+
+        return False, None
+
+    def _clear_add_entry_fields(self) -> None:
+        """Clear all Add/Edit fields in the Entry panel."""
+        try:
+            ctrl = getattr(self, "_field_reset", None)
+            if ctrl is not None and hasattr(ctrl, "clear_add_entry_fields"):
+                ctrl.clear_add_entry_fields()
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+
+    def _reset_to_initial_state(self) -> None:
+        """Reset both Entry and Hanzi panels to initial state (as on dialog open).
+
+        This clears:
+          - All Entry panel fields (Jyutping, Hanzi, Meaning, Category)
+          - Hanzi candidate combo (hidden and cleared)
+          - Internal state flags and context
+        """
+        # Clear Entry panel fields
+        self._clear_add_entry_fields()
+
+        # Hide and clear Hanzi candidate combo
+        try:
+            combo = getattr(self, "_cand_combo", None)
+            if combo is not None:
+                try:
+                    with SignalBlocker(combo):
+                        WidgetAccessor.set_visible(combo, False)
+                        combo.clear()
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+
+        # Reset state flags
+        try:
+            self._hanzi_committed = False
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+
+        # Reset state machine to initial state
+        try:
+            from domain.add_edit_sm import AddEditState, AddEditContext
+            self._add_edit_state = AddEditState.EMPTY
+            self._add_edit_ctx = AddEditContext(
+                jy="",
+                jy_ok=False,
+                duplicate=None,
+                hanzi="",
+                hz_ok=False,
+                manual_hanzi=False,
+                meaning="",
+                mn_ok=False,
+                category="",
+                cat_ok=False,
+                saving=False,
+            )
+        except (TypeError, AttributeError, RuntimeError, ImportError):
+            pass
+
+    def _focus_jyutping(self, *, select_all: bool = True) -> None:
+        """Focus the Jyutping field."""
+        try:
+            w = getattr(self, "_add_jy", None)
+            if w is not None:
+                WidgetAccessor.focus(w, select_all=select_all)
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+
+    def _on_save_clicked(self) -> None:
+        """Handle Save button click."""
+        try:
+            ctrl = getattr(self, "_save_commit", None)
+            if ctrl is not None and hasattr(ctrl, "on_save_clicked"):
+                ctrl.on_save_clicked()
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+
+    # ---- Preview and confirmation delegation methods ----
+
+    def _build_add_entry_preview(self) -> dict:
+        """Build preview payload for pending add/edit entry."""
+        try:
+            ctrl = getattr(self, "_preview_confirm", None)
+            if ctrl is not None and hasattr(ctrl, "build_add_entry_preview"):
+                return ctrl.build_add_entry_preview()
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+        return {}
+
+    def _confirm_add_entry(self, preview: dict) -> str:
+        """Show confirmation dialog for entry. Returns 'save', 'edit', or 'cancel'."""
+        try:
+            ctrl = getattr(self, "_preview_confirm", None)
+            if ctrl is not None and hasattr(ctrl, "confirm_add_entry"):
+                return ctrl.confirm_add_entry(preview)
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+        return "edit"
+
+    def _set_save_button_visible(self, visible: bool) -> None:
+        """Show/hide the Save button."""
+        try:
+            ctrl = getattr(self, "_preview_confirm", None)
+            if ctrl is not None and hasattr(ctrl, "set_save_button_visible"):
+                ctrl.set_save_button_visible(visible)
+        except (TypeError, AttributeError, RuntimeError):
+            pass
 
     # ---- Widget accessor helpers ----
     # Note: Widget access is handled via ui.widget_utils.WidgetAccessor utility methods

@@ -4,6 +4,11 @@ abstract_nouns:
 - =D247
 - =D249
 - =D250
+adjectives:
+- 冇
+- 好
+- 少少
+- 開心
 animals:
 - 兔
 - 牛
@@ -64,12 +69,10 @@ communication:
 - 邊到
 - 閂門
 - 電話
-descriptions_adjectives:
-- 冇
-- 好
-- 少少
-- 開心
-direction: []
+direction:
+- 前
+- 東
+- 下
 family:
 - 先生
 - 哥哥
@@ -80,16 +83,11 @@ family:
 - 媽媽
 - 弟弟
 - 男仔
-food, eating, drinking:
-- 你食左飯未呀
-- 我想飲
-- 我鐘意食
-- 水
-- 飲野
 food_drink_eating_drinking:
 - 你食左飯未呀
 - 我想飲
 - 我鐘意食
+- 水
 - 飲野
 grammatical_particles:
 - =D19

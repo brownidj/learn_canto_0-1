@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QFormLayout,
     QLineEdit,
-    QComboBox,
+    QComboBox, QLabel,
 )
 
 if TYPE_CHECKING:
@@ -100,15 +100,21 @@ class CategoryManagerUIBuilder:
         form_entry.setFormAlignment(_Qt.AlignmentFlag.AlignLeft | _Qt.AlignmentFlag.AlignTop)
         form_entry.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
 
+        # Set vertical spacing between form rows to 18pt for comfortable layout
+        form_entry.setVerticalSpacing(18)
+
         # Jyutping field
+        from PySide6.QtWidgets import QSizePolicy
         self.dialog._add_jy = QLineEdit(group_entry)
         self.dialog._add_jy.setPlaceholderText("e.g. nei5 hou2")
         self.dialog._add_jy.setClearButtonEnabled(True)
+        self.dialog._add_jy.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         # Meanings field
         self.dialog._add_mn = QLineEdit(group_entry)
         self.dialog._add_mn.setPlaceholderText("comma-separated meanings, e.g. hello, hi")
         self.dialog._add_mn.setClearButtonEnabled(True)
+        self.dialog._add_mn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         # Notes field
         self.dialog._add_notes = QLineEdit(group_entry)
@@ -118,18 +124,43 @@ class CategoryManagerUIBuilder:
             "Shown only when an entry is ambiguous or needs confirmation. "
             "Auto-default entries never keep notes."
         )
+        self.dialog._add_notes.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
-        form_entry.addRow("Jyutping:", self.dialog._add_jy)
-        form_entry.addRow("Meanings:", self.dialog._add_mn)
-        form_entry.addRow("Notes:", self.dialog._add_notes)
+        # Create labels with 16pt font
+        from PySide6.QtGui import QFont
+        from PySide6.QtWidgets import QSizePolicy
+        label_font = QFont()
+        label_font.setPointSize(16)
+
+        # Create labels with proper height
+        label_jy = QLabel("Jyutping:")
+        label_jy.setFont(label_font)
+        label_jy.setMinimumHeight(40)
+        label_jy.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+
+        label_mn = QLabel("Meanings:")
+        label_mn.setFont(label_font)
+        label_mn.setMinimumHeight(40)
+        label_mn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+
+        label_notes = QLabel("Notes:")
+        label_notes.setFont(label_font)
+        label_notes.setMinimumHeight(40)
+        label_notes.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+
+        form_entry.addRow(label_jy, self.dialog._add_jy)
+        form_entry.addRow(label_mn, self.dialog._add_mn)
+        form_entry.addRow(label_notes, self.dialog._add_notes)
 
         # Category combobox
+        from PySide6.QtWidgets import QSizePolicy
         self.dialog._add_cat = QComboBox(group_entry)
         self.dialog._add_cat.setObjectName("comboAddCategories")
         self.dialog._add_cat.setEditable(True)
         self.dialog._add_cat.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
         self.dialog._add_cat.addItems(self.dialog._all_cats)
         self.dialog._add_cat.setCurrentIndex(-1)
+        self.dialog._add_cat.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         le_cat = self.dialog._add_cat.lineEdit()
         if le_cat is not None:
@@ -148,7 +179,17 @@ class CategoryManagerUIBuilder:
         except (ImportError, TypeError, AttributeError, RuntimeError):
             self.dialog._cat_combo_ctrl = None
 
-        form_entry.addRow("Category:", self.dialog._add_cat)
+        # Category label with 16pt font
+        from PySide6.QtGui import QFont
+        label_font_cat = QFont()
+        label_font_cat.setPointSize(16)
+
+        label_cat = QLabel("Category:")
+        label_cat.setFont(label_font_cat)
+        label_cat.setMinimumHeight(40)
+        label_cat.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+
+        form_entry.addRow(label_cat, self.dialog._add_cat)
 
         # Back-compat aliases
         self.dialog.editJyut = self.dialog._add_jy
@@ -159,7 +200,35 @@ class CategoryManagerUIBuilder:
         self._group_entry = group_entry
         self._form_entry = form_entry
 
-        row.addWidget(group_entry)
+        # Set 16pt font for Entry panel input fields
+        from PySide6.QtGui import QFont
+        entry_font = QFont()
+        entry_font.setPointSize(16)
+
+        # Apply font to all Entry panel fields
+        self.dialog._add_jy.setFont(entry_font)
+        self.dialog._add_jy.setMinimumHeight(40)
+
+        self.dialog._add_mn.setFont(entry_font)
+        self.dialog._add_mn.setMinimumHeight(40)
+
+        self.dialog._add_notes.setFont(entry_font)
+        self.dialog._add_notes.setMinimumHeight(40)
+
+        # Set font for Category combobox
+        self.dialog._add_cat.setFont(entry_font)
+        self.dialog._add_cat.setMinimumHeight(40)
+
+        # Also set font for the combobox's line edit (when editable)
+        le_cat = self.dialog._add_cat.lineEdit()
+        if le_cat is not None:
+            le_cat.setFont(entry_font)
+
+        # Set Entry panel width to 550px to accommodate wider Category combobox
+        group_entry.setMinimumWidth(550)
+
+        # Add to layout with stretch factor (Entry:Hanzi = 2:1 ratio)
+        row.addWidget(group_entry, 2)
 
     def _create_hanzi_group(self) -> None:
         """Create Hanzi group (display, candidates, manual button)."""
@@ -172,10 +241,15 @@ class CategoryManagerUIBuilder:
         group_hanzi = QGroupBox("Hanzi", self.dialog)
         form_hanzi = QFormLayout(group_hanzi)
 
+        # Set vertical spacing to 18pt to match Entry panel
+        form_hanzi.setVerticalSpacing(18)
+
         # Hanzi display field
+        from PySide6.QtWidgets import QSizePolicy
         self.dialog._add_hz = QLineEdit(group_hanzi)
         self.dialog._add_hz.setReadOnly(True)
         self.dialog._add_hz.setPlaceholderText("Auto, after reverse lookup")
+        self.dialog._add_hz.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         form_hanzi.addRow(self.dialog._add_hz)
 
         # Candidate combo
@@ -186,7 +260,15 @@ class CategoryManagerUIBuilder:
         if self.dialog._cand_combo.view() is not None:
             self.dialog._cand_combo.view().setToolTip(HANZI_CANDIDATE_TOOLTIP)
 
-        form_hanzi.addRow("Candidates:", self.dialog._cand_combo)
+        # Candidates label with 16pt font
+        from PySide6.QtGui import QFont
+        label_font_cand = QFont()
+        label_font_cand.setPointSize(16)
+
+        label_cand = QLabel("Candidates:")
+        label_cand.setFont(label_font_cand)
+
+        form_hanzi.addRow(label_cand, self.dialog._cand_combo)
 
         # Manual Hanzi button
         self.dialog._btn_custom_hz = QPushButton("Enter my own Hanzi", self.dialog)
@@ -207,8 +289,21 @@ class CategoryManagerUIBuilder:
         self._group_hanzi = group_hanzi
         self._form_hanzi = form_hanzi
 
-        row.addWidget(group_hanzi)
-        self.dialog._root.addLayout(row)
+        # Set Hanzi panel width to 350px (matching Entry panel)
+        group_hanzi.setMinimumWidth(350)
+
+        # Increase groupbox heights to 280px to accommodate 40px vertical spacing
+        group_entry = self._group_entry
+        if group_entry is not None:
+            group_entry.setMinimumHeight(280)
+        group_hanzi.setMinimumHeight(280)
+
+        # Add to layout with stretch factor (Entry:Hanzi = 2:1 ratio)
+        row.addWidget(group_hanzi, 1)
+
+        # Add the row to root layout with stretch factor to ensure vertical space
+        # This prevents the Entry+Hanzi row from collapsing to zero height
+        self.dialog._root.addLayout(row, 0)
 
         # Apply typography
         try:

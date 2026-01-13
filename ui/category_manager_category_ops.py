@@ -732,6 +732,21 @@ class CategoryManagerCategoryOpsController:
 
             # Core commit
             logger.debug("Add/Edit category commit: calling svc.commit(requested=%r has_jy=%s confirmed_add=%s)", canon, has_jy, user_confirmed_add)
+
+            # After category commit, if we have Jyutping, fill Hanzi candidates
+            if has_jy:
+                try:
+                    jy_widget = getattr(self.dialog, "_add_jy", None)
+                    if jy_widget is not None:
+                        jy_text = jy_widget.text().strip()
+                        if jy_text:
+                            logger.debug("Category commit: triggering fill_hanzi_candidates jy=%r cat=%r", jy_text, canon)
+                            if hasattr(self.dialog, "_fill_hanzi_candidates"):
+                                self.dialog._fill_hanzi_candidates(jy_text, canon)
+                            else:
+                                logger.debug("Category commit: _fill_hanzi_candidates method not found on dialog")
+                except (TypeError, AttributeError, RuntimeError) as e:
+                    logger.debug("Category commit: failed to fill candidates: %s", e)
             try:
                 res = self.dialog._cat_commit_svc.commit(
                     requested=canon,

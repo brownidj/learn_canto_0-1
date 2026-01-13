@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import logging
 from typing import Callable, Optional
 
 from PySide6.QtWidgets import QComboBox, QLineEdit, QMessageBox
+
+logger = logging.getLogger(__name__)
 
 
 class CategoryComboController:
@@ -95,6 +98,19 @@ class CategoryComboController:
                 pass
 
     def clear_and_refocus(self) -> None:
+        """Clear the category combo and refocus.
+
+        WARNING: This should NOT be called during normal Add flow.
+        Only call this explicitly when resetting the entire form.
+        """
+        logger.debug("CATDBG: clear_and_refocus called (should only happen on explicit reset)")
+
+        # If there's a committed category, don't clear it!
+        # This prevents accidental clearing during the Add flow.
+        if self._last_commit_text:
+            logger.debug("CATDBG: Skipping clear - category already committed: %r", self._last_commit_text)
+            return
+
         w = self._combo
 
         try:
@@ -110,6 +126,7 @@ class CategoryComboController:
                 pass
 
         try:
+            logger.debug("CATDBG: CategoryComboController clearing combo (setCurrentIndex(-1))")
             w.setCurrentIndex(-1)
         except (TypeError, AttributeError, RuntimeError):
             try:

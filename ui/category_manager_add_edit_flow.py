@@ -119,137 +119,220 @@ class CategoryManagerAddEditFlowController:
             return
 
         # Advance to category
+        focused = False
         try:
             ctrl = getattr(self.dialog, "_cat_combo_ctrl", None)
             if ctrl is not None and hasattr(ctrl, "focus"):
                 ctrl.focus()
+                focused = True
         except (TypeError, AttributeError, RuntimeError):
-            pass
+            focused = False
+
+        # Direct fallback: focus the Category widget itself
+        if not focused:
+            try:
+                cat_widget = getattr(self.dialog, "_add_cat", None)
+                if cat_widget is not None and hasattr(cat_widget, "setFocus"):
+                    cat_widget.setFocus()
+                    # Select all text in the line edit for easy typing
+                    if hasattr(cat_widget, "lineEdit"):
+                        le = cat_widget.lineEdit()
+                        if le is not None and hasattr(le, "selectAll"):
+                            QTimer.singleShot(0, le.selectAll)
+            except (TypeError, AttributeError, RuntimeError):
+                pass
 
         self._update_save_enabled()
 
     def on_meaning_enter_committed(self) -> None:
-        """Handle Enter/commit in Meaning field with confirmation dialog."""
+        """Handle Enter/commit in Meaning field with confirmation dialog.
+
+        Workflow:
+          1. Build preview with current field values (including any user edits to Meaning)
+          2. Show confirmation dialog with Save/Edit/Cancel
+          3. Handle user choice:
+             - Save: Commit the entry, clear form, focus Jyutping
+             - Edit: Return to form without clearing, focus Meaning for editing
+             - Cancel: Clear form, focus Jyutping
+        """
+        # Build preview from current UI state
+        # The builder reads directly from widgets, capturing any user edits
         try:
             preview = self.dialog._build_add_entry_preview()
         except (TypeError, AttributeError, RuntimeError, ValueError):
             preview = {}
 
-        jy_s, hz_s, mn_s, cat_s = self.dialog._read_add_fields()
+        # Extract values from preview for use in payload
+        jy_s = str(preview.get("jyutping", "") or "").strip() if isinstance(preview, dict) else ""
+        hz_s = str(preview.get("hanzi", "") or "").strip() if isinstance(preview, dict) else ""
+        mn_s = str(preview.get("meaning", "") or "").strip() if isinstance(preview, dict) else ""
+        cat_s = str(preview.get("category", "") or "").strip() if isinstance(preview, dict) else ""
 
-        # Gather categories payload
-        cats_out = []
-
-        def _cat_ok(s) -> bool:
-            try:
-                t = str(s or "").strip()
-                return bool(t) and t.lower() not in ("unassigned", "all")
-            except Exception:
-                return False
-
-        def _first_valid(values):
-            if values is None:
-                return ""
-            if isinstance(values, str):
-                return str(values).strip() if _cat_ok(values) else ""
-            if isinstance(values, (list, tuple, set)):
-                for v in list(values):
-                    if _cat_ok(v):
-                        return str(v).strip()
-            return ""
-
-        # Source 1: read field
-        if _cat_ok(cat_s):
-            cats_out = [cat_s]
-
-        # Source 2: widget
-        if not cats_out:
-            w_cat2 = getattr(self.dialog, "_add_cat", None)
-            t2 = WidgetAccessor.get_text(w_cat2)
-            if _cat_ok(t2):
-                cats_out = [t2]
-
-        # Source 3: preview
-        if not cats_out and isinstance(preview, dict):
-            for k in ("category", "cat", "categories", "cats"):
-                c = _first_valid(preview.get(k))
-                if c:
-                    cats_out = [c]
-                    break
-
-        # Source 4: context
-        if not cats_out:
-            ctx3 = getattr(self.dialog, "_add_edit_ctx", None)
-            if ctx3 is not None:
-                c3 = getattr(ctx3, "category", "") or getattr(ctx3, "cat", "")
-                if _cat_ok(c3):
-                    cats_out = [str(c3).strip()]
-
-        # User decision
+        # Show confirmation dialog
         try:
             decision = self.dialog._confirm_add_entry(preview)
         except (TypeError, AttributeError, RuntimeError, ValueError):
-            decision = "edit"
+            decision = "cancel"
 
         decision_s = str(decision or "").strip().lower()
 
-        # Save: commit once
+        # Handle Save: commit the entry using preview values
         if decision_s == "save":
+            # Build payload from preview (which was shown to user and includes their edits)
             payload = dict(preview) if isinstance(preview, dict) else {}
+
+            # Extract values from preview
+            payload_jy = str(payload.get("jyutping", "") or "").strip()
+            payload_hz = str(payload.get("hanzi", "") or "").strip()
+            payload_mn = str(payload.get("meaning", "") or "").strip()
+            payload_cat = str(payload.get("category", "") or "").strip()
+
+            # Build category list
+            cat_list = []
+            if payload_cat and str(payload_cat).lower() not in ("unassigned", "all"):
+                cat_list = [payload_cat]
+
+            # Ensure payload has all required fields with correct values
             try:
-                payload["jyutping"] = jy_s
-                payload["hanzi"] = hz_s
-                payload["meaning"] = mn_s
-                payload["gloss"] = mn_s
-                if cats_out:
-                    payload["categories"] = list(cats_out)
-                else:
-                    existing = payload.get("categories")
-                    if isinstance(existing, (list, tuple, set)) and list(existing):
-                        payload["categories"] = [str(x).strip() for x in list(existing) if str(x).strip()]
-                    else:
-                        payload["categories"] = []
-            except Exception:
+                payload["jyutping"] = payload_jy
+                payload["hanzi"] = payload_hz
+                payload["meaning"] = payload_mn
+                payload["gloss"] = payload_mn  # Legacy alias
+                payload["category"] = payload_cat
+                payload["categories"] = cat_list  # Legacy alias
+            except (TypeError, AttributeError, RuntimeError):
                 pass
 
-            committed_once = False
+            # Log for debugging
+            try:
+                logger.debug(
+                    "Save: committing payload jy=%r hz=%r mn=%r cat=%r",
+                    payload_jy, payload_hz, payload_mn, payload_cat
+                )
+            except (TypeError, AttributeError, RuntimeError):
+                pass
+
+            # Commit via callback or save handler
+            committed = False
             cb = getattr(self.dialog, "_commit_callback", None)
             if callable(cb):
                 try:
                     cb(payload)
-                    committed_once = True
-                except (TypeError, AttributeError, RuntimeError):
-                    committed_once = False
+                    committed = True
+                except (TypeError, AttributeError, RuntimeError) as e:
+                    try:
+                        logger.debug("Commit callback failed: %s", e)
+                    except (TypeError, AttributeError, RuntimeError):
+                        pass
 
-            if not committed_once:
+            if not committed:
                 try:
                     self.dialog._on_save_clicked()
                 except (TypeError, AttributeError, RuntimeError):
                     pass
 
+            # Clear form and return to Jyutping
             self.dialog._clear_add_entry_fields()
-            self.dialog._set_save_button_visible(False)
             self.dialog._focus_jyutping(select_all=True)
             self._update_save_enabled()
             return
 
-        # Edit: show Save button
+        # Handle Edit: return focus to Meaning field for editing
         if decision_s == "edit":
-            self.dialog._set_save_button_visible(True)
+            # Focus the Meaning field so user can continue editing
+            try:
+                mn_widget = getattr(self.dialog, "_add_mn", None)
+                if mn_widget is not None:
+                    WidgetAccessor.focus(mn_widget, select_all=True)
+            except (TypeError, AttributeError, RuntimeError):
+                pass
             self._update_save_enabled()
             return
 
-        # Cancel: clear and refocus
-        self.dialog._clear_add_entry_fields()
-        self.dialog._set_save_button_visible(False)
+        # Handle Cancel: reset both Entry and Hanzi panels to initial state
+        try:
+            self.dialog._reset_to_initial_state()
+        except (TypeError, AttributeError, RuntimeError):
+            # Fallback: just clear fields
+            self.dialog._clear_add_entry_fields()
+
         self.dialog._focus_jyutping(select_all=True)
         self._update_save_enabled()
+
+    def _handle_save_decision(self, preview: dict) -> None:
+        """Handle Save decision from confirmation dialog."""
+        try:
+            # Delegate to save/commit controller
+            save_ctrl = getattr(self._dialog, "_save_commit", None)
+            if save_ctrl is not None:
+                # Commit the entry
+                self._commit_entry(preview)
+                # Clear form
+                self._reset_form()
+                # Return focus to jyutping for next entry
+                self._focus_jyutping()
+        except (TypeError, AttributeError, RuntimeError) as e:
+            logger.debug(f"Save decision handling failed: {e}")
+
+    def _handle_edit_decision(self) -> None:
+        """Handle Edit decision from confirmation dialog."""
+        try:
+            # Show save button for manual confirmation
+            preview_ctrl = getattr(self._dialog, "_preview_confirm", None)
+            if preview_ctrl is not None:
+                preview_ctrl.set_save_button_visible(True)
+            # Keep focus on meaning field
+            # (user is already there)
+        except (TypeError, AttributeError, RuntimeError) as e:
+            logger.debug(f"Edit decision handling failed: {e}")
+
+    def _handle_cancel_decision(self) -> None:
+        """Handle Cancel decision from confirmation dialog."""
+        try:
+            # Clear form
+            self._reset_form()
+            # Return focus to jyutping
+            self._focus_jyutping()
+        except (TypeError, AttributeError, RuntimeError) as e:
+            logger.debug(f"Cancel decision handling failed: {e}")
+
+    def _commit_entry(self, preview: dict) -> None:
+        """Commit entry to storage."""
+        try:
+            # Call the dialog's historical commit entry point
+            fn = getattr(self._dialog, "_on_add_item_enter", None)
+            if callable(fn):
+                fn()
+        except (TypeError, AttributeError, RuntimeError) as e:
+            logger.debug(f"Entry commit failed: {e}")
+
+    def _reset_form(self) -> None:
+        """Reset all entry form fields."""
+        try:
+            reset_ctrl = getattr(self._dialog, "_field_reset", None)
+            if reset_ctrl is not None and hasattr(reset_ctrl, "clear_add_entry_fields"):
+                reset_ctrl.clear_add_entry_fields()
+        except (TypeError, AttributeError, RuntimeError) as e:
+            logger.debug(f"Form reset failed: {e}")
+
+    def _focus_jyutping(self) -> None:
+        """Set focus to jyutping field."""
+        try:
+            fn = getattr(self._dialog, "_focus_jyutping", None)
+            if callable(fn):
+                fn()
+        except (TypeError, AttributeError, RuntimeError) as e:
+            logger.debug(f"Focus jyutping failed: {e}")
 
     def fill_hanzi_candidates(self, jy: str, category: str | None = None) -> None:
         """Fill Hanzi candidate combobox for given Jyutping."""
         jy_s = str(jy or "").strip()
         if not jy_s:
             return
+
+        # Preserve the category selection throughout the flow
+        cat_widget = getattr(self.dialog, "_add_cat", None)
+        preserved_category = category or (cat_widget.currentText() if cat_widget else None)
 
         logger.debug("_fill_hanzi_candidates: start jy=%r category=%r", jy_s, category or "")
 
@@ -402,6 +485,18 @@ class CategoryManagerAddEditFlowController:
         # Refresh Save gating
         self._update_save_enabled()
 
+        # Restore category if it was inadvertently cleared
+        if preserved_category and cat_widget:
+            current_text = cat_widget.currentText()
+            if not current_text or current_text.strip() == "":
+                try:
+                    # Restore the category text without triggering signals
+                    with SignalBlocker(cat_widget):
+                        cat_widget.setCurrentText(str(preserved_category))
+                    logger.debug("_fill_hanzi_candidates: restored category to %r", preserved_category)
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
+
         # Focus behaviour
         if len(cands_list) == 1:
             WidgetAccessor.focus(getattr(self.dialog, "_add_mn", None))
@@ -528,7 +623,7 @@ class CategoryManagerAddEditFlowController:
             QMessageBox.warning(
                 self.dialog,
                 "Duplicate Jyutping",
-                f"The Jyutping "{jy}" already exists in your vocabulary.\n\nPlease edit the Jyutping and try again.",
+                f'The Jyutping "{jy}" already exists in your vocabulary.\n\nPlease edit the Jyutping and try again.',
             )
         except (TypeError, AttributeError, RuntimeError):
             pass

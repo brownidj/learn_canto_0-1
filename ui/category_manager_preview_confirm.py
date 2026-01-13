@@ -35,6 +35,11 @@ class CategoryManagerPreviewConfirmController:
         """Confirmation dialog for a pending add/edit entry.
 
         Returns: 'save' | 'edit' | 'cancel'
+
+        Behavior:
+          - Save: Commits the entry and clears the form
+          - Edit: Returns focus to the form without clearing
+          - Cancel: Clears the form and returns focus
         """
         jy = str((preview.get("jyutping") or "")).strip()
         hz = str((preview.get("hanzi") or "")).strip()
@@ -43,14 +48,15 @@ class CategoryManagerPreviewConfirmController:
 
         msg = QMessageBox(self.dialog)
         msg.setIcon(QMessageBox.Icon.Question)
-        msg.setWindowTitle("Confirm entry")
-        msg.setText("Save this entry?")
+        msg.setWindowTitle("Confirm Entry")
+        msg.setText("Review and confirm this entry:")
         msg.setInformativeText(
-            f"Jyutping: {jy}\nHanzi: {hz}\nMeaning: {mn}\nCategory: {cat}"
+            f"Jyutping:  {jy}\nHanzi:     {hz}\nMeaning:   {mn}\nCategory:  {cat}"
         )
 
         btn_save = msg.addButton("Save", QMessageBox.ButtonRole.AcceptRole)
         btn_edit = msg.addButton("Edit", QMessageBox.ButtonRole.ActionRole)
+        btn_cancel = msg.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
 
         try:
             msg.setDefaultButton(btn_save)
@@ -71,6 +77,8 @@ class CategoryManagerPreviewConfirmController:
             return "save"
         if clicked is btn_edit:
             return "edit"
+        if clicked is btn_cancel:
+            return "cancel"
         return "cancel"
 
     def set_save_button_visible(self, visible: bool) -> None:

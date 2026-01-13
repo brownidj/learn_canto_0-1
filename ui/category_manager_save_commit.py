@@ -7,8 +7,12 @@ Handles save button clicks and commit operations.
 import logging
 from typing import TYPE_CHECKING
 
+from PySide6.QtWidgets import QMessageBox
+
 if TYPE_CHECKING:
     from category_manager import CategoryManagerDialog
+
+from PySide6.QtWidgets import QMessageBox
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +31,22 @@ class CategoryManagerSaveCommitController:
 
         Best-effort only: never raise from UI callbacks.
         """
+        # Check for duplicate Jyutping before proceeding
+        try:
+            jy, hz, mn, cat = self.dialog._read_add_fields()
+            is_duplicate, existing_hanzi = self.dialog._check_duplicate_jyutping(jy)
+
+            if is_duplicate:
+                QMessageBox.warning(
+                    self.dialog,
+                    "Duplicate Jyutping",
+                    f"An entry with Jyutping '{jy}' already exists (Hanzi: {existing_hanzi}).\n\n"
+                    f"Please use a different Jyutping or edit the existing entry."
+                )
+                return
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+
         # Prefer the historical handler name if present
         try:
             fn = getattr(self.dialog, "_on_add_item_enter", None)

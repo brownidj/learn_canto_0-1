@@ -3,11 +3,14 @@ import sys
 from pathlib import Path
 
 import pytest
+from PySide6.QtWidgets import QApplication
 
 # Add project root to Python path so tests can import domain modules
 PROJECT_ROOT = Path(__file__).parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
+
+from category_manager import CategoryManagerDialog
 
 
 def _is_ui_run(config) -> bool:
@@ -181,3 +184,43 @@ def _isolate_categories_yaml(monkeypatch, tmp_path: Path):
 
     # Patch the function *as used by categories_store*.
     monkeypatch.setattr(categories_store, "categories_yaml_path", _fake_categories_yaml_path, raising=True)
+
+def _load_add_dialog(
+        vocab_items=None,
+        categories_map=None
+) -> CategoryManagerDialog:
+    """
+    Standardized dialog loading for all tests.
+
+    This function is imported directly by test files that need it.
+    """
+    # Ensure QApplication exists
+    app = QApplication.instance() or QApplication([])
+
+    # Default sample data
+    default_vocab = {
+        "靚": [["pretty", "beautiful"], "leng4"],
+        "靓": [["young"], "leng4"],
+    }
+    default_categories = {
+        "descriptions_adjectives": [],
+        "verbs_actions": [],
+        "unassigned": []
+    }
+
+    # Use provided or default data
+    vocab = vocab_items or default_vocab
+    categories = categories_map or default_categories
+
+    # Create dialog
+    dialog = CategoryManagerDialog(
+        parent=None,
+        vocab_items=vocab,
+        categories_map=categories
+    )
+
+    # Ensure dialog is ready
+    dialog.show()
+    app.processEvents()
+
+    return dialog
