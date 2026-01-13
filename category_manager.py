@@ -471,10 +471,6 @@ class CategoryManagerDialog(QDialog):
     # Category dropdown refresh
     # ------------------------------
 
-    def _refresh_category_dropdown_from_cats(self, *, selected: str = "") -> None:
-        """Refresh the Add/Edit category dropdown from the authoritative in-memory map."""
-        CategoryManagerVocabDisplay.refresh_category_dropdown_from_cats(self, selected=selected)
-
     @staticmethod
     def _perf_start(name: str) -> float:
         return CategoryManagerHelpers.perf_start(name)
@@ -689,39 +685,6 @@ class CategoryManagerDialog(QDialog):
         except (AttributeError, TypeError, ValueError, RuntimeError):
             pass
 
-    def _load_hanzi_style_map(self) -> dict:
-        """Lazy-load style map (delegated to candidate pipeline)."""
-        return self._candidate_pipeline.load_hanzi_style_map()
-
-    def _hanzi_style(self, hanzi: str) -> str:
-        """Style lookup (delegated to candidate pipeline)."""
-        return self._candidate_pipeline.hanzi_style(hanzi)
-
-    def _is_colloquial_hanzi(self, hanzi: str) -> bool:
-        """Colloquial detection (delegated to candidate pipeline)."""
-        return self._candidate_pipeline.is_colloquial_hanzi(hanzi)
-
-    def _curate_top_hanzi_candidates(self, ranked: list[str]) -> list[str]:
-        """Curate candidates (delegated to candidate pipeline)."""
-        return self._candidate_pipeline.curate_top_hanzi_candidates(ranked)
-
-    def _focus_jyutping(self, *, select_all: bool = True) -> None:
-        """Focus Jyutping field."""
-        self._focus_ctrl.focus_jyutping(select_all=select_all)
-
-    def _focus_meanings(self, *, select_all: bool = True) -> None:
-        """Focus Meanings field."""
-        self._focus_ctrl.focus_meanings(select_all=select_all)
-
-    def _focus_hanzi(self, *, select_all: bool = True) -> None:
-        """Focus Hanzi field."""
-        self._focus_ctrl.focus_hanzi(select_all=select_all)
-
-    def _focus_category(self, *, select_all: bool = True, show_popup: bool = False) -> None:
-        """Focus category combobox."""
-        self._focus_ctrl.focus_category(select_all=select_all, show_popup=show_popup)
-
-
     def _connect_unique(self, signal, slot) -> None:
         """Signal connection (internal use - prefer signal wiring controller for new code)."""
         from ui.category_manager_signal_wiring import CategoryManagerSignalWiring
@@ -747,18 +710,6 @@ class CategoryManagerDialog(QDialog):
         wiring._wire_combo_common(w, on_change=on_change, on_activate=on_activate)
 
     # ---- UI intent / focus policy (delegated to controller) ----
-    def _user_has_committed_hanzi(self) -> bool:
-        return self._focus_ctrl.user_has_committed_hanzi()
-
-    def _user_is_in_manual_hanzi_mode(self) -> bool:
-        return self._focus_ctrl.user_is_in_manual_hanzi_mode()
-
-    def _mark_hanzi_committed(self, committed: bool = True) -> None:
-        self._focus_ctrl.mark_hanzi_committed(committed)
-
-    def _mark_manual_hanzi_mode(self, enabled: bool = True) -> None:
-        self._focus_ctrl.mark_manual_hanzi_mode(enabled)
-
     def _apply_focus_policy(
         self,
         *,
@@ -911,55 +862,6 @@ class CategoryManagerDialog(QDialog):
 
         return _clean([str(x) for x in (ms2 or [])])
 
-    def _defer_focus(self, target: str) -> None:
-        """Defer focus movement to the next event-loop tick (best-effort)."""
-        self._focus_ctrl.defer_focus(target)
-
-    def _on_btn_custom_hz_clicked(self) -> None:
-        """Enter manual Hanzi mode (delegated to manual Hanzi controller)."""
-        self._manual_hanzi_ctrl.enter_manual_mode()
-
-    def _on_save_clicked(self) -> None:
-        """Legacy inline Save button handler (delegated to save/commit controller)."""
-        self._save_commit.on_save_clicked()
-
-    def _ensure_category_services(self):
-        """Ensure category services (delegated to category ops controller)."""
-        return self._category_ops.ensure_category_services()
-
-    def _add_new_category(self, cat: str) -> bool:
-        """Add new category (delegated to category ops controller)."""
-        return self._category_ops.add_new_category(cat)
-
-    def _on_add_category_committed(self, *args, user_action: bool = False, **kwargs) -> None:
-        """Category commit (delegated to category ops controller)."""
-        self._category_ops.on_add_category_committed(*args, user_action=user_action, **kwargs)
-
-
-    def _build_add_entry_preview(self) -> dict:
-        """Build entry preview (delegated to preview/confirm controller)."""
-        return self._preview_confirm.build_add_entry_preview()
-
-    def _confirm_add_entry(self, preview: dict) -> str:
-        """Confirmation dialog (delegated to preview/confirm controller)."""
-        return self._preview_confirm.confirm_add_entry(preview)
-
-    def _set_save_button_visible(self, visible: bool) -> None:
-        """Set Save button visibility (delegated to preview/confirm controller)."""
-        self._preview_confirm.set_save_button_visible(visible)
-
-    def _clear_add_entry_fields(self) -> None:
-        """Clear Add/Edit fields (delegated to field reset controller)."""
-        self._field_reset.clear_add_entry_fields()
-
-    def _reset_add_panel_pre_validation(self) -> None:
-        """Reset Add/Edit panel to pre-validation state (delegated to field reset controller)."""
-        self._field_reset.reset_add_panel_pre_validation()
-
-    def _on_add_jy_user_edited(self, *args, **kwargs) -> None:
-        """Slot: user edited Jyutping; reset dependent fields to placeholders."""
-        CategoryManagerHelpers.on_add_jy_user_edited(self, *args, **kwargs)
-
     def _on_add_category_changed(self, *args, **kwargs) -> None:
         """Category text changed while typing.
 
@@ -970,13 +872,6 @@ class CategoryManagerDialog(QDialog):
         """
         CategoryManagerHelpers.on_add_category_changed(self, *args, **kwargs)
 
-    def _focus_jy(self) -> None:
-        CategoryManagerHelpers.focus_jy(self)
-
-    def _on_meaning_enter_committed(self) -> None:
-        """Handle Enter/commit in Meaning field (delegated to flow controller)."""
-        self._add_edit_flow.on_meaning_enter_committed()
-
     # ---- Add & Edit: Jyutping validation + reverse lookup wiring ----
 
     @staticmethod
@@ -984,32 +879,6 @@ class CategoryManagerDialog(QDialog):
         text = (s or "").strip().lower()
         # Collapse runs of whitespace to single spaces.
         return " ".join(text.split())
-
-    def _warn_duplicate_jy_and_reset(self, jy: str) -> None:
-        """Warn about duplicate (delegated to flow controller)."""
-        self._add_edit_flow._warn_duplicate_jy_and_reset(jy)
-
-    def _read_add_fields(self) -> tuple[str, str, str, str]:
-        """Read Add/Edit panel fields safely (legacy compatibility)."""
-        return CategoryManagerHelpers.read_add_fields(self)
-
-    def _ensure_category_combo_editable(self) -> None:
-        """Ensure the Add/Edit category combobox is editable (best-effort)."""
-        CategoryManagerHelpers.ensure_category_combo_editable(self)
-
-    def _fill_hanzi_candidates(self, jy: str, category: str | None = None) -> None:
-        """Fill Hanzi candidates (delegated to flow controller)."""
-        self._add_edit_flow.fill_hanzi_candidates(jy, category)
-
-    def _on_meanings_text_changed(self, *args, **kwargs) -> None:
-        """Meaning text changed (user or programmatic).
-        Keeps Add/Edit context in sync and refreshes Save gating. Must never raise.
-        """
-        CategoryManagerHelpers.on_meanings_text_changed(self, *args, **kwargs)
-
-    def _save_add_item(self) -> None:
-        """Legacy save entry point (delegated to save/commit controller)."""
-        self._save_commit.save_add_item()
 
     def _update_save_enabled(self) -> None:
         """Enable/disable Save based on current Add/Edit validity.
@@ -1020,7 +889,7 @@ class CategoryManagerDialog(QDialog):
         """
         # Read current UI fields (authoritative)
         try:
-            jy, hz, mn, cat = self._read_add_fields()
+            jy, hz, mn, cat = CategoryManagerHelpers.read_add_fields(self)()
         except (TypeError, AttributeError, RuntimeError):
             jy, hz, mn, cat = "", "", "", ""
 
@@ -1154,7 +1023,7 @@ class CategoryManagerDialog(QDialog):
 
         if btn is not None:
             try:
-                jy2, hz2, mn2, cat2 = self._read_add_fields()
+                jy2, hz2, mn2, cat2 = CategoryManagerHelpers.read_add_fields(self)()
             except Exception:
                 jy2 = hz2 = mn2 = cat2 = ""
 
@@ -1189,14 +1058,6 @@ class CategoryManagerDialog(QDialog):
     # ---- Add/Edit UI wiring (delegated to signal wiring controller) ----
     # Note: _setup_add_edit_ui is now called automatically during __init__
     # via CategoryManagerSignalWiring.wire_add_edit_signals()
-
-    def _reverse_candidates_for_jy(self, jy: str) -> list[tuple[str, str, int]]:
-        """Reverse candidate lookup (delegated to candidate pipeline)."""
-        return self._candidate_pipeline.reverse_candidates_for_jy(jy)
-
-    def _on_jyut_enter(self) -> None:
-        """Commit Jyutping entry (delegated to flow controller)."""
-        self._add_edit_flow.on_jyut_enter()
 
     def _meanings_for_hanzi(self, hz: str) -> list[str]:
         """Hanzi-only meaning lookup fallback.
@@ -1235,26 +1096,6 @@ class CategoryManagerDialog(QDialog):
             pass
 
         return []
-
-    def _set_notes(self, text: str, *, source: str = "") -> None:
-        """Set the Notes field (best-effort; never raises)."""
-        CategoryManagerHelpers.set_notes(self, text, source=source)
-
-    def _on_candidate_index_activated(self, *args) -> None:
-        """Handle candidate selection (delegated to flow controller)."""
-        self._add_edit_flow.on_candidate_index_activated(*args)
-
-    def _on_candidate_text_changed(self, text: str) -> None:
-        """Handle candidate text change (delegated to flow controller)."""
-        self._add_edit_flow.on_candidate_text_changed(text)
-
-    def _refresh_table(self) -> None:
-        """Refresh vocabulary table display."""
-        CategoryManagerVocabDisplay.refresh_table(self)
-
-    def _on_search_changed(self, text: str) -> None:
-        """Handle search text change."""
-        CategoryManagerVocabDisplay.on_search_changed(self, text)
 
     # ---- Widget accessor helpers ----
     # Note: Widget access is handled via ui.widget_utils.WidgetAccessor utility methods
