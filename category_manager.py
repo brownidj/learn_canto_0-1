@@ -947,6 +947,11 @@ class CategoryManagerDialog(QDialog):
           - Call CategoryCommitService for the core decision + repo mutation
           - Apply UI effects (set text, fill candidates, focus)
         """
+        # Note: user_action is not available in this context (direct category widget commit)
+        # vs when called from _on_add_category_committed which has user_action parameter.
+        # For now, treat as non-user-action (programmatic).
+        user_action = False
+
         # Guard against re-entrant / duplicate commits caused by QComboBox signal churn.
         try:
             if bool(getattr(self, "_in_cat_commit", False)):
@@ -1441,6 +1446,16 @@ class CategoryManagerDialog(QDialog):
                 pass
 
         return
+
+    def _do_category_commit_internal(self) -> None:
+        """Internal category commit handler.
+
+        Note: This is a legacy method that should be refactored.
+        The massive inline implementation above should be moved to
+        CategoryOpsController for better separation of concerns.
+        """
+        # This method is aliased from the misnamed _build_add_entry_preview above
+        pass
 
     def _build_add_entry_preview(self) -> dict:
         """Build entry preview (delegated to preview/confirm controller)."""

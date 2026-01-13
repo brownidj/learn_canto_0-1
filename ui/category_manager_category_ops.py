@@ -184,6 +184,407 @@ class CategoryManagerCategoryOpsController:
             cats_map[cat_key] = []
         return True
 
+
+    def do_category_commit_internal(self, user_action: bool = False) -> None:
+        """Internal category commit handler (extracted from misnamed _build_add_entry_preview).
+
+        This massive method handles the full category commitment workflow including
+        UI confirmation, repo mutation, and UI effects. Should eventually be broken
+        down further into smaller pieces.
+
+        Args:
+            user_action: Whether this commit was triggered by explicit user action
+        """
+        dialog = self._dialog
+
+        # Guard against re-entrant / duplicate commits caused by QComboBox signal churn.
+        try:
+            if bool(getattr(dialog, "_in_cat_commit", False)):
+                try:
+                    logger.debug("Add/Edit category commit: re-entrant call suppressed")
+                except Exception:
+                    pass
+                return
+        except Exception:
+            pass
+
+        try:
+            dialog._in_cat_commit = True
+        except Exception:
+            pass
+
+        try:
+            # 1) Read category text
+            try:
+                w_cat = getattr(dialog, "_add_cat", None)
+            except (TypeError, AttributeError, RuntimeError):
+                w_cat = None
+
+            try:
+                cat_raw = (w_cat.currentText() or "").strip() if w_cat is not None else ""
+            except (TypeError, AttributeError, RuntimeError):
+                cat_raw = ""
+
+            if (not cat_raw) and (w_cat is not None):
+                try:
+                    le = w_cat.lineEdit() if hasattr(w_cat, "lineEdit") else None
+                except (TypeError, AttributeError, RuntimeError):
+                    le = None
+                if le is not None:
+                    try:
+                        cat_raw = (le.text() or "").strip()
+                    except (TypeError, AttributeError, RuntimeError):
+                        cat_raw = cat_raw or ""
+
+            if not cat_raw:
+                try:
+                    logger.debug(
+                        "Add/Edit category commit: raw=%r user_action=%s",
+                        str(cat_raw or ""),
+                        bool(user_action),
+                    )
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
+
+                try:
+                    fn_gate = getattr(dialog, "_update_save_enabled", None)
+                    if callable(fn_gate):
+                        fn_gate()
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
+                return
+
+            # 2) Jyutping present?
+            try:
+                w_jy = getattr(dialog, "_add_jy", None)
+                jy = (w_jy.text() or "").strip() if w_jy is not None else ""
+            except (TypeError, AttributeError, RuntimeError):
+                jy = ""
+            has_jy = bool(jy)
+
+            # 3) Acquire repo + service (lazy init; UI-free). If unavailable, fail safe.
+            try:
+                repo, svc = self.ensure_category_services()
+            except (TypeError, AttributeError, RuntimeError, ValueError):
+                repo, svc = None, None
+
+            if repo is None or svc is None:
+                try:
+                    fn_gate = getattr(dialog, "_update_save_enabled", None)
+                    if callable(fn_gate):
+                        fn_gate()
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
+                return
+
+            # UI-only helper: clear category input and refocus
+            def _clear_and_refocus() -> None:
+                try:
+                    ctrl2 = getattr(dialog, "_cat_combo_ctrl", None)
+                except (TypeError, AttributeError, RuntimeError):
+                    ctrl2 = None
+
+                if ctrl2 is not None and hasattr(ctrl2, "clear_and_refocus"):
+                    try:
+                        ctrl2.clear_and_refocus()
+                        return
+                    except (TypeError, AttributeError, RuntimeError, ValueError):
+                        pass
+
+                try:
+                    w = getattr(dialog, "_add_cat", None)
+                except (TypeError, AttributeError, RuntimeError):
+                    w = None
+
+                if w is not None:
+                    try:
+                        w.blockSignals(True)
+                    except (TypeError, AttributeError, RuntimeError):
+                        pass
+
+                    try:
+                        le2 = w.lineEdit() if hasattr(w, "lineEdit") else None
+                    except (TypeError, AttributeError, RuntimeError):
+                        le2 = None
+
+                    if le2 is not None:
+                        try:
+                            le2.clear()
+                        except (TypeError, AttributeError, RuntimeError):
+                            pass
+
+                    try:
+                        w.setCurrentIndex(-1)
+                    except (TypeError, AttributeError, RuntimeError):
+                        try:
+                            w.setCurrentText("")
+                        except (TypeError, AttributeError, RuntimeError):
+                            pass
+
+                    try:
+                        w.blockSignals(False)
+                    except (TypeError, AttributeError, RuntimeError):
+                        pass
+
+                try:
+                    dialog._focus_category(select_all=True, show_popup=True)
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
+
+            # 4) Determine confirmation only if unknown
+            user_confirmed_add = False
+
+            try:
+                canon = repo.canon(cat_raw)
+            except (TypeError, AttributeError, RuntimeError, ValueError):
+                canon = str(cat_raw or "").strip()
+
+            try:
+                exists_now = bool(canon) and bool(repo.exists(canon))
+            except (TypeError, AttributeError, RuntimeError, ValueError):
+                exists_now = False
+
+            if not exists_now:
+                # UI confirmation lives at the adapter boundary (tests monkeypatch QMessageBox.question).
+                user_confirmed_add = False
+                try:
+                    from PySide6.QtWidgets import QMessageBox
+                except (ImportError, ModuleNotFoundError):
+                    QMessageBox = None
+
+                if QMessageBox is not None:
+                    try:
+                        resp = QMessageBox.question(
+                            dialog,
+                            "Add category?",
+                            "Add new category '{0}'?".format(str(canon or "")),
+                            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                            QMessageBox.StandardButton.Yes,
+                        )
+                        user_confirmed_add = bool(resp == QMessageBox.StandardButton.Yes)
+                    except (TypeError, AttributeError, RuntimeError, ValueError):
+                        user_confirmed_add = False
+
+            if (not exists_now) and (not bool(user_confirmed_add)):
+                _clear_and_refocus()
+                try:
+                    fn_gate = getattr(dialog, "_update_save_enabled", None)
+                    if callable(fn_gate):
+                        fn_gate()
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
+                return
+
+            # 5) Core commit (pure decision + repo mutation)
+            try:
+                res = svc.commit(
+                    requested=canon,
+                    has_jy=has_jy,
+                    confirmed_add=bool(user_confirmed_add),
+                )
+            except (TypeError, AttributeError, RuntimeError, ValueError):
+                _clear_and_refocus()
+                try:
+                    fn_gate = getattr(dialog, "_update_save_enabled", None)
+                    if callable(fn_gate):
+                        fn_gate()
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
+                return
+
+            if not bool(getattr(res, "ok", False)):
+                _clear_and_refocus()
+                try:
+                    fn_gate = getattr(dialog, "_update_save_enabled", None)
+                    if callable(fn_gate):
+                        fn_gate()
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
+                return
+
+            try:
+                cat = str(getattr(res, "category", "") or "").strip()
+            except (TypeError, AttributeError, RuntimeError, ValueError):
+                cat = ""
+
+            if not cat:
+                _clear_and_refocus()
+                try:
+                    fn_gate = getattr(dialog, "_update_save_enabled", None)
+                    if callable(fn_gate):
+                        fn_gate()
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
+                return
+
+            # Regression guard: ensure authoritative in-memory map records brand-new categories.
+            try:
+                if (not bool(exists_now)) and bool(user_confirmed_add):
+                    cats_map_auth = getattr(dialog, "_cats", None)
+                    if isinstance(cats_map_auth, dict) and cat not in cats_map_auth:
+                        cats_map_auth[cat] = []
+            except Exception:
+                pass
+
+            try:
+                if isinstance(getattr(dialog, "_cats", None), dict) and cat and (cat not in dialog._cats):
+                    dialog._cats[cat] = []
+            except (TypeError, AttributeError, RuntimeError):
+                pass
+
+            # ---- UI list sync (ensure new categories appear in the dropdown) ----
+            try:
+                all_cats = getattr(dialog, "_all_cats", None)
+            except (TypeError, AttributeError, RuntimeError):
+                all_cats = None
+
+            try:
+                if isinstance(all_cats, list) and cat and (cat not in all_cats):
+                    all_cats.append(cat)
+                    all_cats.sort(key=lambda s: str(s).lower())
+            except (TypeError, AttributeError, RuntimeError, ValueError):
+                pass
+
+            # Ensure the combobox model contains the category as an item (not just edit text).
+            if w_cat is not None:
+                try:
+                    existing = []
+                    try:
+                        n = int(w_cat.count())
+                    except (TypeError, AttributeError, RuntimeError, ValueError):
+                        n = 0
+                    for i in range(max(0, n)):
+                        try:
+                            t = str(w_cat.itemText(i) or "").strip()
+                        except (TypeError, AttributeError, RuntimeError, ValueError):
+                            t = ""
+                        if t:
+                            existing.append(t)
+
+                    if cat and (cat not in existing):
+                        # Rebuild items in sorted order (keeps list stable with InsertPolicy.NoInsert).
+                        merged = sorted(set(existing + [cat]), key=lambda s: str(s).lower())
+                        try:
+                            w_cat.blockSignals(True)
+                        except (TypeError, AttributeError, RuntimeError):
+                            pass
+                        try:
+                            w_cat.clear()
+                            w_cat.addItems(list(merged))
+                        except (TypeError, AttributeError, RuntimeError):
+                            pass
+                        try:
+                            w_cat.setEditable(True)
+                        except (TypeError, AttributeError, RuntimeError):
+                            pass
+                        try:
+                            w_cat.blockSignals(False)
+                        except (TypeError, AttributeError, RuntimeError):
+                            pass
+                except (TypeError, AttributeError, RuntimeError, ValueError):
+                    pass
+
+            # Debug: verify repo/_cats now contains the committed category
+            try:
+                cats_map_dbg = getattr(dialog, "_cats", None)
+                in_cats = bool(isinstance(cats_map_dbg, dict) and cat in cats_map_dbg)
+                # Safety: ensure the authoritative in-memory map reflects the committed category.
+                if isinstance(cats_map_dbg, dict) and cat and (cat not in cats_map_dbg):
+                    cats_map_dbg[cat] = []
+                    in_cats = True
+            except Exception:
+                pass
+
+            # 6) Apply success effects
+            try:
+                if w_cat is not None and hasattr(w_cat, "setCurrentText"):
+                    w_cat.setCurrentText(cat)
+            except (TypeError, AttributeError, RuntimeError):
+                pass
+
+            # If we just created a new category, refresh the derived list + dropdown
+            # from the authoritative map so it remains available after field clears.
+            try:
+                if not bool(exists_now):
+                    dialog._refresh_category_dropdown_from_cats(selected=cat)
+            except (TypeError, AttributeError, RuntimeError, ValueError):
+                pass
+
+            try:
+                ctx = getattr(dialog, "_add_edit_ctx", None)
+            except (TypeError, AttributeError, RuntimeError):
+                ctx = None
+
+            try:
+                cat_l = cat.lower()
+                cat_ok = bool(cat) and cat_l not in ("unassigned", "all")
+            except Exception:
+                cat_ok = False
+
+            if ctx is not None:
+                try:
+                    setattr(ctx, "category", cat)
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
+                try:
+                    setattr(ctx, "cat_ok", bool(cat_ok))
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
+
+            # Candidate fill should happen whenever we have Jyutping and a committed category.
+            try:
+                should_fill = bool(has_jy)
+            except (TypeError, AttributeError, RuntimeError):
+                should_fill = False
+
+            if bool(should_fill):
+                try:
+                    fn_fill = getattr(dialog, "_fill_hanzi_candidates", None)
+                except (TypeError, AttributeError, RuntimeError):
+                    fn_fill = None
+
+                if callable(fn_fill):
+                    try:
+                        fn_fill(jy, category=cat)
+                    except TypeError:
+                        try:
+                            fn_fill(jy)
+                        except (TypeError, AttributeError, RuntimeError):
+                            pass
+                    except (TypeError, AttributeError, RuntimeError):
+                        pass
+
+            try:
+                fn_gate = getattr(dialog, "_update_save_enabled", None)
+                if callable(fn_gate):
+                    fn_gate()
+            except (TypeError, AttributeError, RuntimeError):
+                pass
+
+            # 7) Focus advance
+            try:
+                combo = getattr(dialog, "_cand_combo", None)
+            except (TypeError, AttributeError, RuntimeError):
+                combo = None
+
+            n_items = 0
+            if combo is not None:
+                try:
+                    n_items = int(combo.count())
+                except (TypeError, AttributeError, RuntimeError, ValueError):
+                    n_items = 0
+
+            if n_items > 0:
+                dialog._defer_focus("cand")
+            else:
+                dialog._defer_focus("hz")
+
+        finally:
+            try:
+                dialog._in_cat_commit = False
+            except Exception:
+                pass
+
     def on_add_category_committed(self, *args, user_action: bool = False, **kwargs) -> None:
         """Commit the Add/Edit category selection.
 
