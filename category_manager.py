@@ -1373,7 +1373,7 @@ class CategoryManagerDialog(QDialog):
         """Category commit (delegated to category ops controller)."""
         self._category_ops.on_add_category_committed(*args, user_action=user_action, **kwargs)
 
-    def _original_on_add_category_committed_REPLACED_BY_CONTROLLER(self, *args, user_action: bool = False, **kwargs) -> None:
+    def _build_add_entry_preview(self) -> dict:
         """Commit the Add/Edit category selection.
 
         UI prompting for unknown categories is delegated to the CategoryComboController
