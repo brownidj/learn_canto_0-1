@@ -36,6 +36,7 @@ import time
 from dataclasses import dataclass
 
 from domain.add_edit_controller import AddEditInputs, AddEditController
+from ui.category_manager_helpers import CategoryManagerHelpers
 
 # ------------------------------
 # Candidate source labels (UI)
@@ -581,28 +582,15 @@ class CategoryManagerDialog(QDialog):
 
     @staticmethod
     def _perf_start(name: str) -> float:
-        t0 = time.perf_counter()
-        logger.debug("PERF start: %s", name)
-        return t0
+        return CategoryManagerHelpers.perf_start(name)
 
     @staticmethod
     def _perf_end(name: str, t0: float) -> None:
-        if not t0:
-            return
-        dt_ms = (time.perf_counter() - float(t0)) * 1000.0
-        logger.debug("PERF end: %s (%.1f ms)", name, dt_ms)
+        CategoryManagerHelpers.perf_end(name, t0)
 
     @staticmethod
     def _validate_jyut_syllables(jy: str) -> tuple[bool, str | None]:
-        try:
-            return validate_jyut_syllables(jy)
-        except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as e:
-            # Best-effort: do not hard-fail UI if validator is unavailable.
-            try:
-                logger.debug("Jyutping validator unavailable (%s); allowing input", e)
-            except (TypeError, ValueError):
-                pass
-            return True, None
+        return CategoryManagerHelpers.validate_jyut_syllables(jy)
 
     """
     Dialog for adding and editing vocabulary items.
@@ -736,6 +724,7 @@ class CategoryManagerDialog(QDialog):
 
         # ---- Typography controller ----
         from ui.category_manager_typography import CategoryManagerTypographyController
+        from ui.category_manager_helpers import CategoryManagerHelpers
         self._typography_ctrl = CategoryManagerTypographyController(self)
 
         # ---- Add/Edit flow controller ----
@@ -770,264 +759,15 @@ class CategoryManagerDialog(QDialog):
         from ui.category_manager_preview_confirm import CategoryManagerPreviewConfirmController
         self._preview_confirm = CategoryManagerPreviewConfirmController(self)
 
-        # ---- Root layout ----
-        self._root = QVBoxLayout(self)
-        self._root.setContentsMargins(12, 12, 12, 12)
-        self._root.setSpacing(10)
+        # ---- UI Construction (delegated to builder) ----
+        from ui.category_manager_ui_builder import CategoryManagerUIBuilder
+        ui_builder = CategoryManagerUIBuilder(self)
+        ui_builder.build_ui()
 
-        # ---- Header (Close button) ----
-        header = QHBoxLayout()
-        header.addStretch(1)
-        btn_close = QPushButton("Close", self)
-        btn_close.setDefault(False)
-        btn_close.setAutoDefault(False)
-        btn_close.clicked.connect(self.accept)
-        header.addWidget(btn_close, 0, _Qt.AlignmentFlag.AlignTop | _Qt.AlignmentFlag.AlignRight)
-        self._root.addLayout(header)
-
-        # ---- Main row ----
-        row = QHBoxLayout()
-        row.setSpacing(12)
-
-        # ---- Save header ----
-        header_row = QHBoxLayout()
-        self.btn_save = QPushButton("Save")
-        self.btn_save.setObjectName("btn_save")
-        if callable(getattr(self, "_on_save_clicked", None)):
-            self.btn_save.clicked.connect(self._on_save_clicked)
-        self.btn_save.setDefault(False)
-        self.btn_save.setAutoDefault(False)
-        self.btn_save.setEnabled(False)
-        self.btn_save.setToolTip("Save Hanzi + Jyutping + Category")
-
-        # Stage-2: hide legacy inline Save button by default (only shown on 'Edit')
-        try:
-            self._set_save_button_visible(False)
-        except (AttributeError, TypeError, ValueError, RuntimeError):
-            pass
-
-        header_row.addStretch(1)
-        header_row.addWidget(self.btn_save, 0, _Qt.AlignmentFlag.AlignRight)
-        self._root.addLayout(header_row)
-
-        # ---- Entry group ----
-        group_entry = QGroupBox("Entry", self)
-        form_entry = QFormLayout(group_entry)
-        form_entry.setLabelAlignment(_Qt.AlignmentFlag.AlignRight | _Qt.AlignmentFlag.AlignVCenter)
-        form_entry.setFormAlignment(_Qt.AlignmentFlag.AlignLeft | _Qt.AlignmentFlag.AlignTop)
-        form_entry.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
-
-        self._add_jy = QLineEdit(group_entry)
-        self._add_jy.setPlaceholderText("e.g. nei5 hou2")
-        self._add_jy.setClearButtonEnabled(True)
-
-        self._add_mn = QLineEdit(group_entry)
-        self._add_mn.setPlaceholderText("comma-separated meanings, e.g. hello, hi")
-        self._add_mn.setClearButtonEnabled(True)
-
-        self._add_notes = QLineEdit(group_entry)
-        self._add_notes.setReadOnly(True)
-        self._add_notes.setPlaceholderText("Notes (auto; shown only when ambiguous)")
-        self._add_notes.setToolTip(
-            "Shown only when an entry is ambiguous or needs confirmation. "
-            "Auto-default entries never keep notes."
-        )
-
-        form_entry.addRow("Jyutping:", self._add_jy)
-        form_entry.addRow("Meanings:", self._add_mn)
-        form_entry.addRow("Notes:", self._add_notes)
-
-        # ---- Category combobox ----
-        self._add_cat = QComboBox(group_entry)
-        self._add_cat.setObjectName("comboAddCategories")
-        self._add_cat.setEditable(True)
-        self._add_cat.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
-        self._add_cat.addItems(self._all_cats)
-        self._add_cat.setCurrentIndex(-1)
-
-        _le = getattr(self._add_cat, "lineEdit", None)
-        le_cat = cast(QLineEdit | None, _le() if callable(_le) else None)
-
-        if le_cat is not None:
-            le_cat.setPlaceholderText("Type category")
-            le_cat.setClearButtonEnabled(True)
-            # IMPORTANT: do NOT connect returnPressed/editingFinished directly to the dialog handler.
-            # CategoryComboController owns commit wiring and will call `on_commit`.
-
-        _on_cat_commit = getattr(self, "_on_add_category_committed", None)
-        self._cat_combo_ctrl = CategoryComboController(
-            combo=self._add_cat,
-            on_commit=_on_cat_commit if callable(_on_cat_commit) else None,
-            on_add_new=None,
-        )
-
-        form_entry.addRow("Category:", self._add_cat)
-
-        # Back-compat aliases
-        self.editJyut = self._add_jy
-        self.editMeanings = self._add_mn
-        self.comboCategory = self._add_cat
-
-        # ---- Hanzi group ----
-        group_hanzi = QGroupBox("Hanzi", self)
-        form_hanzi = QFormLayout(group_hanzi)
-
-        self._add_hz = QLineEdit(group_hanzi)
-        self._add_hz.setReadOnly(True)
-        self._add_hz.setPlaceholderText("Auto, after reverse lookup")
-        form_hanzi.addRow(self._add_hz)
-
-        self._cand_combo = QComboBox(group_hanzi)
-        self._cand_combo.setObjectName("comboHanziCandidates")
-        self._cand_combo.setVisible(False)
-        self._cand_combo.setToolTip(HANZI_CANDIDATE_TOOLTIP)
-        if self._cand_combo.view() is not None:
-            self._cand_combo.view().setToolTip(HANZI_CANDIDATE_TOOLTIP)
-
-        form_hanzi.addRow("Candidates:", self._cand_combo)
-
-        self._btn_custom_hz = QPushButton("Enter my own Hanzi", self)
-        self._btn_custom_hz.setDefault(False)
-        self._btn_custom_hz.setAutoDefault(False)
-        # Always wire the Manual Hanzi button. Handler is best-effort and must never raise.
-        try:
-            self._btn_custom_hz.clicked.connect(self._on_btn_custom_hz_clicked)
-        except (TypeError, AttributeError, RuntimeError):
-            pass
-        form_hanzi.addWidget(self._btn_custom_hz)
-
-        self.comboCandidates = self._cand_combo
-
-        # ---- Layout assembly ----
-        group_entry.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-        group_hanzi.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-        row.addWidget(group_entry)
-        row.addWidget(group_hanzi)
-        self._root.addLayout(row)
-
-        # ---- Typography (delegated) ----
-        self._typography_ctrl.apply_add_edit_typography(
-            group_entry=group_entry,
-            form_entry=form_entry,
-            group_hanzi=group_hanzi,
-            form_hanzi=form_hanzi,
-        )
-
-        # ---- Vocab table scroll panel (preferred) ----
-        self._table_panel_ctrl = None
-        self._table_panel = None
-        self._vocab_table_ctrl = None
-
-        if TableScrollSliderController is not None:
-            try:
-                # Controller owns the panel widget; keep it as the single table/search surface.
-                # `create()` is optional; if not present, fall back to direct construction.
-                create_fn = getattr(TableScrollSliderController, "create", None)
-                if callable(create_fn):
-                    self._table_panel_ctrl = create_fn(parent=self)
-                else:
-                    self._table_panel_ctrl = TableScrollSliderController(parent=self)
-
-                self._table_panel = getattr(self._table_panel_ctrl, "widget", None)
-
-                if self._table_panel is not None:
-                    self._root.addWidget(self._table_panel, 1)
-
-                    # Back-compat aliases: expose search/table under the dialog's legacy names.
-                    # Tests and existing dialog code refer to `self._search` and `self._table`.
-                    try:
-                        self._search = self._table_panel.findChild(QLineEdit, "editTableSearch")
-                    except ():
-                        self._search = None
-
-                    # The panel may provide either QTableWidget or QTableView; keep it generic.
-                    try:
-                        self._table = self._table_panel.findChild(object, "tableVocab")
-                    except ():
-                        self._table = None
-
-                    # Wire legacy search handler if present.
-                    try:
-                        fn_search = getattr(self, "_on_search_changed", None)
-                        if callable(fn_search) and self._search is not None and hasattr(self._search, "textChanged"):
-                            self._search.textChanged.connect(fn_search)
-                    except (TypeError, AttributeError, RuntimeError):
-                        pass
-
-                    # Initialize vocabulary table controller
-                    if self._table is not None:
-                        try:
-                            self._vocab_table_ctrl = VocabularyTableController(
-                                table=self._table,
-                                vocab=self._vocab,
-                                categories=self._cats,
-                            )
-                            self._vocab_table_ctrl.populate()
-                        except (TypeError, AttributeError, RuntimeError):
-                            self._vocab_table_ctrl = None
-
-                    # Table already populated by VocabularyTableController above
-                    try:
-                        tbl = getattr(self, "_table", None)
-                        if tbl is not None:
-                            try:
-                                rows = int(tbl.rowCount()) if hasattr(tbl, "rowCount") else None
-                            except (TypeError, AttributeError, RuntimeError):
-                                rows = None
-                            logger.debug(
-                                "Table populated via VocabularyTableController: rows=%s",
-                                rows if rows is not None else "?",
-                            )
-                    except (TypeError, AttributeError, RuntimeError):
-                        pass
-            except (TypeError, AttributeError, RuntimeError):
-                # Controller failed: fall back to legacy widgets.
-                self._table_panel_ctrl = None
-                self._table_panel = None
-
-        # ---- Legacy Search + Table (fallback) ----
-        if self._table_panel is None:
-            self._search = QLineEdit(self)
-            self._search.setPlaceholderText("Search (Hanzi / Jyutping / meaning)…")
-            self._search.setClearButtonEnabled(True)
-            try:
-                fn_search = getattr(self, "_on_search_changed", None)
-                if callable(fn_search):
-                    self._search.textChanged.connect(fn_search)
-            except (TypeError, AttributeError, RuntimeError):
-                pass
-            self._root.addWidget(self._search)
-
-            self._table = QTableWidget(self)
-            self._table.setColumnCount(4)
-            self._table.setHorizontalHeaderLabels(["Hanzi", "Jyutping", "Meanings", "Categories"])
-            self._table.horizontalHeader().setStretchLastSection(True)
-            self._table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-            self._table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-            self._root.addWidget(self._table, 1)
-
-            # Initialize table controller for legacy path too
-            try:
-                self._vocab_table_ctrl = VocabularyTableController(
-                    table=self._table,
-                    vocab=self._vocab,
-                    categories=self._cats,
-                )
-                self._vocab_table_ctrl.populate()
-            except (TypeError, AttributeError, RuntimeError):
-                self._vocab_table_ctrl = None
-
-            try:
-                rows = int(self._table.rowCount()) if hasattr(self._table, "rowCount") else 0
-                logger.debug("Legacy table ready: rows=%d", rows)
-            except (TypeError, AttributeError, RuntimeError):
-                pass
-
-        # Final back-compat: ensure attributes exist even if the panel did not expose widgets as expected.
-        if not hasattr(self, "_search"):
-            self._search = None
-        if not hasattr(self, "_table"):
-            self._table = None
+        # ---- Signal wiring (delegated) ----
+        from ui.category_manager_signal_wiring import CategoryManagerSignalWiring
+        signal_wiring = CategoryManagerSignalWiring(self)
+        signal_wiring.wire_add_edit_signals()
 
         # ---- Finalise init ----
         logger.debug("CategoryManagerDialog: init complete")
@@ -1089,67 +829,28 @@ class CategoryManagerDialog(QDialog):
 
 
     def _connect_unique(self, signal, slot) -> None:
-        """Best-effort signal connect without duplicate wiring."""
-        if signal is None or not callable(slot):
-            return
-
-        try:
-            from PySide6.QtCore import Qt
-            signal.connect(slot, Qt.ConnectionType.UniqueConnection)
-            return
-        except (ImportError, TypeError, AttributeError, RuntimeError):
-            pass
-
-        try:
-            signal.connect(slot)
-        except (TypeError, AttributeError, RuntimeError):
-            pass
+        """Signal connection (internal use - prefer signal wiring controller for new code)."""
+        from ui.category_manager_signal_wiring import CategoryManagerSignalWiring
+        wiring = CategoryManagerSignalWiring(self)
+        wiring._connect_unique(signal, slot)
 
     def _try_connect(self, signal, slot) -> None:
-        """Connect a signal to a callable slot (best-effort, no duplicates)."""
-        if signal is None or slot is None or not callable(slot):
-            return
-        try:
-            self._connect_unique(signal, slot)
-        except (TypeError, AttributeError, RuntimeError):
-            # Be conservative: wiring must never break dialog construction.
-            pass
+        """Signal connection (internal use - prefer signal wiring controller for new code)."""
+        from ui.category_manager_signal_wiring import CategoryManagerSignalWiring
+        wiring = CategoryManagerSignalWiring(self)
+        wiring._try_connect(signal, slot)
 
     def _wire_line_edit_common(self, w, *, on_enter=None, on_change=None) -> None:
-        """Common wiring for QLineEdit-like widgets.
-
-        - on_enter: connected to returnPressed
-        - on_change: connected to editingFinished and textChanged
-        """
-        if w is None:
-            return
-
-        if on_enter is not None and callable(on_enter):
-            self._try_connect(getattr(w, "returnPressed", None), on_enter)
-
-        if on_change is not None and callable(on_change):
-            self._try_connect(getattr(w, "editingFinished", None), on_change)
-            self._try_connect(getattr(w, "textChanged", None), on_change)
+        """Line edit wiring (internal use - prefer signal wiring controller for new code)."""
+        from ui.category_manager_signal_wiring import CategoryManagerSignalWiring
+        wiring = CategoryManagerSignalWiring(self)
+        wiring._wire_line_edit_common(w, on_enter=on_enter, on_change=on_change)
 
     def _wire_combo_common(self, w, *, on_change=None, on_activate=None) -> None:
-        """Common wiring for QComboBox-like widgets (best-effort).
-
-        - on_change: connected to currentTextChanged
-        - on_activate: connected to activated
-
-        Notes:
-          - This is intentionally tolerant of missing signals across bindings.
-          - Use `_try_connect`, which prefers UniqueConnection where available.
-        """
-        if w is None:
-            return
-
-        if on_change is not None and callable(on_change):
-            self._try_connect(getattr(w, "currentTextChanged", None), on_change)
-
-        if on_activate is not None and callable(on_activate):
-            self._try_connect(getattr(w, "activated", None), on_activate)
-        # Do not auto-wire activated to on_change. Activated is a commit signal and must be wired explicitly.
+        """Combo wiring (internal use - prefer signal wiring controller for new code)."""
+        from ui.category_manager_signal_wiring import CategoryManagerSignalWiring
+        wiring = CategoryManagerSignalWiring(self)
+        wiring._wire_combo_common(w, on_change=on_change, on_activate=on_activate)
 
     # ---- UI intent / focus policy (delegated to controller) ----
     def _user_has_committed_hanzi(self) -> bool:
@@ -1902,10 +1603,7 @@ class CategoryManagerDialog(QDialog):
 
     def _on_add_jy_user_edited(self, *args, **kwargs) -> None:
         """Slot: user edited Jyutping; reset dependent fields to placeholders."""
-        try:
-            self._reset_add_panel_pre_validation()
-        except (TypeError, AttributeError, RuntimeError):
-            return
+        CategoryManagerHelpers.on_add_jy_user_edited(self, *args, **kwargs)
 
     def _on_add_category_changed(self, *args, **kwargs) -> None:
         """Category text changed while typing.
@@ -1915,19 +1613,10 @@ class CategoryManagerDialog(QDialog):
 
         Commit happens via Enter / editingFinished / activated.
         """
-        return
+        CategoryManagerHelpers.on_add_category_changed(self, *args, **kwargs)
 
     def _focus_jy(self) -> None:
-        try:
-            w = getattr(self, "_add_jy", None)
-            if w is not None:
-                w.setFocus()
-                try:
-                    w.selectAll()
-                except (TypeError, AttributeError, RuntimeError):
-                    pass
-        except (TypeError, AttributeError, RuntimeError):
-            pass
+        CategoryManagerHelpers.focus_jy(self)
 
     def _on_meaning_enter_committed(self) -> None:
         """Handle Enter/commit in Meaning field (delegated to flow controller)."""
@@ -1947,21 +1636,11 @@ class CategoryManagerDialog(QDialog):
 
     def _read_add_fields(self) -> tuple[str, str, str, str]:
         """Read Add/Edit panel fields safely (legacy compatibility)."""
-        return (
-            WidgetAccessor.get_text(getattr(self, "_add_jy", None)),
-            WidgetAccessor.get_text(getattr(self, "_add_hz", None)),
-            WidgetAccessor.get_text(getattr(self, "_add_mn", None)),
-            WidgetAccessor.get_text(getattr(self, "_add_cat", None)),
-        )
+        return CategoryManagerHelpers.read_add_fields(self)
 
     def _ensure_category_combo_editable(self) -> None:
         """Ensure the Add/Edit category combobox is editable (best-effort)."""
-        try:
-            w_cat = getattr(self, "_add_cat", None)
-            if w_cat is not None and hasattr(w_cat, "setEditable"):
-                w_cat.setEditable(True)
-        except (TypeError, AttributeError, RuntimeError):
-            return
+        CategoryManagerHelpers.ensure_category_combo_editable(self)
 
     def _fill_hanzi_candidates(self, jy: str, category: str | None = None) -> None:
         """Fill Hanzi candidates (delegated to flow controller)."""
@@ -1971,37 +1650,7 @@ class CategoryManagerDialog(QDialog):
         """Meaning text changed (user or programmatic).
         Keeps Add/Edit context in sync and refreshes Save gating. Must never raise.
         """
-        try:
-            w = getattr(self, "_add_mn", None)
-        except (TypeError, AttributeError, RuntimeError):
-            w = None
-
-        try:
-            mn = (w.text() or "").strip() if w is not None else ""
-        except (TypeError, AttributeError, RuntimeError):
-            mn = ""
-
-        try:
-            ctx = getattr(self, "_add_edit_ctx", None)
-        except (TypeError, AttributeError, RuntimeError):
-            ctx = None
-
-        if ctx is not None:
-            try:
-                ctx.meaning = mn
-            except (TypeError, AttributeError, RuntimeError):
-                pass
-            try:
-                setattr(ctx, "mn_ok", bool(mn))
-            except (TypeError, AttributeError, RuntimeError):
-                pass
-
-        try:
-            fn_gate = getattr(self, "_update_save_enabled", None)
-            if callable(fn_gate):
-                fn_gate()
-        except (TypeError, AttributeError, RuntimeError):
-            pass
+        CategoryManagerHelpers.on_meanings_text_changed(self, *args, **kwargs)
 
     def _save_add_item(self) -> None:
         """Legacy save entry point (delegated to save/commit controller)."""
@@ -2182,165 +1831,9 @@ class CategoryManagerDialog(QDialog):
             except (TypeError, AttributeError, RuntimeError):
                 pass
 
-    # ---- Add/Edit UI wiring ----
-    def _setup_add_edit_ui(self) -> None:
-        """Wire Add or Edit widgets for Enter/validation.
-
-        Rules:
-          - Meaning Enter triggers the Save/Edit/Cancel confirmation flow.
-          - The legacy inline Save button is hidden by default and only shown
-            when the user chooses 'Edit' from the confirmation dialog.
-
-        Notes:
-          - Use UniqueConnection where available (via _connect_unique).
-          - Wiring is idempotent via _add_edit_wired to avoid duplicate connects.
-        """
-
-        if bool(getattr(self, "_add_edit_wired", False)):
-            return
-
-        try:
-            # --- Hide legacy inline Save by default ---
-            try:
-                self._set_save_button_visible(False)
-            except (TypeError, AttributeError, RuntimeError):
-                pass
-
-            fn_gate = getattr(self, "_update_save_enabled", None)
-
-            # --- Jyutping wiring ---
-            w_jy = getattr(self, "_add_jy", None)
-            fn_jy_enter = getattr(self, "_on_jyut_enter", None)
-            try:
-                self._wire_line_edit_common(
-                    w_jy,
-                    on_enter=fn_jy_enter,
-                    on_change=fn_gate,
-                )
-            except (TypeError, AttributeError, RuntimeError):
-                pass
-
-            # Reset dependent fields only on genuine user edits (not programmatic setText)
-            try:
-                fn_reset = getattr(self, "_on_add_jy_user_edited", None)
-                if w_jy is not None and callable(fn_reset):
-                    self._try_connect(getattr(w_jy, "textEdited", None), fn_reset)
-            except (TypeError, AttributeError, RuntimeError):
-                pass
-
-            # --- Meaning wiring ---
-            w_mn = getattr(self, "_add_mn", None)
-            fn_mn_enter = getattr(self, "_on_meaning_enter_committed", None)
-            try:
-                self._wire_line_edit_common(
-                    w_mn,
-                    on_enter=fn_mn_enter,
-                    on_change=fn_gate,
-                )
-            except (TypeError, AttributeError, RuntimeError):
-                pass
-
-            # --- Category wiring ---
-            w_cat = getattr(self, "_add_cat", None)
-
-            # Ensure editable (required for new category entry)
-            try:
-                if w_cat is not None and hasattr(w_cat, "setEditable"):
-                    w_cat.setEditable(True)
-            except (TypeError, AttributeError, RuntimeError):
-                pass
-
-            # Ensure we have the UI-only controller. It owns Return/Enter wiring and the add-category popup.
-            try:
-                ctrl = getattr(self, "_cat_combo_ctrl", None)
-            except (TypeError, AttributeError, RuntimeError):
-                ctrl = None
-
-            if ctrl is None:
-                try:
-                    from ui.category_combo import CategoryComboController
-                except Exception:
-                    CategoryComboController = None
-
-                try:
-                    if CategoryComboController is not None and w_cat is not None:
-                        self._cat_combo_ctrl = CategoryComboController(
-                            combo=w_cat,
-                            on_commit=(lambda: self._on_add_category_committed(user_action=True)),
-                            on_add_new=None,
-                        )
-                    else:
-                        self._cat_combo_ctrl = None
-                except Exception:
-                    self._cat_combo_ctrl = None
-
-            # Save gating can observe changes; must not commit or move focus.
-            try:
-                self._wire_combo_common(w_cat, on_change=fn_gate)
-            except (TypeError, AttributeError, RuntimeError):
-                pass
-
-            # Commit only when the user explicitly selects from popup (activated).
-            fn_cat_commit = getattr(self, "_on_add_category_committed", None)
-            if w_cat is not None and callable(fn_cat_commit):
-                try:
-                    sig = getattr(w_cat, "activated", None)
-                    if sig is not None:
-                        try:
-                            sig_int = sig[int] if hasattr(sig, "__getitem__") else sig
-                            self._try_connect(sig_int, fn_cat_commit)
-                        except (TypeError, AttributeError, RuntimeError):
-                            self._try_connect(sig, fn_cat_commit)
-                except (TypeError, AttributeError, RuntimeError):
-                    pass
-
-            # --- Hanzi candidate combobox wiring ---
-            try:
-                combo = getattr(self, "_cand_combo", None)
-            except (TypeError, AttributeError, RuntimeError):
-                combo = None
-
-            try:
-                if combo is not None:
-                    self._cand_combo_ctrl = CandidateComboController(combo)
-                else:
-                    self._cand_combo_ctrl = None
-            except (TypeError, AttributeError, RuntimeError, ImportError):
-                self._cand_combo_ctrl = None
-
-            if combo is not None:
-                try:
-                    fn_pick = getattr(self, "_on_candidate_index_activated", None)
-                    if callable(fn_pick):
-                        sig = getattr(combo, "currentIndexChanged", None)
-                        if sig is not None:
-                            try:
-                                sig_int = sig[int] if hasattr(sig, "__getitem__") else sig
-                                self._try_connect(sig_int, fn_pick)
-                            except (TypeError, AttributeError, RuntimeError):
-                                self._try_connect(sig, fn_pick)
-
-                        sig2 = getattr(combo, "activated", None)
-                        if sig2 is not None:
-                            try:
-                                sig2_int = sig2[int] if hasattr(sig2, "__getitem__") else sig2
-                                self._try_connect(sig2_int, fn_pick)
-                            except (TypeError, AttributeError, RuntimeError):
-                                self._try_connect(sig2, fn_pick)
-                except (TypeError, AttributeError, RuntimeError):
-                    pass
-
-            if callable(fn_gate):
-                try:
-                    _gate = fn_gate  # type-narrow for linters
-                    _gate()
-                except (TypeError, AttributeError, RuntimeError):
-                    pass
-
-        finally:
-            self._add_edit_wired = True
-
-        return
+    # ---- Add/Edit UI wiring (delegated to signal wiring controller) ----
+    # Note: _setup_add_edit_ui is now called automatically during __init__
+    # via CategoryManagerSignalWiring.wire_add_edit_signals()
 
     def _reverse_candidates_for_jy(self, jy: str) -> list[tuple[str, str, int]]:
         """Reverse candidate lookup (delegated to candidate pipeline)."""
@@ -2390,34 +1883,7 @@ class CategoryManagerDialog(QDialog):
 
     def _set_notes(self, text: str, *, source: str = "") -> None:
         """Set the Notes field (best-effort; never raises)."""
-        try:
-            w = getattr(self, "_add_notes", None)
-        except (TypeError, AttributeError, RuntimeError):
-            w = None
-
-        if w is None:
-            return
-
-        msg = str(text or "")
-
-        # QLineEdit
-        try:
-            if hasattr(w, "setText"):
-                w.setText(msg)
-                return
-        except (TypeError, AttributeError, RuntimeError):
-            pass
-
-        # QTextEdit
-        try:
-            if hasattr(w, "setPlainText"):
-                w.setPlainText(msg)
-                return
-        except (TypeError, AttributeError, RuntimeError):
-            pass
-
-        return
-
+        CategoryManagerHelpers.set_notes(self, text, source=source)
 
     def _on_candidate_index_activated(self, *args) -> None:
         """Handle candidate selection (delegated to flow controller)."""
