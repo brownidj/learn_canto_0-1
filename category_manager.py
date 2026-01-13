@@ -750,6 +750,26 @@ class CategoryManagerDialog(QDialog):
         from ui.category_manager_category_ops import CategoryManagerCategoryOpsController
         self._category_ops = CategoryManagerCategoryOpsController(self)
 
+        # ---- Candidate pipeline controller ----
+        from ui.category_manager_candidate_pipeline import CategoryManagerCandidatePipeline
+        self._candidate_pipeline = CategoryManagerCandidatePipeline(self)
+
+        # ---- Manual Hanzi controller ----
+        from ui.category_manager_manual_hanzi import CategoryManagerManualHanziController
+        self._manual_hanzi_ctrl = CategoryManagerManualHanziController(self)
+
+        # ---- Field reset controller ----
+        from ui.category_manager_field_reset import CategoryManagerFieldResetController
+        self._field_reset = CategoryManagerFieldResetController(self)
+
+        # ---- Save/commit controller ----
+        from ui.category_manager_save_commit import CategoryManagerSaveCommitController
+        self._save_commit = CategoryManagerSaveCommitController(self)
+
+        # ---- Preview/confirmation controller ----
+        from ui.category_manager_preview_confirm import CategoryManagerPreviewConfirmController
+        self._preview_confirm = CategoryManagerPreviewConfirmController(self)
+
         # ---- Root layout ----
         self._root = QVBoxLayout(self)
         self._root.setContentsMargins(12, 12, 12, 12)
@@ -1036,35 +1056,20 @@ class CategoryManagerDialog(QDialog):
             pass
 
     def _load_hanzi_style_map(self) -> dict:
-        """Lazy-load data/hanzi_style.yaml (Hanzi -> {style, source, notes}).
-
-        Back-compat wrapper around the internal _HanziStyleIndex.
-        """
-        try:
-            return self._style_index.load()  # type: ignore[attr-defined]
-        except (AttributeError, OSError, TypeError, ValueError, RuntimeError):
-            return {}
+        """Lazy-load style map (delegated to candidate pipeline)."""
+        return self._candidate_pipeline.load_hanzi_style_map()
 
     def _hanzi_style(self, hanzi: str) -> str:
-        """Back-compat wrapper for style lookup."""
-        try:
-            return self._style_index.style_for(hanzi)  # type: ignore[attr-defined]
-        except (AttributeError, OSError, TypeError, ValueError, RuntimeError):
-            return "unknown"
+        """Style lookup (delegated to candidate pipeline)."""
+        return self._candidate_pipeline.hanzi_style(hanzi)
 
     def _is_colloquial_hanzi(self, hanzi: str) -> bool:
-        """Back-compat wrapper for colloquial detection."""
-        try:
-            return self._style_index.is_colloquial(hanzi)  # type: ignore[attr-defined]
-        except (AttributeError, OSError, TypeError, ValueError, RuntimeError):
-            return False
+        """Colloquial detection (delegated to candidate pipeline)."""
+        return self._candidate_pipeline.is_colloquial_hanzi(hanzi)
 
     def _curate_top_hanzi_candidates(self, ranked: list[str]) -> list[str]:
-        """Back-compat wrapper to curate the top candidates for the UI."""
-        try:
-            return self._candidate_curator.curate(ranked)  # type: ignore[attr-defined]
-        except (AttributeError, OSError, TypeError, ValueError, RuntimeError):
-            return (ranked or [])[: self.MAX_HANZI_CANDIDATES]
+        """Curate candidates (delegated to candidate pipeline)."""
+        return self._candidate_pipeline.curate_top_hanzi_candidates(ranked)
 
     def _focus_jyutping(self, *, select_all: bool = True) -> None:
         """Focus Jyutping field."""
@@ -1349,136 +1354,12 @@ class CategoryManagerDialog(QDialog):
         self._focus_ctrl.defer_focus(target)
 
     def _on_btn_custom_hz_clicked(self) -> None:
-        """Enter manual Hanzi mode (user types their own Hanzi).
-
-        Must not add UI elements; best-effort and never raise.
-        """
-        try:
-            logger.debug("ManualHanzi: button clicked")
-        except (TypeError, AttributeError, RuntimeError):
-            pass
-
-        # Prefer extracted controller if you created one.
-        try:
-            ctrl = getattr(self, "_manual_hanzi_controller", None)
-        except (TypeError, AttributeError, RuntimeError):
-            ctrl = None
-
-        if ctrl is not None:
-            try:
-                enter = getattr(ctrl, "enter_manual_mode", None)
-            except (TypeError, AttributeError, RuntimeError):
-                enter = None
-
-            if callable(enter):
-                try:
-                    enter()
-                    return
-                except (TypeError, AttributeError, RuntimeError):
-                    pass
-
-        # Local best-effort behaviour.
-        try:
-            self._manual_hanzi_mode = True
-        except (TypeError, AttributeError, RuntimeError):
-            pass
-
-        # Clear any existing auto-selected Hanzi so Save gating requires an explicit manual entry.
-        try:
-            self._mark_hanzi_committed(False)
-        except (TypeError, AttributeError, RuntimeError):
-            pass
-
-        try:
-            ctx = getattr(self, "_add_edit_ctx", None)
-        except (TypeError, AttributeError, RuntimeError):
-            ctx = None
-
-        if ctx is not None:
-            try:
-                ctx.manual_hanzi = True
-            except (TypeError, AttributeError, RuntimeError):
-                pass
-            try:
-                ctx.hanzi = ""
-            except (TypeError, AttributeError, RuntimeError):
-                pass
-            try:
-                ctx.hz_ok = False
-            except (TypeError, AttributeError, RuntimeError):
-                pass
-
-        hz = getattr(self, "_add_hz", None)
-        if hz is not None:
-            try:
-                hz.setReadOnly(False)
-                hz.setPlaceholderText("Type Hanzi…")
-            except (RuntimeError, AttributeError):
-                pass
-        WidgetAccessor.clear_text(hz)
-
-        combo = getattr(self, "_cand_combo", None)
-        WidgetAccessor.set_visible(combo, False)
-        WidgetAccessor.set_combo_index(combo, -1)
-
-        # Focus Hanzi for typing.
-        try:
-            self._focus_hanzi(select_all=True)
-        except (TypeError, AttributeError, RuntimeError):
-            try:
-                if hz is not None and hasattr(hz, "setFocus"):
-                    hz.setFocus()
-            except (TypeError, AttributeError, RuntimeError):
-                pass
-
-        # Refresh Save gating.
-        try:
-            fn_gate = getattr(self, "_update_save_enabled", None)
-        except (TypeError, AttributeError, RuntimeError):
-            fn_gate = None
-
-        if callable(fn_gate):
-            try:
-                fn_gate()
-            except Exception:
-                pass
+        """Enter manual Hanzi mode (delegated to manual Hanzi controller)."""
+        self._manual_hanzi_ctrl.enter_manual_mode()
 
     def _on_save_clicked(self) -> None:
-        """Legacy inline Save button handler.
-
-        This remains the manual-save pathway when the user chooses 'Edit'
-        from the Meaning-Enter confirmation flow.
-
-        Best-effort only: never raise from UI callbacks.
-        """
-        # Prefer the historical handler name if present.
-        try:
-            fn = getattr(self, "_on_add_item_enter", None)
-            if callable(fn):
-                fn()
-                return
-        except (TypeError, AttributeError, RuntimeError):
-            pass
-
-        # Fall back to other known save entry points.
-        try:
-            fn = getattr(self, "_save_add_item", None)
-            if callable(fn):
-                fn()
-                return
-        except (TypeError, AttributeError, RuntimeError):
-            pass
-
-        try:
-            fn = getattr(self, "_do_save", None)
-            if callable(fn):
-                fn()
-                return
-        except (TypeError, AttributeError, RuntimeError):
-            pass
-
-        # Absolute last resort: do nothing.
-        return
+        """Legacy inline Save button handler (delegated to save/commit controller)."""
+        self._save_commit.on_save_clicked()
 
     def _ensure_category_services(self):
         """Ensure category services (delegated to category ops controller)."""
@@ -2000,267 +1881,24 @@ class CategoryManagerDialog(QDialog):
         return
 
     def _build_add_entry_preview(self) -> dict:
-        """Build a stable preview payload for the pending add/edit entry (no mutation)."""
-        try:
-            preview_obj = AddEntryPreviewBuilder.build(self)
-            return preview_obj.to_payload()
-        except (TypeError, AttributeError, RuntimeError, ValueError):
-            return {}
+        """Build entry preview (delegated to preview/confirm controller)."""
+        return self._preview_confirm.build_add_entry_preview()
 
     def _confirm_add_entry(self, preview: dict) -> str:
-        """Confirmation dialog for a pending add/edit entry.
-
-        Returns: 'save' | 'edit' | 'cancel'
-        """
-        # try:
-        #     from PySide6.QtWidgets import QMessageBox
-        # except (ImportError, ModuleNotFoundError, AttributeError, TypeError, RuntimeError):
-        #     # If Qt is not available, preserve legacy behavior.
-        #     return "edit"
-
-        jy = str((preview.get("jyutping") or "")).strip()
-        hz = str((preview.get("hanzi") or "")).strip()
-        mn = str((preview.get("meaning") or "")).strip()
-        cat = str((preview.get("category") or "")).strip()
-
-        msg = QMessageBox(self)
-        msg.setIcon(QMessageBox.Icon.Question)
-        msg.setWindowTitle("Confirm entry")
-        msg.setText("Save this entry?")
-        msg.setInformativeText(
-            "Jyutping: {0}\nHanzi: {1}\nMeaning: {2}\nCategory: {3}".format(jy, hz, mn, cat)
-        )
-
-        btn_save = msg.addButton("Save", QMessageBox.ButtonRole.AcceptRole)
-        btn_edit = msg.addButton("Edit", QMessageBox.ButtonRole.ActionRole)
-        # btn_cancel = msg.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
-
-        try:
-            msg.setDefaultButton(btn_save)
-        except (TypeError, AttributeError, RuntimeError):
-            pass
-
-        try:
-            msg.exec()
-        except (TypeError, AttributeError, RuntimeError):
-            return "edit"
-
-        try:
-            clicked = msg.clickedButton()
-        except (TypeError, AttributeError, RuntimeError):
-            clicked = None
-
-        if clicked is btn_save:
-            return "save"
-        if clicked is btn_edit:
-            return "edit"
-        return "cancel"
+        """Confirmation dialog (delegated to preview/confirm controller)."""
+        return self._preview_confirm.confirm_add_entry(preview)
 
     def _set_save_button_visible(self, visible: bool) -> None:
-        """Show/hide the legacy inline Save button.
-
-        Rule:
-          - Hidden by default
-          - Shown only when the user chooses 'Edit' from the confirmation dialog
-        """
-        # Canonical: current implementation uses `self.btn_save`
-        btn = getattr(self, "btn_save", None)
-
-        # Qt-boundary fallback: objectName lookup
-        if btn is None:
-            try:
-                btn = self.findChild(QPushButton, "btn_save")
-            except (TypeError, AttributeError, RuntimeError):
-                btn = None
-
-        if btn is None:
-            try:
-                btn = self.findChild(QPushButton, "btnSave")
-            except (TypeError, AttributeError, RuntimeError):
-                btn = None
-
-        WidgetAccessor.set_visible(btn, visible)
+        """Set Save button visibility (delegated to preview/confirm controller)."""
+        self._preview_confirm.set_save_button_visible(visible)
 
     def _clear_add_entry_fields(self) -> None:
-        """Clear Add/Edit fields best-effort."""
-        WidgetAccessor.clear_text(getattr(self, "_add_jy", None))
-        WidgetAccessor.clear_text(getattr(self, "_add_hz", None))
-        WidgetAccessor.clear_text(getattr(self, "_add_mn", None))
-
-        try:
-            self._set_notes("", source="auto-default")
-        except (TypeError, AttributeError, RuntimeError):
-            pass
-
-        WidgetAccessor.set_combo_index(getattr(self, "_add_cat", None), -1)
-
-        # Reset manual-Hanzi state so candidates behave normally for the next entry.
-        try:
-            self._mark_manual_hanzi_mode(False)
-        except Exception:
-            try:
-                self._manual_hanzi_mode = False
-            except Exception:
-                pass
-
-        try:
-            ctx = getattr(self, "_add_edit_ctx", None)
-        except (TypeError, AttributeError, RuntimeError):
-            ctx = None
-
-        if ctx is not None:
-            try:
-                ctx.manual_hanzi = False
-            except Exception:
-                pass
-            try:
-                ctx.hanzi = ""
-            except Exception:
-                pass
-            try:
-                ctx.hz_ok = False
-            except Exception:
-                pass
-
-        try:
-            hz = getattr(self, "_add_hz", None)
-        except (TypeError, AttributeError, RuntimeError):
-            hz = None
-
-        if hz is not None:
-            try:
-                hz.setReadOnly(True)
-            except Exception:
-                pass
-            try:
-                hz.setPlaceholderText("Auto, after reverse lookup")
-            except Exception:
-                pass
-
-        try:
-            combo = getattr(self, "_cand_combo", None)
-        except (TypeError, AttributeError, RuntimeError):
-            combo = None
-
-        if combo is not None:
-            # Do not force visibility here; the next category commit will decide.
-            try:
-                combo.setCurrentIndex(-1)
-            except Exception:
-                pass
-
-        try:
-            if callable(getattr(self, "_update_save_enabled", None)):
-                try:
-                    fn_gate = getattr(self, "_update_save_enabled", None)
-                    if callable(fn_gate):
-                        fn_gate()
-                except (TypeError, AttributeError, RuntimeError):
-                    pass
-        except (TypeError, AttributeError, RuntimeError):
-            pass
+        """Clear Add/Edit fields (delegated to field reset controller)."""
+        self._field_reset.clear_add_entry_fields()
 
     def _reset_add_panel_pre_validation(self) -> None:
-        """Return Add/Edit panel to pre-validation state (placeholders only)."""
-        # Clear dependent fields
-        try:
-            if getattr(self, "_add_mn", None) is not None:
-                self._add_mn.clear()
-        except (TypeError, AttributeError, RuntimeError):
-            pass
-
-        try:
-            if getattr(self, "_add_hz", None) is not None:
-                self._add_hz.clear()
-        except (TypeError, AttributeError, RuntimeError):
-            pass
-
-        try:
-            self._set_notes("", source="auto-default")
-        except (TypeError, AttributeError, RuntimeError):
-            pass
-
-        # Reset category selection to placeholder
-        try:
-            if getattr(self, "_add_cat", None) is not None:
-                try:
-                    self._add_cat.setCurrentIndex(-1)
-                except (TypeError, AttributeError, RuntimeError):
-                    pass
-        except (TypeError, AttributeError, RuntimeError):
-            pass
-
-        # Hide and clear candidate combobox
-        try:
-            combo = getattr(self, "_cand_combo", None)
-            if combo is not None:
-                try:
-                    combo.blockSignals(True)
-                except (TypeError, AttributeError, RuntimeError):
-                    pass
-                try:
-                    combo.clear()
-                except (TypeError, AttributeError, RuntimeError):
-                    pass
-                try:
-                    combo.setVisible(False)
-                except (TypeError, AttributeError, RuntimeError):
-                    pass
-                # SignalBlocker will restore original state automatically
-        except (TypeError, AttributeError, RuntimeError):
-            pass
-
-        # Reset intent flags
-        try:
-            self._mark_hanzi_committed(False)
-        except (TypeError, AttributeError, RuntimeError):
-            try:
-                self._hanzi_committed = False
-            except (TypeError, AttributeError, RuntimeError):
-                pass
-
-        try:
-            self._mark_manual_hanzi_mode(False)
-        except (TypeError, AttributeError, RuntimeError):
-            try:
-                self._manual_hanzi_mode = False
-            except (TypeError, AttributeError, RuntimeError):
-                pass
-
-        # Reset SM context best-effort
-        ctx = None
-        try:
-            ctx = getattr(self, "_add_edit_ctx", None)
-        except (TypeError, AttributeError, RuntimeError):
-            ctx = None
-
-        if ctx is not None:
-            for _k, _v in (
-                    ("jy_ok", False),
-                    ("duplicate", None),
-                    ("hanzi", ""),
-                    ("hz_ok", False),
-                    ("manual_hanzi", False),
-                    ("meaning", ""),
-                    ("mn_ok", False),
-                    ("category", ""),
-                    ("cat_ok", False),
-            ):
-                try:
-                    setattr(ctx, _k, _v)
-                except (TypeError, AttributeError, RuntimeError):
-                    pass
-
-        try:
-            if callable(getattr(self, "_update_save_enabled", None)):
-                try:
-                    fn_gate = getattr(self, "_update_save_enabled", None)
-                    if callable(fn_gate):
-                        fn_gate()
-                except (TypeError, AttributeError, RuntimeError):
-                    pass
-        except (TypeError, AttributeError, RuntimeError):
-            pass
+        """Reset Add/Edit panel to pre-validation state (delegated to field reset controller)."""
+        self._field_reset.reset_add_panel_pre_validation()
 
     def _on_add_jy_user_edited(self, *args, **kwargs) -> None:
         """Slot: user edited Jyutping; reset dependent fields to placeholders."""
@@ -2366,13 +2004,8 @@ class CategoryManagerDialog(QDialog):
             pass
 
     def _save_add_item(self) -> None:
-        """Legacy save entry point shim."""
-        try:
-            fn = getattr(self, "_on_add_item_enter", None)
-            if callable(fn):
-                fn()
-        except (TypeError, AttributeError, RuntimeError):
-            pass
+        """Legacy save entry point (delegated to save/commit controller)."""
+        self._save_commit.save_add_item()
 
     def _update_save_enabled(self) -> None:
         """Enable/disable Save based on current Add/Edit validity.
@@ -2710,58 +2343,8 @@ class CategoryManagerDialog(QDialog):
         return
 
     def _reverse_candidates_for_jy(self, jy: str) -> list[tuple[str, str, int]]:
-        """Return Tier-1 reverse candidates for a Jyutping (deterministic, test-friendly)."""
-        jy_s = str(jy or "").strip()
-        if not jy_s:
-            return []
-
-        # Locate reverse index (multiple historical attribute names)
-        rev = None
-        for attr in ("_reverse_index", "_rev_index", "_reverse_jyut_index"):
-            try:
-                v = getattr(self, attr, None)
-            except (TypeError, AttributeError, RuntimeError):
-                v = None
-            if isinstance(v, dict):
-                rev = v
-                break
-
-        items = []
-        if isinstance(rev, dict):
-            try:
-                items = rev.get(jy_s) or []
-            except (TypeError, AttributeError, RuntimeError):
-                items = []
-
-        out: list[tuple[str, str, int]] = []
-        try:
-            for row in list(items):
-                # Expected shapes: (hz, src, score) or (hz, src)
-                if isinstance(row, (list, tuple)) and len(row) >= 3:
-                    hz, src, score = row[0], row[1], row[2]
-                elif isinstance(row, (list, tuple)) and len(row) == 2:
-                    hz, src, score = row[0], row[1], 0
-                else:
-                    hz, src, score = row, "", 0
-
-                hz_s2 = str(hz or "").strip()
-                if not hz_s2:
-                    continue
-                src_s = str(src or "").strip()
-
-                try:
-                    score_i = int(score)
-                except (TypeError, ValueError):
-                    try:
-                        score_i = int(float(score))
-                    except (TypeError, ValueError):
-                        score_i = 0
-
-                out.append((hz_s2, src_s, score_i))
-        except (TypeError, AttributeError, RuntimeError, ValueError):
-            return []
-
-        return out
+        """Reverse candidate lookup (delegated to candidate pipeline)."""
+        return self._candidate_pipeline.reverse_candidates_for_jy(jy)
 
     def _on_jyut_enter(self) -> None:
         """Commit Jyutping entry (delegated to flow controller)."""
