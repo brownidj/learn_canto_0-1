@@ -5,6 +5,7 @@ Handles Qt signal/slot connections for Add/Edit panel.
 """
 
 import logging
+import traceback
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -18,12 +19,31 @@ class CategoryManagerSignalWiring:
 
     def __init__(self, dialog: "CategoryManagerDialog"):
         self.dialog = dialog
+        # Debug: Test all logging levels
+        print(f"Logger name: {logger.name}")
+        print(f"Logger level: {logger.level}")
+        print(f"Effective level: {logger.getEffectiveLevel()}")
+
+        logger.error("TEST ERROR: This should always appear")
+        logger.warning("TEST WARNING: This should appear")
+        logger.info("TEST INFO: This should appear")
+        logger.debug("TEST DEBUG: This should appear if DEBUG is enabled")
+        logger.debug(f"CategoryManagerManualHanziController initialized: {type(dialog)}")
+        # Add extra diagnostic logging
+        try:
+            logger.debug(f"Dialog attributes: {[attr for attr in dir(dialog) if attr.startswith('_') and not attr.startswith('__')]}")
+            logger.debug(f"Dialog type: {type(dialog)}")
+        except Exception as e:
+            logger.error(f"Error logging dialog details: {e}")
 
     def wire_add_edit_signals(self) -> None:
         """Wire Add or Edit widgets for Enter/validation.
 
         Rules:
+          - Jyutping Enter triggers Save/Edit/Cancel confirmation flow
           - Meaning Enter triggers Save/Edit/Cancel confirmation flow
+          - Hanzi Enter triggers meaning lookup and focus to Meaning
+          - Candidate selection triggers Hanzi population, meaning lookup, and focus to Meaning
           - Legacy inline Save button hidden by default, shown only on 'Edit'
           - Use UniqueConnection where available
           - Wiring is idempotent via _add_edit_wired guard
@@ -59,6 +79,77 @@ class CategoryManagerSignalWiring:
                     self._try_connect(getattr(w_jy, "textEdited", None), fn_reset)
             except (TypeError, AttributeError, RuntimeError):
                 pass
+
+            # Hanzi wiring - ALWAYS EDITABLE with Enter handler
+            w_hz = getattr(self.dialog, "_add_hz", None)
+            if w_hz is not None:
+                # Make Hanzi field always editable
+                try:
+                    w_hz.setReadOnly(False)
+                    w_hz.setPlaceholderText("Auto-filled from candidates or type your own...")
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
+
+                # Wire Enter key to trigger meaning lookup and focus transfer
+                def _on_hanzi_enter():
+                    """Handle Enter key in Hanzi field - lookup meanings and focus to Meaning field."""
+                    logger.debug("Hanzi Enter pressed - resolving meanings and focusing Meaning field")
+                    try:
+                        # Get current Hanzi text
+                        hz_text = w_hz.text().strip() if w_hz else ""
+                        if not hz_text:
+                            return
+
+                        # Resolve meanings for the Hanzi
+                        meanings = self.dialog._resolve_meanings_for_candidate(hz_text) or []
+
+                        # Populate meaning field if we found meanings
+                        mn_widget = getattr(self.dialog, "_add_mn", None)
+                        if mn_widget is not None and meanings:
+                            meaning_text = ", ".join(meanings[:3])  # Limit to first 3 meanings
+
+                            # Set meaning text based on widget type
+                            if hasattr(mn_widget, 'setPlainText'):
+                                mn_widget.setPlainText(meaning_text)
+                            elif hasattr(mn_widget, 'setText'):
+                                mn_widget.setText(meaning_text)
+
+                            logger.debug(f"Set meanings: {meaning_text}")
+
+                        # Focus the meaning field
+                        if mn_widget is not None:
+                            try:
+                                from ui.widget_utils import WidgetAccessor
+                                WidgetAccessor.focus(mn_widget, select_all=True)
+                                logger.debug("Focused meaning field")
+                            except (TypeError, AttributeError, RuntimeError):
+                                # Fallback focus method
+                                if hasattr(mn_widget, 'setFocus'):
+                                    mn_widget.setFocus()
+                                    if hasattr(mn_widget, 'selectAll'):
+                                        mn_widget.selectAll()
+
+                        # Update save state
+                        if callable(fn_gate):
+                            fn_gate()
+
+                    except Exception as e:
+                        logger.error(f"Error in Hanzi Enter handler: {e}")
+                        import traceback
+                        logger.debug(traceback.format_exc())
+
+                # Wire the Enter key
+                try:
+                    self._try_connect(getattr(w_hz, "returnPressed", None), _on_hanzi_enter)
+                    logger.debug("Hanzi Enter key handler connected")
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
+
+                # Wire text changes to update save state
+                try:
+                    self._try_connect(getattr(w_hz, "textChanged", None), fn_gate)
+                except (TypeError, AttributeError, RuntimeError):
+                    pass
 
             # Meaning wiring
             w_mn = getattr(self.dialog, "_add_mn", None)
@@ -111,7 +202,7 @@ class CategoryManagerSignalWiring:
                 except (TypeError, AttributeError, RuntimeError):
                     pass
 
-            # Hanzi candidate combobox wiring
+            # Hanzi candidate combobox wiring - ENHANCED
             try:
                 combo = getattr(self.dialog, "_cand_combo", None)
             except (TypeError, AttributeError, RuntimeError):
@@ -127,32 +218,93 @@ class CategoryManagerSignalWiring:
                 self.dialog._cand_combo_ctrl = None
 
             if combo is not None:
-                try:
-                    fn_pick = getattr(self.dialog, "_on_candidate_index_activated", None)
-                    if callable(fn_pick):
-                        sig = getattr(combo, "currentIndexChanged", None)
-                        if sig is not None:
-                            try:
-                                sig_int = sig[int] if hasattr(sig, "__getitem__") else sig
-                                self._try_connect(sig_int, fn_pick)
-                            except (TypeError, AttributeError, RuntimeError):
-                                self._try_connect(sig, fn_pick)
+                # Enhanced candidate selection handler
+                def _on_candidate_selected(index):
+                    """Handle candidate selection from combo - populate Hanzi, resolve meanings, focus Meaning."""
+                    logger.debug(f"Candidate selected at index: {index}")
+                    try:
+                        if index < 0 or index >= combo.count():
+                            return
 
-                        sig2 = getattr(combo, "activated", None)
-                        if sig2 is not None:
-                            try:
-                                sig2_int = sig2[int] if hasattr(sig2, "__getitem__") else sig2
-                                self._try_connect(sig2_int, fn_pick)
-                            except (TypeError, AttributeError, RuntimeError):
-                                self._try_connect(sig2, fn_pick)
-                except (TypeError, AttributeError, RuntimeError):
-                    pass
+                        # Get selected Hanzi text
+                        hanzi_text = combo.itemText(index).strip()
+                        if not hanzi_text or hanzi_text.startswith("—"):  # Skip placeholder items
+                            return
 
-            if callable(fn_gate):
-                try:
-                    fn_gate()
-                except (TypeError, AttributeError, RuntimeError):
-                    pass
+                        # Set Hanzi field
+                        hz_widget = getattr(self.dialog, "_add_hz", None)
+                        if hz_widget is not None:
+                            hz_widget.setText(hanzi_text)
+                            logger.debug(f"Set Hanzi field to: {hanzi_text}")
+
+                        # Resolve meanings for the selected Hanzi
+                        meanings = self.dialog._resolve_meanings_for_candidate(hanzi_text) or []
+
+                        # Populate meaning field
+                        mn_widget = getattr(self.dialog, "_add_mn", None)
+                        if mn_widget is not None and meanings:
+                            meaning_text = ", ".join(meanings[:3])  # Limit to first 3 meanings
+
+                            # Set meaning text based on widget type
+                            if hasattr(mn_widget, 'setPlainText'):
+                                mn_widget.setPlainText(meaning_text)
+                            elif hasattr(mn_widget, 'setText'):
+                                mn_widget.setText(meaning_text)
+
+                            logger.debug(f"Set meanings from candidate: {meaning_text}")
+
+                        # Focus the meaning field
+                        if mn_widget is not None:
+                            try:
+                                from ui.widget_utils import WidgetAccessor
+                                WidgetAccessor.focus(mn_widget, select_all=True)
+                                logger.debug("Focused meaning field from candidate selection")
+                            except (TypeError, AttributeError, RuntimeError):
+                                # Fallback focus method
+                                if hasattr(mn_widget, 'setFocus'):
+                                    mn_widget.setFocus()
+                                    if hasattr(mn_widget, 'selectAll'):
+                                        mn_widget.selectAll()
+
+                        # Update save state
+                        if callable(fn_gate):
+                            fn_gate()
+
+                    except Exception as e:
+                        logger.error(f"Error in candidate selection handler: {e}")
+                        import traceback
+                        logger.debug(traceback.format_exc())
+
+                    # Wire candidate selection events
+                    try:
+                        # activated signal - when user selects from dropdown
+                        sig_activated = getattr(combo, "activated", None)
+                        if sig_activated is not None:
+                            try:
+                                sig_int = sig_activated[int] if hasattr(sig_activated, "__getitem__") else sig_activated
+                                self._try_connect(sig_int, _on_candidate_selected)
+                                logger.debug("Candidate combo activated signal connected")
+                            except (TypeError, AttributeError, RuntimeError):
+                                self._try_connect(sig_activated, _on_candidate_selected)
+
+                        # currentIndexChanged signal - when selection changes
+                        sig_changed = getattr(combo, "currentIndexChanged", None)
+                        if sig_changed is not None:
+                            try:
+                                sig_int = sig_changed[int] if hasattr(sig_changed, "__getitem__") else sig_changed
+                                self._try_connect(sig_int, _on_candidate_selected)
+                                logger.debug("Candidate combo currentIndexChanged signal connected")
+                            except (TypeError, AttributeError, RuntimeError):
+                                self._try_connect(sig_changed, _on_candidate_selected)
+
+                    except (TypeError, AttributeError, RuntimeError) as e:
+                        logger.error(f"Error wiring candidate combo signals: {e}")
+
+                if callable(fn_gate):
+                    try:
+                        fn_gate()
+                    except (TypeError, AttributeError, RuntimeError):
+                        pass
 
         finally:
             self.dialog._add_edit_wired = True

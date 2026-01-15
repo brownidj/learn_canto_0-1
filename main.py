@@ -1,10 +1,22 @@
 import logging
-import os
-import re
-import shlex
 import sys
-import tempfile
-import time
+
+# Configure root logger
+logging.basicConfig(
+    level=logging.DEBUG,  # Set to DEBUG for most verbose logging
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout),  # Log to console
+        logging.FileHandler('category_manager_debug.log', mode='w')  # Log to file
+    ]
+)
+
+# Optional: Set specific loggers to different levels
+logging.getLogger('ui.category_manager_signal_wiring').setLevel(logging.DEBUG)
+logging.getLogger('ui.category_manager_manual_hanzi').setLevel(logging.DEBUG)
+logging.getLogger('manual_hanzi_controller').setLevel(logging.DEBUG)
+
+import os
 from typing import Any, cast, Optional
 
 from infra.paths import project_root, ui_path
@@ -12,17 +24,14 @@ from persistence.categories_store import load_categories as _load_categories
 
 logger = logging.getLogger(__name__)
 
-
 from PySide6.QtWidgets import (
     QApplication, QWidget, QLabel, QPushButton,
     QVBoxLayout, QHBoxLayout, QGroupBox, QLineEdit,
-    QTextEdit, QComboBox, QToolButton, QSlider, QDialog, QMessageBox,
+    QTextEdit, QComboBox, QToolButton, QDialog, QMessageBox,
     QSizePolicy,
-    QLayout,
 )
 from PySide6.QtUiTools import QUiLoader
-from PySide6.QtCore import QFile, QIODevice, Qt, QTimer, QProcess, QEvent, QObject
-from PySide6.QtGui import QFontMetrics
+from PySide6.QtCore import QFile, QIODevice, Qt, QTimer
 
 from settings import load_all, save_one, reset_all, bounds
 from category_manager import CategoryManagerDialog
@@ -95,7 +104,6 @@ def load_one(key, default=None):
 # Import extracted helper functions
 from main_helpers import (
     normalize_reverse_index as _normalize_reverse_index,
-    parse_base_point_size_from_stylesheet,
     perf_start as _perf_start,
     perf_end as _perf_end,
 )
@@ -460,6 +468,7 @@ if __name__ == "__main__":
         except Exception:
             pass
 
+
         # Wire category combo change handler
         def _on_category_changed(name):
             save_one("category", name)
@@ -473,6 +482,7 @@ if __name__ == "__main__":
             controller.update_buttons()
             controller.apply_category_filter(name)
 
+
         ui_setup.wire_category_change(_on_category_changed)
 
         # Apply initial category filter
@@ -480,7 +490,8 @@ if __name__ == "__main__":
             controller.apply_category_filter(ui_setup.combo_category.currentText())
         else:
             logger.debug("comboCategory not found; applying saved category '%s'", saved_category)
-            controller.apply_category_filter(saved_category if saved_category in categories_map or saved_category == "All" else "All")
+            controller.apply_category_filter(
+                saved_category if saved_category in categories_map or saved_category == "All" else "All")
         # --- Tortoise (slow mode) & Auto mode wiring ---
         btn_tortoise = window.findChild(QPushButton, "btnTortoise")
         btn_auto = window.findChild(QPushButton, "btnAuto")
@@ -527,7 +538,6 @@ if __name__ == "__main__":
 
         if btn_auto is not None:
             btn_auto.toggled.connect(controller.set_auto_mode)
-
 
         # --- TTS wiring: Initialize service ---
         tts_service = TTSService(window)
@@ -626,9 +636,11 @@ if __name__ == "__main__":
             shortlist_fn=shortlist_candidates
         )
 
+
         def _reverse_candidates_for_jy(jy: str) -> list[tuple[str, str, int]]:
             """Wrapper for reverse lookup service."""
             return reverse_lookup.candidates_for_jyutping(jy)
+
 
         def _commit_vocab_entry_from_dialog(entry: dict, dialog=None):
             """Wrapper to maintain signature compatibility with existing code."""
@@ -655,6 +667,7 @@ if __name__ == "__main__":
 
         # Get group_about for audio test setup below
         group_about = window.findChild(QGroupBox, "groupAbout")
+
 
         # -----------------------------
         # In-app Category Manager Dialog
@@ -859,6 +872,7 @@ if __name__ == "__main__":
             finally:
                 file.close()
 
+
         # Setup tones & radicals toggle
         btn_tr = window.findChild(QToolButton, "btnTonesAndRadicalsToggle")
         if btn_tr is None:
@@ -1022,6 +1036,7 @@ if __name__ == "__main__":
         # Show the first entry on startup (after category filter applied)
         controller.show_current()
 
+
         # Update all labels with ranges and current values
         def _update_labels_wrapper():
             update_all_labels(
@@ -1033,6 +1048,7 @@ if __name__ == "__main__":
                 slider_extro,
                 slider_auto,
             )
+
 
         # Sliders already configured by setup_all()
         _update_labels_wrapper()

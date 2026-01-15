@@ -113,6 +113,9 @@ class CategoryManagerFieldResetController:
         try:
             if getattr(self.dialog, "_add_hz", None) is not None:
                 self.dialog._add_hz.clear()
+                # ALWAYS keep Hanzi field editable
+                self.dialog._add_hz.setReadOnly(False)
+                self.dialog._add_hz.setPlaceholderText("Auto-filled from candidates or type your own...")
         except (TypeError, AttributeError, RuntimeError):
             pass
 

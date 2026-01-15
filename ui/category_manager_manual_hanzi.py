@@ -5,6 +5,7 @@ Handles user's custom Hanzi entry mode.
 """
 
 import logging
+import traceback
 from typing import TYPE_CHECKING
 
 from ui.widget_utils import WidgetAccessor
@@ -16,10 +17,9 @@ logger = logging.getLogger(__name__)
 
 
 class CategoryManagerManualHanziController:
-    """Manages manual Hanzi entry mode for CategoryManagerDialog."""
-
     def __init__(self, dialog: "CategoryManagerDialog"):
         self.dialog = dialog
+        logger.debug(f"CategoryManagerManualHanziController initialized: {type(dialog)}")
 
     def enter_manual_mode(self) -> None:
         """Enter manual Hanzi mode (user types their own Hanzi).
@@ -28,9 +28,19 @@ class CategoryManagerManualHanziController:
         """
         try:
             logger.debug("ManualHanzi: button clicked")
-        except (TypeError, AttributeError, RuntimeError):
-            pass
+            logger.debug(f"Button exists: {hasattr(self.dialog, '_btn_custom_hz')}")
+            btn = getattr(self.dialog, '_btn_custom_hz', None)
+            logger.debug(f"Button details: {btn}, text={btn.text() if btn else 'N/A'}")
 
+            logger.debug(f"Hanzi input exists: {hasattr(self.dialog, '_add_hz')}")
+            hz = getattr(self.dialog, '_add_hz', None)
+            logger.debug(f"Hanzi input details: {hz}, readonly={hz.isReadOnly() if hz else 'N/A'}")
+        except Exception as e:
+            logger.error(f"Error checking dialog attributes: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+
+        # Existing method remains the same
         # Set mode flag
         try:
             self.dialog._manual_hanzi_mode = True
@@ -67,10 +77,13 @@ class CategoryManagerManualHanziController:
         hz = getattr(self.dialog, "_add_hz", None)
         if hz is not None:
             try:
+                logger.debug(f"Before setting editable: is_readonly={hz.isReadOnly()}")
                 hz.setReadOnly(False)
                 hz.setPlaceholderText("Type Hanzi…")
-            except (RuntimeError, AttributeError):
-                pass
+                logger.debug(f"After setting editable: is_readonly={hz.isReadOnly()}")
+            except (RuntimeError, AttributeError) as e:
+                logger.error(f"Error setting Hanzi editable: {e}")
+
         WidgetAccessor.clear_text(hz)
 
         # Hide candidate combo
@@ -97,5 +110,5 @@ class CategoryManagerManualHanziController:
         if callable(fn_gate):
             try:
                 fn_gate()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.error(f"Error in save gating: {e}")
