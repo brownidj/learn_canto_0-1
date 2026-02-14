@@ -333,6 +333,12 @@ class CategoryManagerAddEditFlowController:
         # Preserve the category selection throughout the flow
         cat_widget = getattr(self.dialog, "_add_cat", None)
         preserved_category = category or (cat_widget.currentText() if cat_widget else None)
+        if not preserved_category:
+            try:
+                ctx = getattr(self.dialog, "_add_edit_ctx", None)
+                preserved_category = str(getattr(ctx, "category", "") or "").strip() if ctx is not None else ""
+            except (TypeError, AttributeError, RuntimeError):
+                preserved_category = ""
 
         logger.debug("_fill_hanzi_candidates: start jy=%r category=%r", jy_s, category or "")
 
@@ -451,7 +457,7 @@ class CategoryManagerAddEditFlowController:
             _ctx_set("hanzi", selected_hz)
             _ctx_set("hz_ok", bool(selected_hz))
 
-            # Meaning autofill
+            # Meaning autofill for the selected candidate (default or chosen).
             joined = ""
             if selected_hz:
                 try:
@@ -460,26 +466,38 @@ class CategoryManagerAddEditFlowController:
                 except (TypeError, AttributeError, RuntimeError):
                     joined = ""
 
-            if (not str(joined or "").strip()) and (len(cands_list) == 1) and selected_hz:
-                try:
-                    ms2 = self.dialog._meanings_for_hanzi(selected_hz)
-                    joined = ", ".join([str(x).strip() for x in (ms2 or []) if str(x).strip()])
-                except (TypeError, AttributeError, RuntimeError):
-                    joined = ""
+                if not str(joined or "").strip():
+                    try:
+                        ms2 = self.dialog._meanings_for_hanzi(selected_hz)
+                        joined = ", ".join([str(x).strip() for x in (ms2 or []) if str(x).strip()])
+                    except (TypeError, AttributeError, RuntimeError):
+                        joined = ""
 
-            w_mn2 = getattr(self.dialog, "_add_mn", None)
-            if str(joined or "").strip():
-                WidgetAccessor.set_text(w_mn2, joined)
-            else:
-                WidgetAccessor.clear_text(w_mn2)
+        w_mn2 = getattr(self.dialog, "_add_mn", None)
+        if str(joined or "").strip():
+            WidgetAccessor.set_text(w_mn2, joined)
+        else:
+            WidgetAccessor.clear_text(w_mn2)
 
-            _ctx_set("meaning", joined)
-            _ctx_set("mn_ok", bool(str(joined or "").strip()))
+        _ctx_set("meaning", joined)
+        _ctx_set("mn_ok", bool(str(joined or "").strip()))
 
-            # Mark committed if single candidate
-            if len(cands_list) == 1 and bool(selected_hz):
-                self.dialog._mark_hanzi_committed(True)
-            else:
+        if not str(joined or "").strip():
+            try:
+                svc = getattr(self.dialog, "_canto_service", None)
+                if svc is not None and hasattr(svc, "get_cached"):
+                    info = svc.get_cached(hanzi=selected_hz, jyutping=jy_s)
+                    if info is not None and str(info.meaning_colloquial or "").strip():
+                        WidgetAccessor.set_text(w_mn2, str(info.meaning_colloquial))
+                        _ctx_set("meaning", str(info.meaning_colloquial))
+                        _ctx_set("mn_ok", True)
+            except Exception:
+                pass
+
+        # Mark committed if single candidate
+        if len(cands_list) == 1 and bool(selected_hz):
+            self.dialog._mark_hanzi_committed(True)
+        else:
                 self.dialog._mark_hanzi_committed(False)
 
         # Refresh Save gating
@@ -498,10 +516,8 @@ class CategoryManagerAddEditFlowController:
                     pass
 
         # Focus behaviour
-        if len(cands_list) == 1:
-            WidgetAccessor.focus(getattr(self.dialog, "_add_mn", None))
-        else:
-            WidgetAccessor.focus(combo)
+        # Focus Hanzi by default after category commit; user can open dropdown if needed.
+        WidgetAccessor.focus(getattr(self.dialog, "_add_hz", None), select_all=False)
 
     def on_candidate_index_activated(self, *args) -> None:
         """Handle candidate selection from combobox."""

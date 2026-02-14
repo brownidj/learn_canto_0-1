@@ -3,6 +3,7 @@ certifi==2025.10.5
 charset-normalizer==3.4.4
 idna==3.11
 OpenCC==1.1.9
+openai>=1.0.0,<2
 pycantonese==3.4.0
 pylangacq==0.16.2
 PySide6==6.10.1
@@ -19,5 +20,6 @@ wcwidth==0.2.14
 wordseg==0.0.2
 pandas>=2.3.3,<3
 pyarrow>=14,<20
+pydantic>=2,<3
 ruamel.yaml
 reportlab

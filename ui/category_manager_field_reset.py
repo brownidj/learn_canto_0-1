@@ -33,6 +33,10 @@ class CategoryManagerFieldResetController:
             pass
 
         WidgetAccessor.set_combo_index(getattr(self.dialog, "_add_cat", None), -1)
+        try:
+            self.dialog._last_committed_category = ""
+        except (TypeError, AttributeError, RuntimeError):
+            pass
 
         # Reset manual-Hanzi state
         try:
@@ -62,17 +66,13 @@ class CategoryManagerFieldResetController:
             except Exception:
                 pass
 
-        # Reset Hanzi field to read-only
+        # Keep Hanzi field editable
         try:
             hz = getattr(self.dialog, "_add_hz", None)
         except (TypeError, AttributeError, RuntimeError):
             hz = None
 
         if hz is not None:
-            try:
-                hz.setReadOnly(True)
-            except Exception:
-                pass
             try:
                 hz.setPlaceholderText("Auto, after reverse lookup")
             except Exception:
@@ -131,6 +131,10 @@ class CategoryManagerFieldResetController:
                     self.dialog._add_cat.setCurrentIndex(-1)
                 except (TypeError, AttributeError, RuntimeError):
                     pass
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+        try:
+            self.dialog._last_committed_category = ""
         except (TypeError, AttributeError, RuntimeError):
             pass
 

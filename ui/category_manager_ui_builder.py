@@ -247,7 +247,7 @@ class CategoryManagerUIBuilder:
         # Hanzi display field
         from PySide6.QtWidgets import QSizePolicy
         self.dialog._add_hz = QLineEdit(group_hanzi)
-        self.dialog._add_hz.setReadOnly(True)
+        self.dialog._add_hz.setReadOnly(False)
         self.dialog._add_hz.setPlaceholderText("Auto, after reverse lookup")
         self.dialog._add_hz.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         form_hanzi.addRow(self.dialog._add_hz)

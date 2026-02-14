@@ -38,6 +38,7 @@
 import logging
 import os
 import time
+import threading
 from dataclasses import dataclass
 
 from domain.add_edit_controller import AddEditInputs, AddEditController
@@ -85,6 +86,7 @@ from ui.vocabulary_table_controller import VocabularyTableController
 # ----------------------------------------
 from PySide6.QtCore import Qt as _Qt
 from PySide6.QtCore import QPoint, QTimer
+from PySide6.QtCore import Slot
 from PySide6.QtGui import (
     QFont,
     QFontMetrics,
@@ -128,6 +130,7 @@ from infra.paths import project_root
 
 from ui.focus_policy import should_steal_focus
 from ui.category_combo import CategoryComboController
+from services.cantonese_language_service import CantoneseInfo
 
 from persistence.categories_store import persist_categories_yaml
 from table_scroll_slider_controller import TableScrollSliderController
@@ -238,6 +241,19 @@ class AddEntryPreviewBuilder:
             if jy_widget is not None:
                 jy = WidgetAccessor.get_text(jy_widget) or ""
             if hz_widget is not None:
+                # FORCE it to be editable
+                hz_widget.setReadOnly(False)
+
+                # Add a simple test handler
+                def test_enter():
+                    print("*** ENTER PRESSED ON HANZI FIELD! ***")
+
+                # Connect it directly
+                try:
+                    hz_widget.returnPressed.connect(test_enter)
+                    print("  - Connection: SUCCESS")
+                except Exception as e:
+                    print(f"  - Connection: FAILED - {e}")
                 hz = WidgetAccessor.get_text(hz_widget) or ""
             if mn_widget is not None:
                 mn = WidgetAccessor.get_text(mn_widget) or ""
@@ -1129,6 +1145,20 @@ class CategoryManagerDialog(QDialog):
         except (TypeError, AttributeError, RuntimeError):
             pass
 
+    def _on_add_jy_user_edited(self, *args, **kwargs) -> None:
+        """Handle Jyutping user edits (clear dependent fields)."""
+        try:
+            CategoryManagerHelpers.on_add_jy_user_edited(self, *args, **kwargs)
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+
+    def _on_add_jy_editing_finished(self, *args, **kwargs) -> None:
+        """Handle Jyutping edit commit (focus Category)."""
+        try:
+            CategoryManagerHelpers.on_add_jy_editing_finished(self, *args, **kwargs)
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+
     def _on_candidate_index_activated(self, *args) -> None:
         """Delegate candidate selection to flow controller."""
         try:
@@ -1154,6 +1184,228 @@ class CategoryManagerDialog(QDialog):
             if cat_ops is not None and hasattr(cat_ops, "on_add_category_changed"):
                 cat_ops.on_add_category_changed(*args, **kwargs)
         except (TypeError, AttributeError, RuntimeError):
+            pass
+
+    def _fetch_canto_info_async(self, *, hanzi: str, jyutping: str = "") -> None:
+        """Fetch Cantonese info via service and apply meaning if still empty."""
+        try:
+            svc = getattr(self, "_canto_service", None)
+        except (TypeError, AttributeError, RuntimeError):
+            svc = None
+        if svc is None:
+            try:
+                logger.debug("CANTO: service unavailable")
+            except Exception:
+                pass
+            try:
+                fn_notes = getattr(self, "_set_notes", None)
+                if callable(fn_notes):
+                    fn_notes("Cantonese service unavailable", source="canto-service")
+            except Exception:
+                pass
+            return
+
+        hz = str(hanzi or "").strip()
+        jy = str(jyutping or "").strip()
+        if not hz:
+            return
+
+        key = "hz:" + hz if hz else "jy:" + jy
+        try:
+            inflight = getattr(self, "_canto_inflight", None)
+            if not isinstance(inflight, set):
+                inflight = set()
+                self._canto_inflight = inflight
+            if key in inflight:
+                logger.debug("CANTO: inflight skip key=%r", key)
+                return
+            inflight.add(key)
+        except Exception:
+            pass
+
+        # Surface status in Notes while fetching.
+        try:
+            fn_notes = getattr(self, "_set_notes", None)
+            if callable(fn_notes):
+                fn_notes("Fetching colloquial meaning… please wait", source="canto-service")
+        except Exception:
+            pass
+        try:
+            logger.debug("CANTO: fetch start hanzi=%r jyutping=%r", hz, jy)
+        except Exception:
+            pass
+
+        def _worker() -> None:
+            info: CantoneseInfo | None = None
+            try:
+                logger.debug("CANTO: worker lookup hanzi=%r", hz)
+                info = svc.lookup(hanzi=hz, jyutping=jy)
+            except Exception:
+                logger.debug("CANTO: worker lookup failed", exc_info=True)
+                info = None
+
+            if info is None:
+                def _clear_note() -> None:
+                    try:
+                        fn_notes = getattr(self, "_set_notes", None)
+                        if callable(fn_notes):
+                            fn_notes("", source="canto-service")
+                    except Exception:
+                        pass
+                try:
+                    from PySide6.QtCore import QTimer
+                    QTimer.singleShot(0, _clear_note)
+                except Exception:
+                    _clear_note()
+                try:
+                    logger.debug("CANTO: lookup returned None")
+                except Exception:
+                    pass
+                try:
+                    inflight = getattr(self, "_canto_inflight", None)
+                    if isinstance(inflight, set):
+                        inflight.discard(key)
+                except Exception:
+                    pass
+                return
+
+            try:
+                logger.debug("CANTO: worker result hanzi=%r meaning=%r", hz, info.meaning_colloquial)
+            except Exception:
+                pass
+
+            try:
+                self._canto_pending = (hz, key, info.meaning_colloquial or "")
+            except Exception:
+                pass
+
+            try:
+                from PySide6.QtCore import QMetaObject, Qt
+                try:
+                    logger.debug("CANTO: scheduling apply (invokeMethod)")
+                except Exception:
+                    pass
+                QMetaObject.invokeMethod(self, "_apply_canto_pending", Qt.ConnectionType.QueuedConnection)
+            except Exception:
+                try:
+                    from PySide6.QtCore import QTimer
+                    try:
+                        logger.debug("CANTO: scheduling apply (QTimer)")
+                    except Exception:
+                        pass
+                    QTimer.singleShot(0, self._apply_canto_pending)
+                except Exception:
+                    try:
+                        logger.debug("CANTO: scheduling apply failed, running inline", exc_info=True)
+                    except Exception:
+                        pass
+                    self._apply_canto_pending()
+
+        t = threading.Thread(target=_worker, daemon=True)
+        t.start()
+
+    @Slot()
+    def _apply_canto_pending(self) -> None:
+        """Apply the most recent Cantonese meaning result on the UI thread."""
+        try:
+            pending = getattr(self, "_canto_pending", None)
+        except Exception:
+            pending = None
+        if not pending or not isinstance(pending, tuple) or len(pending) != 3:
+            return
+
+        hz, key, meaning_raw = pending
+        meaning = str(meaning_raw or "").strip()
+        try:
+            logger.debug("CANTO: apply start hanzi=%r", hz)
+        except Exception:
+            pass
+
+        w_mn = getattr(self, "_add_mn", None)
+        if w_mn is None:
+            return
+        w_hz = getattr(self, "_add_hz", None)
+        if w_hz is not None:
+            try:
+                current_hz = WidgetAccessor.get_text(w_hz)
+            except Exception:
+                current_hz = ""
+            try:
+                logger.debug("CANTO: apply current_hz=%r", current_hz)
+            except Exception:
+                pass
+            if current_hz and current_hz != hz:
+                try:
+                    fn_notes = getattr(self, "_set_notes", None)
+                    if callable(fn_notes):
+                        fn_notes("", source="canto-service")
+                except Exception:
+                    pass
+                return
+
+        current = WidgetAccessor.get_text(w_mn)
+        try:
+            logger.debug("CANTO: apply current=%r", current)
+        except Exception:
+            pass
+        if current:
+            try:
+                fn_notes = getattr(self, "_set_notes", None)
+                if callable(fn_notes):
+                    fn_notes("", source="canto-service")
+            except Exception:
+                pass
+            try:
+                logger.debug("CANTO: skip apply (meaning already present) hanzi=%r", hz)
+            except Exception:
+                pass
+            try:
+                inflight = getattr(self, "_canto_inflight", None)
+                if isinstance(inflight, set):
+                    inflight.discard(key)
+            except Exception:
+                pass
+            return
+
+        try:
+            logger.debug("CANTO: apply meaning=%r", meaning)
+        except Exception:
+            pass
+        if not meaning:
+            try:
+                fn_notes = getattr(self, "_set_notes", None)
+                if callable(fn_notes):
+                    fn_notes("", source="canto-service")
+            except Exception:
+                pass
+            try:
+                logger.debug("CANTO: empty meaning_colloquial hanzi=%r", hz)
+            except Exception:
+                pass
+            try:
+                inflight = getattr(self, "_canto_inflight", None)
+                if isinstance(inflight, set):
+                    inflight.discard(key)
+            except Exception:
+                pass
+            return
+
+        WidgetAccessor.set_text(w_mn, meaning)
+        try:
+            fn_notes = getattr(self, "_set_notes", None)
+            if callable(fn_notes):
+                fn_notes("", source="canto-service")
+        except Exception:
+            pass
+        try:
+            logger.debug("CANTO: applied meaning hanzi=%r meaning=%r", hz, meaning)
+        except Exception:
+            pass
+        try:
+            inflight = getattr(self, "_canto_inflight", None)
+            if isinstance(inflight, set):
+                inflight.discard(key)
+        except Exception:
             pass
 
     def _fill_hanzi_candidates(self, jy: str, category: str | None = None) -> None:
@@ -1228,6 +1480,15 @@ class CategoryManagerDialog(QDialog):
             ctrl = getattr(self, "_field_reset", None)
             if ctrl is not None and hasattr(ctrl, "clear_add_entry_fields"):
                 ctrl.clear_add_entry_fields()
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+
+    def _reset_add_panel_pre_validation(self) -> None:
+        """Reset Add/Edit panel to pre-validation state (clear dependent fields)."""
+        try:
+            ctrl = getattr(self, "_field_reset", None)
+            if ctrl is not None and hasattr(ctrl, "reset_add_panel_pre_validation"):
+                ctrl.reset_add_panel_pre_validation()
         except (TypeError, AttributeError, RuntimeError):
             pass
 

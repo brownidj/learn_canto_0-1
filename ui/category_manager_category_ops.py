@@ -645,7 +645,31 @@ class CategoryManagerCategoryOpsController:
                 return
 
             # Clear and refocus helper
-            def _clear_and_refocus() -> None:
+            def _clear_and_refocus(preserve_text: str = "") -> None:
+                preserve = str(preserve_text or "").strip()
+
+                # If we have a valid category text, keep it visible and just refocus.
+                if preserve:
+                    try:
+                        w = getattr(self.dialog, "_add_cat", None)
+                    except (TypeError, AttributeError, RuntimeError):
+                        w = None
+
+                    if w is not None:
+                        with SignalBlocker(w):
+                            try:
+                                if hasattr(w, "setCurrentText"):
+                                    w.setCurrentText(preserve)
+                                else:
+                                    WidgetAccessor.set_text(w, preserve)
+                            except (TypeError, AttributeError, RuntimeError):
+                                pass
+                    try:
+                        self.dialog._focus_category(select_all=True, show_popup=True)
+                    except (TypeError, AttributeError, RuntimeError):
+                        pass
+                    return
+
                 try:
                     ctrl2 = getattr(self.dialog, "_cat_combo_ctrl", None)
                 except (TypeError, AttributeError, RuntimeError):
@@ -726,7 +750,7 @@ class CategoryManagerCategoryOpsController:
 
             # Guard after confirmation
             if (not exists_now) and (not user_confirmed_add):
-                _clear_and_refocus()
+                _clear_and_refocus(preserve_text=canon or cat_raw)
                 self._update_save_enabled()
                 return
 
@@ -754,7 +778,7 @@ class CategoryManagerCategoryOpsController:
                     confirmed_add=bool(user_confirmed_add),
                 )
             except (TypeError, AttributeError, RuntimeError, ValueError):
-                _clear_and_refocus()
+                _clear_and_refocus(preserve_text=canon or cat_raw)
                 self._update_save_enabled()
                 return
 
@@ -779,7 +803,7 @@ class CategoryManagerCategoryOpsController:
                         bool(getattr(res, "should_fill_candidates", False)))
 
             if not bool(getattr(res, "ok", False)):
-                _clear_and_refocus()
+                _clear_and_refocus(preserve_text=canon or cat_raw)
                 self._update_save_enabled()
                 return
 
@@ -789,7 +813,7 @@ class CategoryManagerCategoryOpsController:
                 cat = ""
 
             if not cat:
-                _clear_and_refocus()
+                _clear_and_refocus(preserve_text=canon or cat_raw)
                 self._update_save_enabled()
                 return
 
@@ -909,6 +933,12 @@ class CategoryManagerCategoryOpsController:
                     except (TypeError, AttributeError, RuntimeError):
                         pass
 
+            # Remember last committed category for UI restoration
+            try:
+                self.dialog._last_committed_category = cat
+            except (TypeError, AttributeError, RuntimeError):
+                pass
+
             # Candidate fill
             try:
                 should_fill = bool(has_jy)
@@ -947,10 +977,8 @@ class CategoryManagerCategoryOpsController:
                 except (TypeError, AttributeError, RuntimeError, ValueError):
                     n_items = 0
 
-            if n_items > 0:
-                self.dialog._defer_focus("cand")
-            else:
-                self.dialog._defer_focus("hz")
+            # Always move to Hanzi after category commit; meanings are prefilled for default.
+            self.dialog._defer_focus("hz")
 
         finally:
             try:

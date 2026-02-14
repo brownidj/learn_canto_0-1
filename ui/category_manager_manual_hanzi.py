@@ -77,14 +77,51 @@ class CategoryManagerManualHanziController:
         hz = getattr(self.dialog, "_add_hz", None)
         if hz is not None:
             try:
-                logger.debug(f"Before setting editable: is_readonly={hz.isReadOnly()}")
-                hz.setReadOnly(False)
-                hz.setPlaceholderText("Type Hanzi…")
-                logger.debug(f"After setting editable: is_readonly={hz.isReadOnly()}")
+                # Ensure stable objectName for tests/debugging (CategoryManager may construct widgets without names)
+                try:
+                    if hasattr(hz, "objectName") and callable(hz.objectName):
+                        if not str(hz.objectName() or "").strip() and hasattr(hz, "setObjectName"):
+                            hz.setObjectName("editHanzi")
+                except Exception:
+                    pass
+
+                logger.debug(
+                    "ManualHanzi: before editable hz=%r objectName=%r readonly=%s",
+                    type(hz),
+                    (hz.objectName() if hasattr(hz, "objectName") else ""),
+                    (hz.isReadOnly() if hasattr(hz, "isReadOnly") else "?"),
+                )
+
+                if hasattr(hz, "setReadOnly"):
+                    hz.setReadOnly(False)
+                if hasattr(hz, "setEnabled"):
+                    hz.setEnabled(True)
+                if hasattr(hz, "setPlaceholderText"):
+                    hz.setPlaceholderText("Type Hanzi…")
+
+                logger.debug(
+                    "ManualHanzi: after editable hz=%r objectName=%r readonly=%s",
+                    type(hz),
+                    (hz.objectName() if hasattr(hz, "objectName") else ""),
+                    (hz.isReadOnly() if hasattr(hz, "isReadOnly") else "?"),
+                )
             except (RuntimeError, AttributeError) as e:
-                logger.error(f"Error setting Hanzi editable: {e}")
+                logger.error("Error setting Hanzi editable: %s", e)
 
         WidgetAccessor.clear_text(hz)
+
+        # Also name Meaning field if it exists (helps downstream focus/lookup)
+        try:
+            mn = getattr(self.dialog, "_add_mn", None)
+        except Exception:
+            mn = None
+        if mn is not None:
+            try:
+                if hasattr(mn, "objectName") and callable(mn.objectName):
+                    if not str(mn.objectName() or "").strip() and hasattr(mn, "setObjectName"):
+                        mn.setObjectName("editMeaning")
+            except Exception:
+                pass
 
         # Hide candidate combo
         combo = getattr(self.dialog, "_cand_combo", None)

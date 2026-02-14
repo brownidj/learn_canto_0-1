@@ -110,6 +110,33 @@ class CategoryManagerHelpers:
             return
 
     @staticmethod
+    def on_add_jy_editing_finished(dialog, *args, **kwargs) -> None:
+        """Slot: Jyutping edit committed; focus Category."""
+        try:
+            from ui.widget_utils import WidgetAccessor
+            jy = WidgetAccessor.get_text(getattr(dialog, "_add_jy", None))
+        except (TypeError, AttributeError, RuntimeError, ImportError, ValueError):
+            jy = ""
+
+        if not str(jy or "").strip():
+            return
+
+        try:
+            ctrl = getattr(dialog, "_focus_ctrl", None)
+            if ctrl is not None and hasattr(ctrl, "focus_category"):
+                ctrl.focus_category(select_all=True, show_popup=True)
+                return
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+
+        try:
+            ctrl2 = getattr(dialog, "_cat_combo_ctrl", None)
+            if ctrl2 is not None and hasattr(ctrl2, "focus"):
+                ctrl2.focus(select_all=True, show_popup=True)
+        except (TypeError, AttributeError, RuntimeError):
+            pass
+
+    @staticmethod
     def on_add_category_changed(dialog, *args, **kwargs) -> None:
         """Category text changed while typing.
 

@@ -34,6 +34,7 @@ class CategoryManagerInitializer:
         self._reload_categories_from_disk_if_needed()
         self._init_reverse_lookup_caches()
         self._init_meaning_resolver()
+        self._init_cantonese_language_service()
         self._init_vocabulary_service()
         self._init_hanzi_pipeline()
         self._init_optional_category_profiles()
@@ -264,6 +265,19 @@ class CategoryManagerInitializer:
             )
         except (TypeError, ValueError):
             pass
+
+    def _init_cantonese_language_service(self) -> None:
+        """Initialize Cantonese language service (optional)."""
+        try:
+            from services.cantonese_language_service import CantoneseLanguageService
+            from domain.storage_paths import cantonese_language_cache_path
+
+            cache_path = cantonese_language_cache_path()
+            self.dialog._canto_service = CantoneseLanguageService(cache_path=cache_path)
+            logger.debug("Cantonese language service initialized (cache=%s)", str(cache_path))
+        except (ImportError, OSError, AttributeError, TypeError, ValueError, RuntimeError) as e:
+            logger.warning("Cantonese language service init failed: %s", e)
+            self.dialog._canto_service = None
 
     def _init_vocabulary_service(self) -> None:
         """Initialize VocabularyService (Week 2 refactoring)."""

@@ -170,6 +170,28 @@ class CategoryManagerFocusController:
             QTimer = None
 
         def _apply() -> None:
+            # Preserve category display before moving focus to candidates.
+            if target == "cand":
+                try:
+                    from ui.widget_utils import WidgetAccessor, SignalBlocker
+                    w_cat = getattr(self.dialog, "_add_cat", None)
+                    ctx = getattr(self.dialog, "_add_edit_ctx", None)
+                    current_cat = WidgetAccessor.get_text(w_cat)
+                    ctx_cat = str(getattr(ctx, "category", "") or "").strip() if ctx is not None else ""
+                    last_cat = str(getattr(self.dialog, "_last_committed_category", "") or "").strip()
+                    restore_cat = ctx_cat or last_cat
+                    if w_cat is not None and not current_cat and restore_cat:
+                        with SignalBlocker(w_cat):
+                            try:
+                                if hasattr(w_cat, "setCurrentText"):
+                                    w_cat.setCurrentText(restore_cat)
+                                else:
+                                    WidgetAccessor.set_text(w_cat, restore_cat)
+                            except (TypeError, AttributeError, RuntimeError):
+                                pass
+                except (TypeError, AttributeError, RuntimeError, ImportError, ValueError):
+                    pass
+
             # Debug logging
             try:
                 from PySide6.QtWidgets import QApplication

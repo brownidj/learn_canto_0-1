@@ -212,6 +212,11 @@ def cedict_path(*, project_dir: Optional[Path] = None) -> Path:
     return resolve_data_file("cedict_ts.u8", project_dir=project_dir, prefer_data_dir=True)
 
 
+def cantonese_language_cache_path(*, project_dir: Optional[Path] = None) -> Path:
+    """Cache for Cantonese language service lookups."""
+    return resolve_data_file("cantonese_language_cache.json", project_dir=project_dir, prefer_data_dir=True)
+
+
 def unihan_dir(*, project_dir: Optional[Path] = None) -> Path:
     paths = get_project_paths(project_dir)
     # Keep Unihan under data/Unihan
