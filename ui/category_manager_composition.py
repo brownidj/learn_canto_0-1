@@ -10,6 +10,9 @@ class CategoryManagerComposition:
     def build(self) -> None:
         dlg = self._dlg
 
+        from ui.category_manager_vocab_display import on_search_changed
+        dlg._on_search_changed = lambda text: on_search_changed(dlg, text)
+
         from ui.category_manager_initializer import CategoryManagerInitializer
         dlg._initializer = CategoryManagerInitializer(dlg)
 

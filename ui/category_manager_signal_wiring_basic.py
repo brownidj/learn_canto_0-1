@@ -14,12 +14,9 @@ def wire_add_edit(wiring, fn_gate) -> None:
 
     # Jyutping
     fn_jy_enter = None
-    try:
-        coord = getattr(wiring, "_coord", None)
-        if coord is not None and hasattr(coord, "on_jyut_enter"):
-            fn_jy_enter = coord.on_jyut_enter
-    except (TypeError, AttributeError, RuntimeError):
-        fn_jy_enter = None
+    coord = wiring._coord if hasattr(wiring, "_coord") else None
+    if coord is not None and hasattr(coord, "on_jyut_enter"):
+        fn_jy_enter = coord.on_jyut_enter
     wiring._wire_line_edit_common(w_jy, on_enter=fn_jy_enter, on_change=fn_gate)
 
     fn_reset = None
@@ -30,7 +27,11 @@ def wire_add_edit(wiring, fn_gate) -> None:
     except Exception:
         fn_reset = None
     if w_jy is not None and callable(fn_reset):
-        wiring._try_connect(getattr(w_jy, "textEdited", None), fn_reset)
+        try:
+            sig = w_jy.textEdited
+        except Exception:
+            sig = None
+        wiring._try_connect(sig, fn_reset)
 
     fn_jy_done = None
     try:
@@ -40,16 +41,17 @@ def wire_add_edit(wiring, fn_gate) -> None:
     except Exception:
         fn_jy_done = None
     if w_jy is not None and callable(fn_jy_done):
-        wiring._try_connect(getattr(w_jy, "editingFinished", None), fn_jy_done)
+        try:
+            sig = w_jy.editingFinished
+        except Exception:
+            sig = None
+        wiring._try_connect(sig, fn_jy_done)
 
     # Meaning
     fn_mn_enter = None
-    try:
-        coord = getattr(wiring, "_coord", None)
-        if coord is not None and hasattr(coord, "on_meaning_enter"):
-            fn_mn_enter = coord.on_meaning_enter
-    except (TypeError, AttributeError, RuntimeError):
-        fn_mn_enter = None
+    coord = wiring._coord if hasattr(wiring, "_coord") else None
+    if coord is not None and hasattr(coord, "on_meaning_enter"):
+        fn_mn_enter = coord.on_meaning_enter
     wiring._wire_line_edit_common(w_mn, on_enter=fn_mn_enter, on_change=fn_gate)
 
     # Category
@@ -68,7 +70,10 @@ def wire_add_edit(wiring, fn_gate) -> None:
     except (TypeError, AttributeError, RuntimeError):
         fn_cat_commit = None
     if w_cat is not None and callable(fn_cat_commit):
-        sig = getattr(w_cat, "activated", None)
+        try:
+            sig = w_cat.activated
+        except Exception:
+            sig = None
         if sig is not None:
             try:
                 sig_int = sig[int] if hasattr(sig, "__getitem__") else sig
@@ -91,17 +96,22 @@ def wire_add_edit(wiring, fn_gate) -> None:
                     hz_text = ""
                 if not hz_text:
                     return
-                coord = getattr(wiring, "_coord", None)
+                coord = wiring._coord if hasattr(wiring, "_coord") else None
                 if coord is not None and hasattr(coord, "on_hanzi_enter"):
                     coord.on_hanzi_enter(hz_text)
                 if callable(fn_gate):
                     fn_gate()
             except Exception:
-                fn_log = getattr(wiring, "_log_handler_error", None)
-                if callable(fn_log):
-                    fn_log("Hanzi enter handler failed")
+                try:
+                    wiring._log_handler_error("Hanzi enter handler failed")
+                except Exception:
+                    pass
 
-        wiring._try_connect(getattr(w_hz, "returnPressed", None), _on_hanzi_enter)
+        try:
+            sig = w_hz.returnPressed
+        except Exception:
+            sig = None
+        wiring._try_connect(sig, _on_hanzi_enter)
 
     # Candidates
     if combo is not None:
@@ -113,7 +123,7 @@ def wire_add_edit(wiring, fn_gate) -> None:
                     idx = -1
                 if idx < 0:
                     return
-                coord = getattr(wiring, "_coord", None)
+                coord = wiring._coord if hasattr(wiring, "_coord") else None
                 if coord is not None and hasattr(coord, "on_candidate_selected"):
                     coord.on_candidate_selected(idx)
                 else:
@@ -141,11 +151,15 @@ def wire_add_edit(wiring, fn_gate) -> None:
                     fn_gate()
 
             except Exception:
-                fn_log = getattr(wiring, "_log_handler_error", None)
-                if callable(fn_log):
-                    fn_log("Candidate selection handler failed")
+                try:
+                    wiring._log_handler_error("Candidate selection handler failed")
+                except Exception:
+                    pass
 
-        sig_activated = getattr(combo, "activated", None)
+        try:
+            sig_activated = combo.activated
+        except Exception:
+            sig_activated = None
         if sig_activated is not None:
             try:
                 sig_int = sig_activated[int] if hasattr(sig_activated, "__getitem__") else sig_activated

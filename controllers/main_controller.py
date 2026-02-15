@@ -19,6 +19,13 @@ from PySide6.QtWidgets import QWidget, QLabel, QLineEdit, QTextEdit, QComboBox, 
 logger = logging.getLogger(__name__)
 
 
+def _get_window_attr(window: QWidget, name: str, default=None):
+    try:
+        return window.__dict__.get(name, default)
+    except Exception:
+        return default
+
+
 class MainController:
     """Lightweight controller wrapper that centralises high-level UI actions.
 
@@ -42,8 +49,8 @@ class MainController:
     def show_current(self):
         """Show the current vocab item in the UI."""
         window = self.window
-        idx = getattr(window, "_vocab_index", -1)
-        items = getattr(window, "_vocab_items", [])
+        idx = _get_window_attr(window, "_vocab_index", -1)
+        items = _get_window_attr(window, "_vocab_items", [])
         if idx < 0 or not items:
             return
 
@@ -67,7 +74,7 @@ class MainController:
         if label_hanzi is not None:
             try:
                 label_hanzi.setText(hanzi)
-                upd = getattr(window, "_update_hanzi_font_now", None)
+                upd = _get_window_attr(window, "_update_hanzi_font_now", None)
                 if callable(upd):
                     try:
                         upd()
@@ -100,15 +107,15 @@ class MainController:
         window = self.window
 
         # Guard: ignore category changes during playback
-        if getattr(window, "_is_playing", False):
+        if _get_window_attr(window, "_is_playing", False):
             logger.debug("Category change requested during playback -> ignored")
             return
 
         # Get vocab and categories from window or module globals
         try:
             # Try to get from window first
-            vocab = getattr(window, "_vocab", None)
-            categories_map = getattr(window, "_categories_map", None)
+            vocab = _get_window_attr(window, "_vocab", None)
+            categories_map = _get_window_attr(window, "_categories_map", None)
 
             # Fallback to module-level globals if not on window
             if vocab is None or categories_map is None:
@@ -148,18 +155,18 @@ class MainController:
         window = self.window
 
         # Ignore if playing; (buttons are disabled while playing anyway)
-        if getattr(window, "_is_playing", False):
+        if _get_window_attr(window, "_is_playing", False):
             return
         # If not armed yet, ignore (Next is disabled; this is just a guard)
-        if not getattr(window, "_tts_armed", False):
+        if not _get_window_attr(window, "_tts_armed", False):
             return
 
-        items = getattr(window, "_vocab_items", [])
+        items = _get_window_attr(window, "_vocab_items", [])
         if not items:
             return
 
         try:
-            idx = int(getattr(window, "_vocab_index", 0))
+            idx = int(_get_window_attr(window, "_vocab_index", 0))
         except Exception:
             idx = 0
 
@@ -173,17 +180,17 @@ class MainController:
         """Move to the previous vocab item and play it, respecting playback guards."""
         window = self.window
 
-        if getattr(window, "_is_playing", False):
+        if _get_window_attr(window, "_is_playing", False):
             return
-        if not getattr(window, "_tts_armed", False):
+        if not _get_window_attr(window, "_tts_armed", False):
             return
 
-        items = getattr(window, "_vocab_items", [])
+        items = _get_window_attr(window, "_vocab_items", [])
         if not items:
             return
 
         try:
-            idx = int(getattr(window, "_vocab_index", 0))
+            idx = int(_get_window_attr(window, "_vocab_index", 0))
         except Exception:
             idx = 0
 
@@ -209,17 +216,17 @@ class MainController:
           - While _auto_mode is True: disable Play/Repeat, Next, Previous and the Category combobox.
         """
         window = self.window
-        btn_play = getattr(self, "btn_play", None)
-        btn_next = getattr(self, "btn_next", None)
-        btn_prev = getattr(self, "btn_prev", None)
+        btn_play = self.btn_play
+        btn_next = self.btn_next
+        btn_prev = self.btn_prev
 
-        auto_on = bool(getattr(window, "_auto_mode", False))
-        if getattr(window, "_is_playing", False):
+        auto_on = bool(_get_window_attr(window, "_auto_mode", False))
+        if _get_window_attr(window, "_is_playing", False):
             play_enabled = False
             nav_enabled = False
         else:
             play_enabled = True
-            nav_enabled = bool(getattr(window, "_tts_armed", False))
+            nav_enabled = bool(_get_window_attr(window, "_tts_armed", False))
 
         if auto_on:
             play_enabled = False
@@ -243,10 +250,10 @@ class MainController:
     def on_play_clicked(self):
         """Handle Play/Repeat button clicks using the controller state."""
         window = self.window
-        btn_play = getattr(self, "btn_play", None)
+        btn_play = self.btn_play
 
         # First time: arm and relabel
-        if not getattr(window, "_tts_armed", False):
+        if not _get_window_attr(window, "_tts_armed", False):
             window._tts_armed = True
             if btn_play is not None:
                 try:
@@ -318,7 +325,7 @@ class MainController:
           - Just flip the flag; any in-progress playback will finish normally.
         """
         window = self.window
-        btn_play = getattr(self, "btn_play", None)
+        btn_play = self.btn_play
 
         window._auto_mode = bool(on)
         logger.debug("Auto mode %s", "ON" if on else "OFF")
@@ -332,7 +339,7 @@ class MainController:
 
         # When turning auto mode ON, ensure TTS is armed and label shows Repeat
         try:
-            if not getattr(window, "_tts_armed", False):
+            if not _get_window_attr(window, "_tts_armed", False):
                 window._tts_armed = True
                 if btn_play is not None:
                     try:
@@ -354,17 +361,17 @@ class MainController:
         window = self.window
 
         # Abort if auto mode has been turned off meanwhile
-        if not getattr(window, "_auto_mode", False):
+        if not _get_window_attr(window, "_auto_mode", False):
             logger.debug("Auto advance skipped: auto mode OFF")
             return
 
-        items = getattr(window, "_vocab_items", [])
+        items = _get_window_attr(window, "_vocab_items", [])
         if not items:
             logger.debug("Auto advance skipped: no vocab items")
             return
 
         try:
-            idx = int(getattr(window, "_vocab_index", 0))
+            idx = int(_get_window_attr(window, "_vocab_index", 0))
         except Exception:
             idx = 0
 
@@ -388,7 +395,7 @@ class MainController:
 
         def _kickoff_next():
             # Re-check auto mode at the moment of kicking off
-            if not getattr(window, "_auto_mode", False):
+            if not _get_window_attr(window, "_auto_mode", False):
                 logger.debug("Auto advance kickoff aborted: auto mode OFF")
                 return
             # Use the controller-managed playback entry point for the next cycle

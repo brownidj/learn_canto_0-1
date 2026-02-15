@@ -132,6 +132,7 @@ class TableScrollSliderController:
         # Internal guard to prevent recursion.
         self._syncing = False
         self._all_rows: list[list[str]] = []
+        self._external_search_handler = None
 
         # Wire up slider <-> table scrollbar.
         self._wire_scroll_sync()
@@ -144,6 +145,14 @@ class TableScrollSliderController:
 
         # Ensure initial range is correct.
         self._refresh_slider_range_from_table()
+        self._snapshot_rows()
+
+    def set_external_search_handler(self, handler) -> None:
+        """Use an external search handler instead of internal row filtering."""
+        self._external_search_handler = handler
+
+    def refresh_snapshot(self) -> None:
+        """Refresh internal snapshot of current table rows."""
         self._snapshot_rows()
 
     @property
@@ -335,6 +344,13 @@ class TableScrollSliderController:
             self._syncing = False
 
     def _on_search_text_changed(self, text: str) -> None:
+        if callable(self._external_search_handler):
+            try:
+                self._external_search_handler(text)
+            except Exception:
+                pass
+            self._after_external_search()
+            return
         term = str(text or "").strip().lower()
         if term == "":
             self._rebuild_rows(self._all_rows)
@@ -352,6 +368,28 @@ class TableScrollSliderController:
         except Exception:
             pass
         self._refresh_slider_range_from_table()
+
+    def _after_external_search(self) -> None:
+        try:
+            from PySide6.QtCore import QTimer
+        except Exception:
+            QTimer = None
+        def _kick():
+            try:
+                sb = self._table.verticalScrollBar()
+                sb.setValue(0)
+            except Exception:
+                pass
+            try:
+                self._slider.setValue(0)
+            except Exception:
+                pass
+            self._refresh_slider_range_from_table()
+            self._snapshot_rows()
+        if QTimer is not None:
+            QTimer.singleShot(0, _kick)
+        else:
+            _kick()
 
     def _snapshot_rows(self) -> None:
         self._all_rows = []

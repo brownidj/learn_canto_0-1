@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from typing import Callable, Optional, Sequence, Mapping
 
 from domain.hanzi_candidate_types import HanziCandidate
@@ -11,47 +12,53 @@ from domain.hanzi_candidate_utils import _split_syllables, _coerce_candidates, _
 logger = logging.getLogger(__name__)
 
 
+@dataclass(frozen=True)
+class HanziPipelineDeps:
+    normalize_jyutping: Callable[[str], str]
+    tier1_reverse_candidates: Optional[Callable[[str], object]] = None
+    reverse_index: Optional[dict] = None
+    tier2_compose: Optional[Callable[[str, dict], object]] = None
+    tier2_shortlist: Optional[Callable[[object], object]] = None
+    char_map: Optional[dict] = None
+    cc_glosses_for: Optional[Callable[[str], Sequence[str]]] = None
+    cedict_meanings_for: Optional[Callable[[str], Sequence[str]]] = None
+    gloss_cleaner: Optional[Callable[[Sequence[str]], Sequence[str]]] = None
+    curate: Optional[Callable[[Sequence[HanziCandidate]], Sequence[HanziCandidate]]] = None
+    max_candidates: int = 10
+
+
 class HanziCandidatePipeline:
     """Orchestrates candidate generation for a jyutping string."""
 
-    def __init__(
-        self,
-        *,
-        normalize_jyutping: Callable[[str], str],
-        tier1_reverse_candidates: Optional[Callable[[str], object]] = None,
-        reverse_index: Optional[dict] = None,
-        tier2_compose: Optional[Callable[[str, dict], object]] = None,
-        tier2_shortlist: Optional[Callable[[object], object]] = None,
-        char_map: Optional[dict] = None,
-        cc_glosses_for: Optional[Callable[[str], Sequence[str]]] = None,
-        cedict_meanings_for: Optional[Callable[[str], Sequence[str]]] = None,
-        gloss_cleaner: Optional[Callable[[Sequence[str]], Sequence[str]]] = None,
-        curate: Optional[Callable[[Sequence[HanziCandidate]], Sequence[HanziCandidate]]] = None,
-        max_candidates: int = 10,
-        **_ignored: object,
-    ):
-        self._normalize = normalize_jyutping
+    def __init__(self, deps: HanziPipelineDeps | None = None, **kwargs: object):
+        if deps is None:
+            try:
+                deps = HanziPipelineDeps(**kwargs)  # type: ignore[arg-type]
+            except TypeError as e:
+                raise TypeError("HanziCandidatePipeline requires deps or valid kwargs") from e
 
-        if tier1_reverse_candidates is None and isinstance(reverse_index, dict):
+        self._normalize = deps.normalize_jyutping
+
+        if deps.tier1_reverse_candidates is None and isinstance(deps.reverse_index, dict):
             def _tier1_from_index(jy_norm: str) -> object:
                 try:
-                    return reverse_index.get(jy_norm, [])
+                    return deps.reverse_index.get(jy_norm, [])
                 except Exception:
                     return []
 
             self._tier1 = _tier1_from_index
         else:
-            self._tier1 = tier1_reverse_candidates
+            self._tier1 = deps.tier1_reverse_candidates
 
-        self._tier2_compose = tier2_compose
-        self._tier2_shortlist = tier2_shortlist
-        self._char_map = char_map or {}
-        self._cc_glosses_for = cc_glosses_for
-        self._cedict_meanings_for = cedict_meanings_for
-        self._gloss_cleaner = gloss_cleaner
-        self._curate = curate
+        self._tier2_compose = deps.tier2_compose
+        self._tier2_shortlist = deps.tier2_shortlist
+        self._char_map = deps.char_map or {}
+        self._cc_glosses_for = deps.cc_glosses_for
+        self._cedict_meanings_for = deps.cedict_meanings_for
+        self._gloss_cleaner = deps.gloss_cleaner
+        self._curate = deps.curate
         try:
-            m = int(max_candidates)
+            m = int(deps.max_candidates)
         except Exception:
             m = 10
         self._max = m if m > 0 else 10
@@ -115,7 +122,7 @@ class HanziCandidatePipeline:
 
         out: list[str] = []
 
-        cc = getattr(self, "_cc_glosses_for", None)
+        cc = self._cc_glosses_for
         if callable(cc):
             try:
                 out = list(cc(hz) or [])
@@ -123,7 +130,7 @@ class HanziCandidatePipeline:
                 out = []
 
         if not out:
-            ced = getattr(self, "_cedict_meanings_for", None)
+            ced = self._cedict_meanings_for
             if callable(ced):
                 try:
                     out = list(ced(hz) or [])
@@ -135,7 +142,7 @@ class HanziCandidatePipeline:
         except Exception:
             out = []
 
-        cleaner = getattr(self, "_gloss_cleaner", None)
+        cleaner = self._gloss_cleaner
         if callable(cleaner):
             try:
                 cleaned = cleaner(out)
@@ -157,7 +164,11 @@ class HanziCandidatePipeline:
 
 
 def build_pipeline_from_category_manager(dialog: object) -> HanziCandidatePipeline:
-    normalize = getattr(dialog, "_normalize_jy", None)
+    normalize = None
+    try:
+        normalize = dialog.__dict__.get("_normalize_jy")
+    except Exception:
+        normalize = None
     if not callable(normalize):
         try:
             from domain.jyutping_validation import normalize_jyutping
@@ -167,7 +178,7 @@ def build_pipeline_from_category_manager(dialog: object) -> HanziCandidatePipeli
 
     tier1 = None
     try:
-        prov = getattr(dialog, "_candidate_provider", None)
+        prov = dialog.__dict__.get("_candidate_provider")
     except Exception:
         prov = None
     if prov is not None:
@@ -186,7 +197,10 @@ def build_pipeline_from_category_manager(dialog: object) -> HanziCandidatePipeli
     compose_fn = None
     shortlist_fn = None
 
-    get_comp = getattr(dialog, "_get_compose_and_rank", None)
+    try:
+        get_comp = dialog.__dict__.get("_get_compose_and_rank")
+    except Exception:
+        get_comp = None
     if callable(get_comp):
         try:
             compose_fn, shortlist_fn = get_comp()
@@ -196,40 +210,50 @@ def build_pipeline_from_category_manager(dialog: object) -> HanziCandidatePipeli
     if not callable(compose_fn):
         compose_fn = getattr(dialog, "compose_candidates_from_chars", None)
         if not callable(compose_fn):
-            compose_fn = getattr(dialog, "_compose_candidates_from_chars", None)
+            try:
+                compose_fn = dialog.__dict__.get("_compose_candidates_from_chars")
+            except Exception:
+                compose_fn = None
     if not callable(compose_fn):
-        try:
-            from infra.hanzi_composition import compose_candidates_from_chars
-            compose_fn = compose_candidates_from_chars
-        except Exception:
-            compose_fn = None
+        compose_fn = None
 
     if not callable(shortlist_fn):
         shortlist_fn = getattr(dialog, "shortlist_hanzi_candidates", None)
         if not callable(shortlist_fn):
-            shortlist_fn = getattr(dialog, "_shortlist_hanzi_candidates", None)
+            try:
+                shortlist_fn = dialog.__dict__.get("_shortlist_hanzi_candidates")
+            except Exception:
+                shortlist_fn = None
     if not callable(shortlist_fn):
-        try:
-            from infra.hanzi_composition import shortlist_candidates
-            shortlist_fn = shortlist_candidates
-        except Exception:
-            shortlist_fn = None
+        shortlist_fn = None
 
-    reverse_index = getattr(dialog, "_reverse_index", None)
+    try:
+        reverse_index = dialog.__dict__.get("_reverse_index")
+    except Exception:
+        reverse_index = None
     if not isinstance(reverse_index, dict):
         reverse_index = None
 
-    char_map = getattr(dialog, "_char_map", None)
+    try:
+        char_map = dialog.__dict__.get("_char_map")
+    except Exception:
+        char_map = None
     if not isinstance(char_map, dict):
         char_map = {}
 
     cc_glosses_for = getattr(dialog, "get_cccanto_glosses_for", None)
     if not callable(cc_glosses_for):
-        cc_glosses_for = getattr(dialog, "_cc_glosses_for", None)
+        try:
+            cc_glosses_for = dialog.__dict__.get("_cc_glosses_for")
+        except Exception:
+            cc_glosses_for = None
 
     cedict_for = getattr(dialog, "get_cedict_meanings_for", None)
     if not callable(cedict_for):
-        cedict_for = getattr(dialog, "_cedict_meanings_for", None)
+        try:
+            cedict_for = dialog.__dict__.get("_cedict_meanings_for")
+        except Exception:
+            cedict_for = None
 
     try:
         from domain.meaning_sources import clean_glosses_for_display as gloss_cleaner
@@ -237,13 +261,19 @@ def build_pipeline_from_category_manager(dialog: object) -> HanziCandidatePipeli
         gloss_cleaner = None
 
     curate = None
-    curator = getattr(dialog, "_candidate_curator", None)
+    try:
+        curator = dialog.__dict__.get("_candidate_curator")
+    except Exception:
+        curator = None
     if curator is not None and hasattr(curator, "curate") and callable(getattr(curator, "curate")):
         curate = getattr(curator, "curate")
 
-    max_cands = getattr(dialog, "MAX_HANZI_CANDIDATES", 10)
+    try:
+        max_cands = dialog.__dict__.get("MAX_HANZI_CANDIDATES", 10)
+    except Exception:
+        max_cands = 10
 
-    return HanziCandidatePipeline(
+    deps = HanziPipelineDeps(
         normalize_jyutping=normalize,
         tier1_reverse_candidates=tier1 if callable(tier1) else None,
         reverse_index=reverse_index,
@@ -256,6 +286,7 @@ def build_pipeline_from_category_manager(dialog: object) -> HanziCandidatePipeli
         curate=curate,
         max_candidates=int(max_cands) if isinstance(max_cands, int) else 10,
     )
+    return HanziCandidatePipeline(deps)
 
 
 __all__ = [

@@ -7,6 +7,7 @@ Separates domain decision-making from UI side effects.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from types import SimpleNamespace
 from typing import Callable, Protocol
 
 
@@ -78,13 +79,19 @@ def decide_category_commit(
         )
     except Exception:
         res = None
-
-    if res is None or not bool(getattr(res, "ok", False)):
+    if res is None:
+        res = SimpleNamespace(
+            ok=False,
+            category="",
+            should_fill_candidates=False,
+            reason="commit_failed",
+        )
+    if not bool(res.ok):
         return CategoryCommitDecision(
             ok=False,
-            category=str(getattr(res, "category", "") or "").strip(),
-            should_fill_candidates=bool(getattr(res, "should_fill_candidates", False)) if res is not None else False,
-            reason=str(getattr(res, "reason", "commit_failed") or "commit_failed"),
+            category=str(res.category or "").strip(),
+            should_fill_candidates=bool(res.should_fill_candidates),
+            reason=str(res.reason or "commit_failed"),
             canon=canon,
             exists_now=exists_now,
             user_confirmed_add=user_confirmed_add,
@@ -92,9 +99,9 @@ def decide_category_commit(
 
     return CategoryCommitDecision(
         ok=True,
-        category=str(getattr(res, "category", "") or "").strip(),
-        should_fill_candidates=bool(getattr(res, "should_fill_candidates", False)),
-        reason=str(getattr(res, "reason", "ok") or "ok"),
+        category=str(res.category or "").strip(),
+        should_fill_candidates=bool(res.should_fill_candidates),
+        reason=str(res.reason or "ok"),
         canon=canon,
         exists_now=exists_now,
         user_confirmed_add=user_confirmed_add,
@@ -113,4 +120,3 @@ def _category_exists(repo: CategoryRepoLike, canon: str) -> bool:
         return bool(canon) and bool(repo.exists(canon))
     except Exception:
         return False
-

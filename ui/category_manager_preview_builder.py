@@ -6,6 +6,7 @@ UI-aware builder that reads widget state with minimal fallbacks.
 
 from dataclasses import dataclass
 
+from ui.category_manager_add_edit_state_service import AddEditStateService
 from ui.category_manager_ui_services import CategoryManagerUIService
 
 
@@ -50,10 +51,9 @@ class AddEntryPreviewBuilder:
     @staticmethod
     def _resolve_vocab_service(dialog):
         try:
-            svc = getattr(dialog, "_vocab_service", None)
-        except (TypeError, AttributeError, RuntimeError):
-            svc = None
-        return svc
+            return dialog.__dict__.get("_vocab_service")
+        except Exception:
+            return None
 
     @staticmethod
     def _meaning_from_service(vocab_svc, hanzi: str) -> str:
@@ -82,8 +82,8 @@ class AddEntryPreviewBuilder:
     def _meaning_from_vocab_fallback(dialog, hanzi: str) -> str:
         """Fallback for tests/dummy dialogs without a vocab service."""
         try:
-            vocab = getattr(dialog, "_vocab", None)
-        except (TypeError, AttributeError, RuntimeError):
+            vocab = dialog.__dict__.get("_vocab")
+        except Exception:
             vocab = None
         if not isinstance(vocab, dict):
             return ""
@@ -158,8 +158,8 @@ class AddEntryPreviewBuilder:
         # 3) Enrich from ViewModel when widgets are blank
         vm = None
         try:
-            vm = getattr(dialog, "_add_edit_vm", None)
-        except (TypeError, AttributeError, RuntimeError):
+            vm = AddEditStateService(dialog).get_state()
+        except Exception:
             vm = None
 
         if vm is not None:

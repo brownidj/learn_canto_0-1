@@ -4,11 +4,19 @@ abstract_nouns:
 - =D247
 - =D249
 - =D250
+- 文
+- 電
 adjectives:
 - 冇
 - 好
 - 少少
 - 開心
+- 短
+- 靚
+- 慢
+- 明
+- 難過
+- 細
 animals:
 - 兔
 - 牛
@@ -34,11 +42,23 @@ body_parts:
 - 口
 - 手
 - 頭
+color:
+- 銀
+- 深綠
+- 黃
+- 啡
 colors:
 - 紅
 - 藍
 - 黑
 - 白
+- 橙
+- 青
+- 淺藍
+- 粉紅
+- 金
+- 栗色
+- 米色
 communication:
 - 今日係
 - 你好 我係 好高興認識你
@@ -73,6 +93,9 @@ direction:
 - 前
 - 東
 - 下
+- 明
+- 上
+- 細
 family:
 - 先生
 - 哥哥
@@ -83,6 +106,8 @@ family:
 - 媽媽
 - 弟弟
 - 男仔
+- 太
+- 奶
 food_drink_eating_drinking:
 - 你食左飯未呀
 - 我想飲
@@ -134,9 +159,11 @@ nature_air:
 - 星星
 - 月亮
 - 行雷
+- 花
 nature_land:
 - 地震
 - 沙
+- 花
 nature_ocean:
 - 洋
 - 海潮汐
@@ -240,10 +267,20 @@ time_calendar:
 - 秋
 - 秒
 - 週末
+- 晚
+- 啦
 unassigned: []
 vehicle:
 - 飛機
-verbs_actions: []
+- 車
+- 宥
+- 做嘢
+- 終
+verbs_actions:
+- 畀
+- 問
+- 做嘢
+- 終
 weather:
 - 乾燥
 - 好凍
@@ -261,6 +298,7 @@ weekdays:
 - 週末
 work:
 - 返工
+- 工作
 zodiac:
 - 兔
 - 牛

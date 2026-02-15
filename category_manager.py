@@ -166,6 +166,28 @@ class CategoryManagerDialog(QDialog):
 
         # Add/Edit wiring is handled by CategoryManagerSignalWiring during init.
 
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        try:
+            from PySide6.QtCore import QTimer
+        except Exception:
+            QTimer = None
+
+        def _kick() -> None:
+            try:
+                ctrl = getattr(self, "_vocab_table_ctrl", None)
+                if ctrl is not None and hasattr(ctrl, "ensure_sort_indicator"):
+                    ctrl.ensure_sort_indicator()
+            except Exception:
+                pass
+
+        if QTimer is not None:
+            QTimer.singleShot(0, _kick)
+            QTimer.singleShot(50, _kick)
+            QTimer.singleShot(150, _kick)
+        else:
+            _kick()
+
     # ---- UI intent / focus policy (delegated to controller) ----
     def _apply_focus_policy(
         self,

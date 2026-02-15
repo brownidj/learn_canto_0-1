@@ -102,11 +102,23 @@ class CategoryManagerSignalWiring:
             return
 
         if on_enter is not None and callable(on_enter):
-            self._try_connect(getattr(w, "returnPressed", None), on_enter)
+            try:
+                sig = w.returnPressed
+            except Exception:
+                sig = None
+            self._try_connect(sig, on_enter)
 
         if on_change is not None and callable(on_change):
-            self._try_connect(getattr(w, "editingFinished", None), on_change)
-            self._try_connect(getattr(w, "textChanged", None), on_change)
+            try:
+                sig = w.editingFinished
+            except Exception:
+                sig = None
+            self._try_connect(sig, on_change)
+            try:
+                sig = w.textChanged
+            except Exception:
+                sig = None
+            self._try_connect(sig, on_change)
 
     def _wire_combo_common(self, w, *, on_change=None, on_activate=None) -> None:
         """Common wiring for QComboBox-like widgets (best-effort).
@@ -118,7 +130,21 @@ class CategoryManagerSignalWiring:
             return
 
         if on_change is not None and callable(on_change):
-            self._try_connect(getattr(w, "currentTextChanged", None), on_change)
+            try:
+                sig = w.currentTextChanged
+            except Exception:
+                sig = None
+            self._try_connect(sig, on_change)
 
         if on_activate is not None and callable(on_activate):
-            self._try_connect(getattr(w, "activated", None), on_activate)
+            try:
+                sig = w.activated
+            except Exception:
+                sig = None
+            self._try_connect(sig, on_activate)
+
+    def _log_handler_error(self, message: str) -> None:
+        try:
+            logger.debug(message)
+        except Exception:
+            pass

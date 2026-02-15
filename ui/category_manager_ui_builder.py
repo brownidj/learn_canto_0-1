@@ -29,6 +29,7 @@ class CategoryManagerUIBuilder:
 
     def __init__(self, dialog: "CategoryManagerDialog"):
         self.dialog = dialog
+        self._dialog_data = getattr(dialog, "__dict__", {})
 
     def build_ui(self) -> None:
         """Build the complete UI for the dialog."""
@@ -65,7 +66,7 @@ class CategoryManagerUIBuilder:
         self.dialog.btn_save.setObjectName("btn_save")
 
         try:
-            save_ctrl = getattr(self.dialog, "_save_commit", None)
+            save_ctrl = self._dialog_data.get("_save_commit")
         except (TypeError, AttributeError, RuntimeError):
             save_ctrl = None
         if save_ctrl is not None and hasattr(save_ctrl, "on_save_clicked"):
@@ -78,7 +79,7 @@ class CategoryManagerUIBuilder:
 
         # Hide by default
         try:
-            preview_ctrl = getattr(self.dialog, "_preview_confirm", None)
+            preview_ctrl = self._dialog_data.get("_preview_confirm")
             if preview_ctrl is not None:
                 preview_ctrl.set_save_button_visible(False)
         except (AttributeError, TypeError, ValueError, RuntimeError):
@@ -185,14 +186,14 @@ class CategoryManagerUIBuilder:
             from ui.category_combo import CategoryComboController
             _on_cat_commit = None
             try:
-                ops = getattr(self.dialog, "_category_ops", None)
+                ops = self._dialog_data.get("_category_ops")
                 if ops is not None and hasattr(ops, "on_add_category_committed"):
                     _on_cat_commit = ops.on_add_category_committed
             except (TypeError, AttributeError, RuntimeError):
                 _on_cat_commit = None
             _on_add_new = None
             try:
-                ops = getattr(self.dialog, "_category_ops", None)
+                ops = self._dialog_data.get("_category_ops")
                 if ops is not None and hasattr(ops, "add_new_category"):
                     _on_add_new = ops.add_new_category
             except (TypeError, AttributeError, RuntimeError):
@@ -382,7 +383,12 @@ class CategoryManagerUIBuilder:
                 else:
                     self.dialog._table_panel_ctrl = TableScrollSliderController(parent=self.dialog)
 
-                self.dialog._table_panel = getattr(self.dialog._table_panel_ctrl, "widget", None)
+                self.dialog._table_panel = self._dialog_data.get("_table_panel")
+                if self.dialog._table_panel is None:
+                    try:
+                        self.dialog._table_panel = self.dialog._table_panel_ctrl.widget
+                    except Exception:
+                        self.dialog._table_panel = None
 
                 if self.dialog._table_panel is not None:
                     self.dialog._root.addWidget(self.dialog._table_panel, 1)
@@ -397,12 +403,37 @@ class CategoryManagerUIBuilder:
                         self.dialog._table = self.dialog._table_panel.findChild(object, "tableVocab")
                     except Exception:
                         self.dialog._table = None
+                    try:
+                        logger.debug("Vocab table type=%s", type(self.dialog._table).__name__)
+                    except Exception:
+                        pass
+                    try:
+                        from PySide6.QtWidgets import QAbstractItemView
+                        if self.dialog._table is not None:
+                            self.dialog._table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectItems)
+                            self.dialog._table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+                            try:
+                                self.dialog._table.setEditTriggers(QAbstractItemView.EditTrigger.AllEditTriggers)
+                            except Exception:
+                                self.dialog._table.setEditTriggers(
+                                    QAbstractItemView.EditTrigger.EditKeyPressed
+                                    | QAbstractItemView.EditTrigger.DoubleClicked
+                                    | QAbstractItemView.EditTrigger.SelectedClicked
+                                )
+                    except Exception:
+                        pass
 
                     # Wire search handler
                     try:
-                        fn_search = getattr(self.dialog, "_on_search_changed", None)
+                        fn_search = self._dialog_data.get("_on_search_changed")
                         if callable(fn_search) and self.dialog._search is not None:
-                            self.dialog._search.textChanged.connect(fn_search)
+                            from ui.vocab_table_searching import wire_search_field
+                            wire_search_field(self.dialog._search, fn_search)
+                            if self.dialog._table_panel_ctrl is not None:
+                                try:
+                                    self.dialog._table_panel_ctrl.set_external_search_handler(fn_search)
+                                except Exception:
+                                    pass
                     except (TypeError, AttributeError, RuntimeError):
                         pass
 
@@ -414,8 +445,16 @@ class CategoryManagerUIBuilder:
                                 table=self.dialog._table,
                                 vocab=self.dialog._vocab,
                                 categories=self.dialog._cats,
+                                on_category_changed=self._make_table_category_handler(),
                             )
                             self.dialog._vocab_table_ctrl.populate()
+                            self._ensure_table_sort_indicator(self.dialog._table)
+                            self._defer_table_sort_indicator(self.dialog._vocab_table_ctrl)
+                            try:
+                                if self.dialog._table_panel_ctrl is not None:
+                                    self.dialog._table_panel_ctrl.refresh_snapshot()
+                            except Exception:
+                                pass
                         except (TypeError, AttributeError, RuntimeError):
                             self.dialog._vocab_table_ctrl = None
 
@@ -439,12 +478,12 @@ class CategoryManagerUIBuilder:
 
         self.dialog._search = QLineEdit(self.dialog)
         self.dialog._search.setPlaceholderText("Search (Hanzi / Jyutping / meaning)…")
-        self.dialog._search.setClearButtonEnabled(True)
 
         try:
-            fn_search = getattr(self.dialog, "_on_search_changed", None)
+            fn_search = self._dialog_data.get("_on_search_changed")
             if callable(fn_search):
-                self.dialog._search.textChanged.connect(fn_search)
+                from ui.vocab_table_searching import wire_search_field
+                wire_search_field(self.dialog._search, fn_search)
         except (TypeError, AttributeError, RuntimeError):
             pass
 
@@ -454,8 +493,28 @@ class CategoryManagerUIBuilder:
         self.dialog._table.setColumnCount(4)
         self.dialog._table.setHorizontalHeaderLabels(["Hanzi", "Jyutping", "Meanings", "Categories"])
         self.dialog._table.horizontalHeader().setStretchLastSection(True)
-        self.dialog._table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.dialog._table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        try:
+            header = self.dialog._table.horizontalHeader()
+            header.setStretchLastSection(False)
+        except Exception:
+            pass
+        self.dialog._table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectItems)
+        self.dialog._table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        try:
+            self.dialog._table.setEditTriggers(QAbstractItemView.EditTrigger.AllEditTriggers)
+        except Exception:
+            try:
+                self.dialog._table.setEditTriggers(
+                    QAbstractItemView.EditTrigger.EditKeyPressed
+                    | QAbstractItemView.EditTrigger.DoubleClicked
+                    | QAbstractItemView.EditTrigger.SelectedClicked
+                )
+            except Exception:
+                pass
+        try:
+            logger.debug("Vocab table type=%s", type(self.dialog._table).__name__)
+        except Exception:
+            pass
         self.dialog._root.addWidget(self.dialog._table, 1)
 
         # Initialize table controller
@@ -465,7 +524,96 @@ class CategoryManagerUIBuilder:
                 table=self.dialog._table,
                 vocab=self.dialog._vocab,
                 categories=self.dialog._cats,
+                on_category_changed=self._make_table_category_handler(),
             )
             self.dialog._vocab_table_ctrl.populate()
+            self._ensure_table_sort_indicator(self.dialog._table)
+            self._defer_table_sort_indicator(self.dialog._vocab_table_ctrl)
         except (TypeError, AttributeError, RuntimeError):
             self.dialog._vocab_table_ctrl = None
+
+    def _ensure_table_sort_indicator(self, table) -> None:
+        if table is None:
+            return
+        try:
+            if hasattr(table, "setSortingEnabled"):
+                table.setSortingEnabled(True)
+            header = getattr(table, "horizontalHeader", None)
+            header = header() if callable(header) else None
+            if header is not None:
+                header.setSortIndicatorShown(True)
+                header.setSortIndicator(0, 0)
+        except Exception:
+            pass
+
+    def _defer_table_sort_indicator(self, ctrl) -> None:
+        if ctrl is None or not hasattr(ctrl, "ensure_sort_indicator"):
+            return
+        try:
+            from PySide6.QtCore import QTimer
+            QTimer.singleShot(0, ctrl.ensure_sort_indicator)
+            QTimer.singleShot(50, ctrl.ensure_sort_indicator)
+            QTimer.singleShot(150, ctrl.ensure_sort_indicator)
+        except Exception:
+            pass
+
+    def _make_table_category_handler(self):
+        dlg = self.dialog
+
+        def _handler(hanzi: str, categories: list[str]) -> None:
+            hz = str(hanzi or "").strip()
+            if not hz:
+                return
+
+            new_set = {str(c).strip() for c in categories if str(c).strip()}
+
+            cats_map = dlg.__dict__.get("_cats")
+            if not isinstance(cats_map, dict):
+                return
+
+            repo = dlg.__dict__.get("_cat_repo")
+            if repo is None and dlg.__dict__.get("_cat_commit_svc") is not None:
+                repo = dlg.__dict__.get("_cat_repo")
+
+            # Remove from categories not in new_set
+            for cat, members in list(cats_map.items()):
+                if not isinstance(members, list):
+                    continue
+                if hz in members and cat not in new_set:
+                    if repo is not None and hasattr(repo, "remove_hanzi"):
+                        try:
+                            repo.remove_hanzi(cat, hz)
+                        except Exception:
+                            pass
+                    else:
+                        try:
+                            members[:] = [x for x in members if x != hz]
+                        except Exception:
+                            pass
+
+            # Add to new categories
+            for cat in sorted(new_set, key=lambda s: s.lower()):
+                if repo is not None and hasattr(repo, "ensure_category"):
+                    try:
+                        repo.ensure_category(cat)
+                    except Exception:
+                        pass
+                if cat not in cats_map:
+                    cats_map[cat] = []
+                members = cats_map.get(cat)
+                if isinstance(members, list) and hz not in members:
+                    members.append(hz)
+
+            try:
+                from persistence.categories_store import persist_categories_yaml
+                persist_categories_yaml(cats_map)
+            except Exception:
+                pass
+
+            try:
+                from ui.category_manager_vocab_categories import CategoryManagerVocabCategories
+                CategoryManagerVocabCategories.refresh_category_dropdown_from_cats(dlg)
+            except Exception:
+                pass
+
+        return _handler

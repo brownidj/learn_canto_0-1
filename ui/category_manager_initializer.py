@@ -23,6 +23,7 @@ class CategoryManagerInitializer:
 
     def __init__(self, dialog: "CategoryManagerDialog"):
         self.dialog = dialog
+        self._dialog_data = getattr(dialog, "__dict__", {})
 
     def initialize_all(
         self,
@@ -76,7 +77,7 @@ class CategoryManagerInitializer:
             saving=False,
         )
         try:
-            state_svc = getattr(self.dialog, "_state_svc", None)
+            state_svc = self._dialog_data.get("_state_svc")
             self.dialog._add_edit_vm = state_svc.get_state() if state_svc is not None else None
         except Exception:
             self.dialog._add_edit_vm = None
@@ -132,7 +133,7 @@ class CategoryManagerInitializer:
 
         # Initialize repo + commit service
         try:
-            canon_fn = getattr(self.dialog, "_canon_cat_name", None)
+            canon_fn = self._dialog_data.get("_canon_cat_name")
 
             def persist_cb(_cats_map: dict) -> None:
                 try:
@@ -220,10 +221,10 @@ class CategoryManagerInitializer:
 
     def _init_reverse_lookup_caches(self) -> None:
         """Initialize reverse lookup caches from parent or create empty."""
-        parent = getattr(self.dialog, "_parent", None)
+        parent = self._dialog_data.get("_parent")
 
         # Tier 1: reverse index
-        reverse_index = getattr(parent, "_reverse_index", None) if parent else None
+        reverse_index = parent.__dict__.get("_reverse_index") if parent and hasattr(parent, "__dict__") else None
         if not isinstance(reverse_index, dict) or not reverse_index:
             reverse_index = {}
             try:
@@ -238,7 +239,7 @@ class CategoryManagerInitializer:
                 reverse_index = reverse_index or {}
         self.dialog._reverse_index = reverse_index
 
-        src = "parent" if parent and isinstance(getattr(parent, "_reverse_index", None), dict) else "loaded"
+        src = "parent" if parent and isinstance(parent.__dict__.get("_reverse_index"), dict) else "loaded"
         try:
             size = len(self.dialog._reverse_index)
             logger.debug("CacheAudit: reverse_index source=%s size=%d", src, int(size))
@@ -246,7 +247,7 @@ class CategoryManagerInitializer:
             pass
 
         # Tier 2: shared Unihan char map
-        char_map = getattr(parent, "_char_map", None) if parent else None
+        char_map = parent.__dict__.get("_char_map") if parent and hasattr(parent, "__dict__") else None
         if not isinstance(char_map, dict) or not char_map:
             char_map = {}
             try:
@@ -274,6 +275,16 @@ class CategoryManagerInitializer:
         )
 
         try:
+            if self._dialog_data.get("_compose_candidates_from_chars") is None:
+                from infra.hanzi_composition import compose_candidates_from_chars
+                self.dialog._compose_candidates_from_chars = compose_candidates_from_chars
+            if self._dialog_data.get("_shortlist_hanzi_candidates") is None:
+                from infra.hanzi_composition import shortlist_candidates
+                self.dialog._shortlist_hanzi_candidates = shortlist_candidates
+        except (ImportError, OSError, AttributeError, TypeError, ValueError, RuntimeError):
+            pass
+
+        try:
             self.dialog._hanzi_pipeline = build_pipeline_from_category_manager(self.dialog)
             return
         except (ImportError, OSError, AttributeError, TypeError, ValueError, RuntimeError) as e:
@@ -295,7 +306,7 @@ class CategoryManagerInitializer:
     def _init_candidate_provider(self) -> None:
         """Initialize candidate provider adapter if not explicitly provided."""
         try:
-            if getattr(self.dialog, "_candidate_provider", None) is not None:
+            if self._dialog_data.get("_candidate_provider") is not None:
                 return
         except Exception:
             pass
@@ -342,7 +353,7 @@ class CategoryManagerInitializer:
         """Initialize Cantonese meaning controller (optional)."""
         from ui.cantonese_meaning_controller import CantoneseMeaningController
 
-        svc = getattr(self.dialog, "_canto_service", None)
+        svc = self._dialog_data.get("_canto_service")
         self.dialog._canto_ctrl = CantoneseMeaningController(self.dialog, svc)
         logger.debug("Cantonese meaning controller initialized")
 
@@ -375,13 +386,13 @@ class CategoryManagerInitializer:
 
     def _init_optional_category_profiles(self) -> None:
         """Build optional category semantic profiles from existing vocab."""
-        if not isinstance(getattr(self.dialog, "_cat_keywords", None), dict):
+        if not isinstance(self._dialog_data.get("_cat_keywords"), dict):
             self.dialog._cat_keywords = {}
 
-        if isinstance(getattr(self.dialog, "_vocab", None), dict) and isinstance(
-            getattr(self.dialog, "_cats", None), dict
+        if isinstance(self._dialog_data.get("_vocab"), dict) and isinstance(
+            self._dialog_data.get("_cats"), dict
         ):
-            builder = getattr(self.dialog, "_build_category_profiles", None)
+            builder = self._dialog_data.get("_build_category_profiles")
             if callable(builder):
                 try:
                     builder()

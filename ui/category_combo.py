@@ -40,9 +40,7 @@ class CategoryComboController:
         le = self._line_edit()
         if le is not None:
             try:
-                sig = getattr(le, "returnPressed", None)
-                if sig is not None:
-                    sig.connect(self.commit)
+                le.returnPressed.connect(self.commit)
             except (TypeError, AttributeError, RuntimeError, ValueError):
                 pass
 
@@ -162,7 +160,7 @@ class CategoryComboController:
             text = ""
 
         try:
-            last = getattr(self, "_last_commit_text", None)
+            last = self._last_commit_text
         except (TypeError, AttributeError, RuntimeError, ValueError):
             last = None
 
@@ -217,16 +215,7 @@ class CategoryComboController:
             return
 
         try:
-            find = getattr(self._combo, "findText", None)
-            add = getattr(self._combo, "addItem", None)
-        except (TypeError, AttributeError, RuntimeError, ValueError):
-            return
-
-        if not callable(find) or not callable(add):
-            return
-
-        try:
-            idx = int(find(t))
+            idx = int(self._combo.findText(t))
         except (TypeError, AttributeError, RuntimeError, ValueError):
             return
 
@@ -234,7 +223,7 @@ class CategoryComboController:
             return
 
         try:
-            add(t)
+            self._combo.addItem(t)
         except (TypeError, AttributeError, RuntimeError, ValueError):
             return
 

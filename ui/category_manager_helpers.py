@@ -85,7 +85,7 @@ class CategoryManagerHelpers:
     def on_add_jy_user_edited(dialog, *args, **kwargs) -> None:
         """Slot: user edited Jyutping; reset dependent fields to placeholders."""
         try:
-            ctrl = getattr(dialog, "_field_reset", None)
+            ctrl = dialog.__dict__.get("_field_reset") if hasattr(dialog, "__dict__") else None
             if ctrl is not None:
                 ctrl.reset_add_panel_pre_validation()
         except (TypeError, AttributeError, RuntimeError):
@@ -104,7 +104,7 @@ class CategoryManagerHelpers:
             return
 
         try:
-            ctrl = getattr(dialog, "_focus_ctrl", None)
+            ctrl = dialog.__dict__.get("_focus_ctrl") if hasattr(dialog, "__dict__") else None
             if ctrl is not None and hasattr(ctrl, "focus_category"):
                 ctrl.focus_category(select_all=True, show_popup=True)
                 return
@@ -112,7 +112,7 @@ class CategoryManagerHelpers:
             pass
 
         try:
-            ctrl2 = getattr(dialog, "_cat_combo_ctrl", None)
+            ctrl2 = dialog.__dict__.get("_cat_combo_ctrl") if hasattr(dialog, "__dict__") else None
             if ctrl2 is not None and hasattr(ctrl2, "focus"):
                 ctrl2.focus(select_all=True, show_popup=True)
         except (TypeError, AttributeError, RuntimeError):
@@ -146,7 +146,7 @@ class CategoryManagerHelpers:
             pass
 
         try:
-            fn_gate = getattr(dialog, "_update_save_enabled", None)
+            fn_gate = dialog.__dict__.get("_update_save_enabled") if hasattr(dialog, "__dict__") else None
             if callable(fn_gate):
                 fn_gate()
         except (TypeError, AttributeError, RuntimeError):
@@ -156,7 +156,7 @@ class CategoryManagerHelpers:
     def focus_jy(dialog) -> None:
         """Focus the Jyutping input field."""
         try:
-            ctrl = getattr(dialog, "_focus_ctrl", None)
+            ctrl = dialog.__dict__.get("_focus_ctrl") if hasattr(dialog, "__dict__") else None
             if ctrl is not None and hasattr(ctrl, "focus_jyutping"):
                 ctrl.focus_jyutping(select_all=True)
         except (TypeError, AttributeError, RuntimeError):

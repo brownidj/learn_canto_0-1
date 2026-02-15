@@ -212,14 +212,23 @@ class CategoryManagerTypographyController:
 
             logger.debug("HANZI-GEO %s", str(reason or "").strip())
             logger.debug("  grp:   geo=%s cr=%s sh=%s %s font=%s", _g(grp), _cr(grp), _sh(grp), _minmax(grp), _font(grp))
+            ro = False
+            try:
+                ro = bool(hz.isReadOnly()) if hz is not None else False
+            except Exception:
+                ro = False
+            try:
+                align = str(hz.alignment()) if hz is not None else "?"
+            except Exception:
+                align = "?"
             logger.debug(
                 "  hz:    geo=%s cr=%s sh=%s %s ro=%s align=%s font=%s",
                 _g(hz),
                 _cr(hz),
                 _sh(hz),
                 _minmax(hz),
-                bool(getattr(hz, "isReadOnly", lambda: False)()),
-                str(getattr(hz, "alignment", lambda: "?")()),
+                ro,
+                align,
                 _font(hz),
             )
             logger.debug(
@@ -228,7 +237,7 @@ class CategoryManagerTypographyController:
                 _cr(combo),
                 _sh(combo),
                 _minmax(combo),
-                bool(getattr(combo, "isVisible", lambda: False)()),
+                bool(combo.isVisible()) if combo is not None else False,
                 _font(combo),
             )
 
@@ -245,7 +254,7 @@ class CategoryManagerTypographyController:
                 _cr(view),
                 _sh(view),
                 _minmax(view),
-                bool(getattr(view, "isVisible", lambda: False)()),
+                bool(view.isVisible()) if view is not None else False,
                 _font(view),
             )
 
@@ -255,7 +264,7 @@ class CategoryManagerTypographyController:
                 _cr(btn),
                 _sh(btn),
                 _minmax(btn),
-                str(getattr(btn, "text", lambda: "")()),
+                str(btn.text()) if btn is not None else "",
                 _font(btn),
             )
 

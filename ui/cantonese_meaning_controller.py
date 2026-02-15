@@ -6,6 +6,7 @@ Isolates cache/network lookup and UI application for colloquial meanings.
 
 import threading
 
+from ui.category_manager_ui_services import CategoryManagerUIService
 from ui.ui_services import get_text, set_text
 
 try:
@@ -23,6 +24,7 @@ class CantoneseMeaningController(QObject):
     def __init__(self, dialog, service=None):
         super().__init__()
         self.dialog = dialog
+        self._ui = CategoryManagerUIService(dialog)
         self._service = service
         self._inflight = set()
         self._pending = None
@@ -98,14 +100,8 @@ class CantoneseMeaningController(QObject):
             return False
         key = "hz:" + hz if hz else "jy:" + jy
         # Apply directly to avoid timing issues; respect hanzi match + empty meaning.
-        try:
-            w_mn = getattr(self.dialog, "_add_mn", None)
-        except Exception:
-            w_mn = None
-        try:
-            w_hz = getattr(self.dialog, "_add_hz", None)
-        except Exception:
-            w_hz = None
+        w_mn = self._ui.widget("add_mn")
+        w_hz = self._ui.widget("add_hz")
         if w_mn is None:
             return False
         try:
@@ -153,12 +149,7 @@ class CantoneseMeaningController(QObject):
         call_later(_clear, delay_ms=0)
 
     def _set_notes(self, text: str) -> None:
-        try:
-            fn_notes = getattr(self.dialog, "_set_notes", None)
-            if callable(fn_notes):
-                fn_notes(text, source="canto-service")
-        except Exception:
-            pass
+        self._ui.set_notes(text, source="canto-service")
 
     @Slot()
     def _apply_pending(self) -> None:
@@ -169,11 +160,11 @@ class CantoneseMeaningController(QObject):
         hz, key, meaning_raw = pending
         meaning = str(meaning_raw or "").strip()
 
-        w_mn = getattr(self.dialog, "_add_mn", None)
+        w_mn = self._ui.widget("add_mn")
         if w_mn is None:
             return
 
-        w_hz = getattr(self.dialog, "_add_hz", None)
+        w_hz = self._ui.widget("add_hz")
         if w_hz is not None:
             try:
                 current_hz = get_text(w_hz)

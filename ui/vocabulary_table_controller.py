@@ -1,28 +1,12 @@
-"""Vocabulary table controller - manages the vocab display table.
-
-Extracts ~800 lines of table logic from category_manager.py.
-"""
+"""Vocabulary table controller - manages the vocab display table."""
 
 from __future__ import annotations
 from typing import Any, Callable
-from dataclasses import dataclass
 
-@dataclass(frozen=True)
-class TableRow:
-    """Single row in vocabulary table."""
-    hanzi: str
-    jyutping: str
-    meanings: str
-    categories: list[str]
-
-    def to_list(self) -> list[str]:
-        """Convert to list for table display."""
-        return [
-            self.hanzi,
-            self.jyutping,
-            self.meanings,
-            ", ".join(self.categories) if self.categories else ""
-        ]
+from ui.vocab_table_category_editor import make_category_combo_delegate
+from ui.vocab_table_layout import apply_column_widths
+from ui.vocab_table_rows import TableRow, build_rows_from_vocab
+from ui.vocab_table_sorting import sync_header_arrows_from_native
 
 
 class VocabularyTableController:
@@ -66,52 +50,69 @@ class VocabularyTableController:
 
         self._search_filter = ""
         self._all_rows: list[TableRow] = []
+        self._sort_enabled = False
+        self._sort_column = 0
+        self._sort_order = 0
+        self._use_native_sort_indicator = False
+        self._updating_table = False
+
+        self._wire_sorting()
+        self._wire_category_editing()
+
+    def _wire_sorting(self) -> None:
+        if not self._table:
+            return
+        try:
+            if hasattr(self._table, "setSortingEnabled"):
+                self._table.setSortingEnabled(True)
+            header = getattr(self._table, "horizontalHeader", None)
+            header = header() if callable(header) else None
+            if header is not None and hasattr(header, "sectionClicked"):
+                try:
+                    header.setSectionsClickable(True)
+                    header.setSortIndicatorShown(False)
+                except Exception:
+                    pass
+                header.sectionClicked.connect(self._on_header_clicked)
+                self._sort_enabled = True
+        except Exception:
+            self._sort_enabled = False
+
+    def _on_header_clicked(self, col: int) -> None:
+        if not self._table:
+            return
+        try:
+            col_i = int(col)
+        except Exception:
+            return
+
+        if col_i == 2:
+            # Meanings column is not sortable.
+            try:
+                from PySide6.QtCore import Qt
+                order = Qt.SortOrder.AscendingOrder if self._sort_order == 0 else Qt.SortOrder.DescendingOrder
+                if hasattr(self._table, "sortItems"):
+                    self._table.sortItems(self._sort_column, order)
+            except Exception:
+                pass
+            self._sync_header_arrows_from_native(force_col=self._sort_column, force_order=self._sort_order)
+            return
+
+        try:
+            header = getattr(self._table, "horizontalHeader", None)
+            header = header() if callable(header) else None
+            if header is not None:
+                self._sort_column = int(header.sortIndicatorSection())
+                order = int(header.sortIndicatorOrder())
+                self._sort_order = 0 if order == 0 else 1
+        except Exception:
+            pass
+
+        self._sync_header_arrows_from_native()
 
     def build_rows(self) -> list[TableRow]:
-        """Build all table rows from current vocab/categories.
-
-        Returns:
-            List of TableRow objects
-        """
-        rows = []
-
-        # Build hanzi -> categories mapping
-        hz_to_cats: dict[str, list[str]] = {}
-        for cat, members in self._categories.items():
-            for hz in members:
-                if hz not in hz_to_cats:
-                    hz_to_cats[hz] = []
-                hz_to_cats[hz].append(cat)
-
-        # Build rows
-        for hanzi, data in self._vocab.items():
-            if not isinstance(data, (list, tuple)) or len(data) < 2:
-                continue
-
-            meanings_raw, jyutping = data[0], data[1]
-
-            # Flatten meanings
-            meanings_list = []
-            if isinstance(meanings_raw, (list, tuple)):
-                for item in meanings_raw:
-                    if isinstance(item, (list, tuple)):
-                        meanings_list.extend(str(x) for x in item if x)
-                    else:
-                        meanings_list.append(str(item))
-            else:
-                meanings_list.append(str(meanings_raw))
-
-            meanings = ", ".join(m.strip() for m in meanings_list if m.strip())
-            categories = hz_to_cats.get(hanzi, [])
-
-            rows.append(TableRow(
-                hanzi=hanzi,
-                jyutping=str(jyutping),
-                meanings=meanings,
-                categories=sorted(categories, key=lambda s: s.lower()),
-            ))
-
-        return rows
+        """Build all table rows from current vocab/categories."""
+        return build_rows_from_vocab(self._vocab, self._categories)
 
     def populate(self, *, sort: bool = True) -> None:
         """Populate table from current vocab/categories.
@@ -124,16 +125,47 @@ class VocabularyTableController:
         if sort:
             self._all_rows.sort(key=lambda r: (
                 r.categories[0].lower() if r.categories else "~",
-                r.meanings.lower(),
+                r.jyutping.lower(),
                 r.hanzi,
+                r.meanings.lower(),
             ))
 
+        try:
+            if hasattr(self._table, "setSortingEnabled"):
+                self._table.setSortingEnabled(True)
+        except Exception:
+            pass
+
         self._apply_filter()
+        self._sync_header_arrows_from_native()
+        apply_column_widths(self._table)
+
+    def _sync_header_arrows_from_native(self, *, force_col: int | None = None, force_order: int | None = None) -> None:
+        if not self._table:
+            return
+        self._sort_column, self._sort_order = sync_header_arrows_from_native(
+            self._table,
+            sort_column=self._sort_column,
+            sort_order=self._sort_order,
+            force_col=force_col,
+            force_order=force_order,
+        )
+
+    def ensure_sort_indicator(self) -> None:
+        """Public hook for UI builders to re-assert sort indicator after show."""
+        self._sync_header_arrows_from_native()
 
     def _apply_filter(self) -> None:
         """Apply current search filter and update table display."""
         if not self._table:
             return
+
+        try:
+            if hasattr(self._table, "setSortingEnabled"):
+                self._table.setSortingEnabled(False)
+        except Exception:
+            pass
+        self._updating_table = True
 
         # Filter rows
         if self._search_filter:
@@ -159,11 +191,138 @@ class VocabularyTableController:
                         if hasattr(self._table, "setItem"):
                             # QTableWidget
                             from PySide6.QtWidgets import QTableWidgetItem
-                            self._table.setItem(i, j, QTableWidgetItem(value))
+                            item = QTableWidgetItem(value)
+                            try:
+                                from PySide6.QtCore import Qt
+                                if j != 3:
+                                    item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                                else:
+                                    item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEditable)
+                            except Exception:
+                                pass
+                            self._table.setItem(i, j, item)
                     except (RuntimeError, AttributeError, ImportError):
                         pass
         except (RuntimeError, AttributeError):
             pass
+        finally:
+            try:
+                if hasattr(self._table, "setSortingEnabled"):
+                    self._table.setSortingEnabled(True)
+            except Exception:
+                pass
+            self._updating_table = False
+        apply_column_widths(self._table)
+
+
+    def _wire_category_editing(self) -> None:
+        if not self._table:
+            return
+        try:
+            delegate = make_category_combo_delegate(self._category_names)
+            if delegate is not None:
+                self._table.setItemDelegateForColumn(3, delegate)
+        except Exception:
+            pass
+        try:
+            from PySide6.QtWidgets import QAbstractItemView
+        except Exception:
+            QAbstractItemView = None
+        if QAbstractItemView is not None:
+            try:
+                self._table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectItems)
+                self._table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+            except Exception:
+                pass
+            try:
+                self._table.setEditTriggers(QAbstractItemView.EditTrigger.AllEditTriggers)
+            except Exception:
+                try:
+                    self._table.setEditTriggers(
+                        QAbstractItemView.EditTrigger.EditKeyPressed
+                        | QAbstractItemView.EditTrigger.DoubleClicked
+                        | QAbstractItemView.EditTrigger.SelectedClicked
+                    )
+                except Exception:
+                    pass
+        try:
+            sig = getattr(self._table, "itemChanged", None)
+            if callable(sig):
+                sig.connect(self._on_item_changed)
+        except Exception:
+            pass
+        try:
+            sig = getattr(self._table, "cellClicked", None)
+            if callable(sig):
+                sig.connect(self._on_cell_clicked)
+        except Exception:
+            pass
+
+    def _on_cell_clicked(self, row: int, col: int) -> None:
+        try:
+            if int(col) != 3:
+                return
+        except Exception:
+            return
+        try:
+            item = self._table.item(int(row), 3)
+        except Exception:
+            item = None
+        if item is None:
+            return
+        try:
+            self._table.setCurrentCell(int(row), 3)
+        except Exception:
+            pass
+        try:
+            self._table.setFocus()
+        except Exception:
+            pass
+        try:
+            self._table.editItem(item)
+        except Exception:
+            pass
+
+    def _on_item_changed(self, item) -> None:
+        if self._updating_table:
+            return
+        try:
+            col = int(item.column())
+        except Exception:
+            return
+        if col != 3:
+            return
+        try:
+            row = int(item.row())
+        except Exception:
+            return
+        try:
+            hz_item = self._table.item(row, 0)
+            hanzi = hz_item.text() if hz_item is not None else ""
+        except Exception:
+            hanzi = ""
+        if not str(hanzi or "").strip():
+            return
+        cats = self._parse_categories(item.text())
+        if callable(self._on_category_changed):
+            try:
+                self._on_category_changed(hanzi, cats)
+            except Exception:
+                pass
+
+    def _parse_categories(self, text: str) -> list[str]:
+        raw = str(text or "")
+        parts = [p.strip() for p in raw.replace(";", ",").split(",")]
+        out = [p for p in parts if p]
+        return out
+
+    def _category_names(self) -> list[str]:
+        try:
+            names = [str(k) for k in self._categories.keys()]
+        except Exception:
+            names = []
+        names = [n for n in names if n.strip()]
+        return sorted(names, key=lambda s: s.lower())
 
     def set_search_filter(self, text: str) -> None:
         """Set search filter text and refresh display.
