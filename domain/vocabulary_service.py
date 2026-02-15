@@ -168,6 +168,27 @@ class VocabularyService:
             normalize=self._normalize_jy
         )
 
+    def get_entry_raw(self, hanzi: str) -> tuple[object, str] | None:
+        """Return raw vocab entry for Hanzi, if present.
+
+        Returns:
+            (raw_meanings, jyutping) or None
+        """
+        hz = (hanzi or "").strip()
+        if not hz or not isinstance(self._vocab, dict):
+            return None
+        row = self._vocab.get(hz)
+        if not isinstance(row, (list, tuple)) or len(row) < 1:
+            return None
+        meanings = row[0]
+        jy = row[1] if len(row) >= 2 else ""
+        return meanings, str(jy or "")
+
+    def get_meanings_raw(self, hanzi: str) -> object | None:
+        """Return raw meanings for Hanzi, if present."""
+        entry = self.get_entry_raw(hanzi)
+        return entry[0] if entry else None
+
     def add_entry(
         self,
         jyutping: str,

@@ -49,7 +49,7 @@ def test_duplicate_detection_is_whitespace_and_case_insensitive():
 
 
 @pytest.mark.ui
-@pytest.mark.skip(reason="Refactoring: Focus/validation behavior changed with AddEditPanel")
+@pytest.mark.skip(reason="Refactoring: Focus/validation behavior changed with Add/Edit services")
 def test_duplicate_jyutping_shows_warning_and_keeps_focus(monkeypatch):
     _skip_if_headless_ci()
 
@@ -88,13 +88,13 @@ def test_duplicate_jyutping_shows_warning_and_keeps_focus(monkeypatch):
         dlg._add_jy.returnPressed.emit()
     except Exception:
         # Fallback: if signal emission is not available for some reason, call the most likely handler if present.
-        if hasattr(dlg, "_on_jyut_enter"):
-            dlg._on_jyut_enter()
-        elif hasattr(dlg, "_on_jyutping_enter"):
-            dlg._on_jyutping_enter()
-        elif hasattr(dlg, "_on_add_jyutping_enter"):
-            dlg._on_add_jyutping_enter()
-        else:
+        try:
+            flow = getattr(dlg, "_add_edit_flow", None)
+            if flow is not None and hasattr(flow, "on_jyut_enter"):
+                flow.on_jyut_enter()
+            else:
+                raise
+        except Exception:
             raise
 
     # Allow Qt to process any queued slots
@@ -113,7 +113,7 @@ def test_duplicate_jyutping_shows_warning_and_keeps_focus(monkeypatch):
 
 
 @pytest.mark.ui
-@pytest.mark.skip(reason="Refactoring: Focus/validation behavior changed with AddEditPanel")
+@pytest.mark.skip(reason="Refactoring: Focus/validation behavior changed with Add/Edit services")
 def test_category_does_not_steal_focus_after_hanzi_selection(monkeypatch):
     """UI regression: after the user selects a Hanzi candidate, focus must not jump back to Category.
 
@@ -150,16 +150,16 @@ def test_category_does_not_steal_focus_after_hanzi_selection(monkeypatch):
         except Exception:
             pass
 
-    try:
-        if hasattr(dlg, "_meanings_for_hanzi"):
-            def _mf(hz: str):
-                if hz == "風":
-                    return ["wind", "news", "style"]
-                if hz == "封":
-                    return ["to confer", "to grant"]
-                return []
+    class _StubMeaningResolver:
+        def meanings_for_hanzi(self, hz: str):
+            if hz == "風":
+                return ["wind", "news", "style"]
+            if hz == "封":
+                return ["to confer", "to grant"]
+            return []
 
-            setattr(dlg, "_meanings_for_hanzi", _mf)
+    try:
+        dlg._meaning_resolver = _StubMeaningResolver()
     except Exception:
         pass
 
@@ -168,8 +168,9 @@ def test_category_does_not_steal_focus_after_hanzi_selection(monkeypatch):
     try:
         dlg._add_jy.returnPressed.emit()
     except Exception:
-        if hasattr(dlg, "_on_jyut_enter"):
-            dlg._on_jyut_enter()
+        flow = getattr(dlg, "_add_edit_flow", None)
+        if flow is not None and hasattr(flow, "on_jyut_enter"):
+            flow.on_jyut_enter()
         else:
             raise
 
@@ -203,11 +204,13 @@ def test_category_does_not_steal_focus_after_hanzi_selection(monkeypatch):
             le_cat.returnPressed.emit()
         else:
             # Directly call handler if lineEdit isn't available
-            if hasattr(dlg, "_on_add_category_committed"):
-                dlg._on_add_category_committed()
+            ops = getattr(dlg, "_category_ops", None)
+            if ops is not None and hasattr(ops, "on_add_category_committed"):
+                ops.on_add_category_committed()
     except Exception:
-        if hasattr(dlg, "_on_add_category_committed"):
-            dlg._on_add_category_committed()
+        ops = getattr(dlg, "_category_ops", None)
+        if ops is not None and hasattr(ops, "on_add_category_committed"):
+            ops.on_add_category_committed()
         else:
             raise
 

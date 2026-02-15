@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
     QComboBox, QSlider, QGroupBox, QSizePolicy, QVBoxLayout,
     QHBoxLayout, QToolButton
 )
-from PySide6.QtCore import Qt, QTimer, QEvent, QObject
+from PySide6.QtCore import Qt, QEvent, QObject
 from PySide6.QtGui import QFontMetrics
 
 from settings import load_all, save_one
@@ -142,7 +142,8 @@ class MainWindowSetup:
                 self.window._hanzi_avail_w0 = w0
                 logger.debug("Hanzi baseline avail_w0 set to %d", w0)
 
-        QTimer.singleShot(0, _capture_baseline)
+        from ui.qt_timers import call_later
+        call_later(_capture_baseline, delay_ms=0)
 
         # Install resize event filter
         class HanziSizer(QObject):

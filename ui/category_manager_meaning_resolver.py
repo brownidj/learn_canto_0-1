@@ -7,6 +7,13 @@ Centralizes all meaning lookup, resolution, and display formatting logic.
 import logging
 from typing import TYPE_CHECKING
 
+from ui.category_manager_dialog_adapter import CategoryManagerDialogAdapter
+from ui.category_manager_meaning_resolver_service import (
+    MeaningResolverService,
+    build_meaning_resolver_service,
+)
+from ui.category_manager_ui_services import CategoryManagerUIService
+
 if TYPE_CHECKING:
     from category_manager import CategoryManagerDialog
 
@@ -16,8 +23,10 @@ logger = logging.getLogger(__name__)
 class CategoryManagerMeaningResolver:
     """Manages meaning resolution for CategoryManagerDialog."""
 
-    def __init__(self, dialog: "CategoryManagerDialog"):
+    def __init__(self, dialog: "CategoryManagerDialog", service: MeaningResolverService | None = None):
         self.dialog = dialog
+        self._dlg = CategoryManagerDialogAdapter(dialog)
+        self._service = service or build_meaning_resolver_service(dialog)
 
     @staticmethod
     def flatten_vocab_meanings(raw_meanings) -> list[str]:
@@ -88,27 +97,22 @@ class CategoryManagerMeaningResolver:
         # Prefer user's vocab meanings first when we have exact Hanzi match
         hz_key = (hz or "").strip()
         try:
-            v = getattr(self.dialog, "_vocab", None)
-            if isinstance(v, dict) and hz_key:
-                entry = v.get(hz_key)
-                if isinstance(entry, (list, tuple)) and len(entry) >= 2:
-                    raw_meanings = entry[0]
-                    entry_jy = entry[1]
+            vocab_svc = self._service.vocab_service()
+            if vocab_svc is not None and hz_key:
+                entry = vocab_svc.get_entry_raw(hz_key) if hasattr(vocab_svc, "get_entry_raw") else None
+                if entry is not None:
+                    raw_meanings, entry_jy = entry
 
                     # Flatten meanings
                     flat = self.flatten_vocab_meanings(raw_meanings)
 
                     # Compare normalized Jyutping where possible
-                    try:
-                        jy_widget = getattr(self.dialog, "_add_jy", None)
-                        cand_jy = (jy_widget.text() or "").strip() if jy_widget is not None else ""
-                    except (TypeError, AttributeError, RuntimeError):
-                        cand_jy = ""
+                    cand_jy = self._service.jyutping_text()
 
                     try:
-                        norm = getattr(self.dialog, "_normalize_jy", None)
-                        n_cand = str(norm(cand_jy) if callable(norm) else cand_jy).strip()
-                        n_entry = str(norm(entry_jy) if callable(norm) else entry_jy).strip()
+                        from domain.jyutping_validation import normalize_jyutping
+                        n_cand = normalize_jyutping(cand_jy)
+                        n_entry = normalize_jyutping(entry_jy)
                     except (TypeError, AttributeError, RuntimeError, ValueError):
                         n_cand = str(cand_jy or "").strip()
                         n_entry = str(entry_jy or "").strip()
@@ -149,7 +153,7 @@ class CategoryManagerMeaningResolver:
             return out[:n]
 
         # Domain façade (authoritative)
-        facade = getattr(self.dialog, "_meaning_facade", None)
+        facade = self._service.facade()
         if facade is not None and hasattr(facade, "select_candidate"):
             try:
                 selected = facade.select_candidate(
@@ -192,7 +196,7 @@ class CategoryManagerMeaningResolver:
         if not hz_s:
             return []
 
-        facade = getattr(self.dialog, "_meaning_facade", None)
+        facade = self._service.facade()
         if facade is not None and hasattr(facade, "meanings_for_display"):
             try:
                 ms = facade.meanings_for_display(hz_s)
@@ -208,13 +212,48 @@ class CategoryManagerMeaningResolver:
 
         # Vocab fallback
         try:
-            v = getattr(self.dialog, "_vocab", None)
-            if isinstance(v, dict) and hz_s in v:
-                row = v.get(hz_s)
-                if isinstance(row, (list, tuple)) and len(row) >= 1:
-                    meanings = row[0]
-                    return self.flatten_vocab_meanings(meanings)
+            vocab_svc = self._service.vocab_service()
+            if vocab_svc is not None and hasattr(vocab_svc, "get_meanings_raw"):
+                raw = vocab_svc.get_meanings_raw(hz_s)
+                if raw is not None:
+                    return self.flatten_vocab_meanings(raw)
         except (TypeError, AttributeError, RuntimeError):
             pass
-
         return []
+
+    def resolve_for_add_edit(
+        self,
+        *,
+        hanzi: str,
+        src: str,
+        jyutping: str,
+        allow_canto: bool,
+    ) -> tuple[str, str]:
+        """Resolve meaning for Add/Edit in one place.
+
+        Returns (meaning, source) where source is 'resolver' or 'canto' (or '').
+        """
+        dlg = self._dlg
+        ui = CategoryManagerUIService(dlg)
+        hz = str(hanzi or "").strip()
+        if not hz:
+            return "", ""
+
+        meanings = self.resolve_meanings_for_candidate(hz, src)
+
+        joined = ui.join_meanings(meanings)
+        if str(joined or "").strip():
+            return joined, "resolver"
+
+        if not allow_canto:
+            return "", ""
+
+        try:
+            from ui.category_manager_add_edit_flow_services import apply_cantonese_cache
+            applied = apply_cantonese_cache(dlg, hanzi=hz, jyutping=jyutping)
+        except Exception:
+            applied = False
+        if applied:
+            return str(ui.get_meaning_text() or "").strip(), "canto"
+
+        return "", ""

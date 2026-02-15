@@ -8,6 +8,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from PySide6.QtWidgets import QMessageBox
+from ui.category_manager_dialog_adapter import CategoryManagerDialogAdapter
 
 if TYPE_CHECKING:
     from category_manager import CategoryManagerDialog
@@ -22,6 +23,7 @@ class CategoryManagerSaveCommitController:
 
     def __init__(self, dialog: "CategoryManagerDialog"):
         self.dialog = dialog
+        self._dlg = CategoryManagerDialogAdapter(dialog)
 
     def on_save_clicked(self) -> None:
         """Legacy inline Save button handler.
@@ -33,12 +35,18 @@ class CategoryManagerSaveCommitController:
         """
         # Check for duplicate Jyutping before proceeding
         try:
-            jy, hz, mn, cat = self.dialog._read_add_fields()
-            is_duplicate, existing_hanzi = self.dialog._check_duplicate_jyutping(jy)
+            from ui.category_manager_helpers import CategoryManagerHelpers
+            from domain.duplicate_detection import find_duplicate_jyutping
+            jy, _hz, _mn, _cat = CategoryManagerHelpers.read_add_fields(self.dialog)()
+            vocab = self._dlg.get("_vocab")
+            is_duplicate, existing_hanzi = find_duplicate_jyutping(
+                vocab if isinstance(vocab, dict) else {},
+                jy,
+            )
 
             if is_duplicate:
                 QMessageBox.warning(
-                    self.dialog,
+                    self._dlg.dialog,
                     "Duplicate Jyutping",
                     f"An entry with Jyutping '{jy}' already exists (Hanzi: {existing_hanzi}).\n\n"
                     f"Please use a different Jyutping or edit the existing entry."
@@ -49,7 +57,7 @@ class CategoryManagerSaveCommitController:
 
         # Prefer the historical handler name if present
         try:
-            fn = getattr(self.dialog, "_on_add_item_enter", None)
+            fn = self._dlg.get("_on_add_item_enter")
             if callable(fn):
                 fn()
                 return
@@ -58,7 +66,7 @@ class CategoryManagerSaveCommitController:
 
         # Fall back to other known save entry points
         try:
-            fn = getattr(self.dialog, "_save_add_item", None)
+            fn = self._dlg.get("_save_add_item")
             if callable(fn):
                 fn()
                 return
@@ -66,7 +74,7 @@ class CategoryManagerSaveCommitController:
             pass
 
         try:
-            fn = getattr(self.dialog, "_do_save", None)
+            fn = self._dlg.get("_do_save")
             if callable(fn):
                 fn()
                 return
@@ -79,7 +87,7 @@ class CategoryManagerSaveCommitController:
     def save_add_item(self) -> None:
         """Legacy save entry point shim."""
         try:
-            fn = getattr(self.dialog, "_on_add_item_enter", None)
+            fn = self._dlg.get("_on_add_item_enter")
             if callable(fn):
                 fn()
         except (TypeError, AttributeError, RuntimeError):

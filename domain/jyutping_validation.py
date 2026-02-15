@@ -63,5 +63,15 @@ def validate_jyut_syllables(jy: str) -> tuple[bool, str | None]:
 
 
 __all__ = [
+    "normalize_jyutping",
     "validate_jyut_syllables",
 ]
+
+
+def normalize_jyutping(jy: str) -> str:
+    """Normalize Jyutping: trim, lowercase, collapse whitespace.
+
+    This is intentionally conservative and does not alter tone digits.
+    """
+    text = (jy or "").strip().lower()
+    return " ".join(text.split())

@@ -1,0 +1,22 @@
+.DS_Store
+.env
+.idea/
+__pycache__/
+*.pyc
+.venv/
+.venv313/
+
+# Large/generated data and caches
+data/subtitles/
+data/*.bz2
+data/*.xml
+data/*.jsonl
+data/*.log
+data/*.pdf
+data/*.xlsx
+data/*.bak
+data/category_cache.yaml
+data/snapshot.json
+
+# Temporary files
+temp.XXX

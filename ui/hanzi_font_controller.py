@@ -8,7 +8,7 @@ import logging
 import re
 from typing import Optional
 
-from PySide6.QtCore import QObject, QEvent, QTimer
+from PySide6.QtCore import QObject, QEvent
 from PySide6.QtWidgets import QLabel
 from PySide6.QtGui import QFontMetrics
 
@@ -175,7 +175,8 @@ class HanziFontController:
 
         if avail_w < 10:
             # Retry after layout
-            QTimer.singleShot(0, lambda: self._fit_font_to_label(ht, jt, base_pt))
+            from ui.qt_timers import call_later
+            call_later(lambda: self._fit_font_to_label(ht, jt, base_pt), delay_ms=0)
             return
 
         # Use Hanzi for sizing (conservative)

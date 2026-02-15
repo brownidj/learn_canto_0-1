@@ -23,7 +23,7 @@ def _skip_if_headless_ci() -> None:
 
 
 @pytest.mark.ui
-@pytest.mark.skip(reason="Refactoring: _on_jyut_enter removed, needs update for AddEditPanel")
+@pytest.mark.skip(reason="Refactoring: _on_jyut_enter removed, needs update for Add/Edit services")
 def test_add_new_category_yes_adds_and_selects(monkeypatch):
     """Regression: entering a brand-new category and confirming 'Yes' adds it.
 
@@ -55,14 +55,14 @@ def test_add_new_category_yes_adds_and_selects(monkeypatch):
 
     # Jyutping validated
     dlg._add_jy.setText("cin4")
-    dlg._on_jyut_enter()
+    dlg._add_edit_flow.on_jyut_enter()
     app.processEvents()
 
     # New category entry + commit
     new_cat = "verbs_actions"
     dlg._add_cat.setEditable(True)
     dlg._add_cat.setCurrentText(new_cat)
-    dlg._on_add_category_committed(user_action=True)
+    dlg._category_ops.on_add_category_committed(user_action=True)
     app.processEvents()
 
     # Must exist in the authoritative in-memory map
@@ -74,7 +74,7 @@ def test_add_new_category_yes_adds_and_selects(monkeypatch):
 
 
 @pytest.mark.ui
-@pytest.mark.skip(reason="Refactoring: _on_jyut_enter removed, needs update for AddEditPanel")
+@pytest.mark.skip(reason="Refactoring: _on_jyut_enter removed, needs update for Add/Edit services")
 def test_add_new_category_no_clears_and_refocuses(monkeypatch):
     """Regression: confirming 'No' should not add the category and should clear."""
 
@@ -100,13 +100,13 @@ def test_add_new_category_no_clears_and_refocuses(monkeypatch):
     app.processEvents()
 
     dlg._add_jy.setText("cin4")
-    dlg._on_jyut_enter()
+    dlg._add_edit_flow.on_jyut_enter()
     app.processEvents()
 
     new_cat = "verbs_actions"
     dlg._add_cat.setEditable(True)
     dlg._add_cat.setCurrentText(new_cat)
-    dlg._on_add_category_committed(user_action=True)
+    dlg._category_ops.on_add_category_committed(user_action=True)
     app.processEvents()
 
     assert isinstance(getattr(dlg, "_cats", None), dict)

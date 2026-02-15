@@ -73,7 +73,7 @@ def test_table_scroll_panel_exposes_required_widgets():
     _ensure_app()
 
     # The implementation will provide this module.
-    from table_scroll_slider_controller import TableScrollSliderController  # noqa: F401
+    from ui.table_scroll_slider_controller import TableScrollSliderController  # noqa: F401
 
     # The controller must be constructible without CategoryManager.
     ctrl = TableScrollSliderController.create_for_tests()
@@ -99,7 +99,7 @@ def test_slider_moves_table_vertical_scrollbar():
     pytest.importorskip("PySide6")
     from PySide6.QtCore import Qt
 
-    from table_scroll_slider_controller import TableScrollSliderController
+    from ui.table_scroll_slider_controller import TableScrollSliderController
 
     ctrl = TableScrollSliderController.create_for_tests(rows=200)
     w = ctrl.widget
@@ -148,7 +148,7 @@ def test_table_scroll_updates_slider_on_mousewheel_or_scrollbar_drag():
     _skip_if_headless_ci()
     _ensure_app()
 
-    from table_scroll_slider_controller import TableScrollSliderController
+    from ui.table_scroll_slider_controller import TableScrollSliderController
 
     ctrl = TableScrollSliderController.create_for_tests(rows=200)
     w = ctrl.widget
@@ -193,7 +193,7 @@ def test_search_filters_rows_and_resets_scroll():
     _skip_if_headless_ci()
     _ensure_app()
 
-    from table_scroll_slider_controller import TableScrollSliderController
+    from ui.table_scroll_slider_controller import TableScrollSliderController
 
     ctrl = TableScrollSliderController.create_for_tests(rows=200, include_terms=True)
     w = ctrl.widget

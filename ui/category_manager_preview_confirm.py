@@ -8,7 +8,8 @@ import logging
 from typing import TYPE_CHECKING
 
 from PySide6.QtWidgets import QMessageBox
-from ui.widget_utils import WidgetAccessor
+from ui.ui_services import set_visible
+from ui.category_manager_dialog_adapter import CategoryManagerDialogAdapter
 
 if TYPE_CHECKING:
     from category_manager import CategoryManagerDialog
@@ -21,12 +22,13 @@ class CategoryManagerPreviewConfirmController:
 
     def __init__(self, dialog: "CategoryManagerDialog"):
         self.dialog = dialog
+        self._dlg = CategoryManagerDialogAdapter(dialog)
 
     def build_add_entry_preview(self) -> dict:
         """Build a stable preview payload for the pending add/edit entry (no mutation)."""
         try:
-            from category_manager import AddEntryPreviewBuilder
-            preview_obj = AddEntryPreviewBuilder.build(self.dialog)
+            from ui.category_manager_preview_builder import AddEntryPreviewBuilder
+            preview_obj = AddEntryPreviewBuilder.build(self._dlg.dialog)
             return preview_obj.to_payload()
         except (TypeError, AttributeError, RuntimeError, ValueError):
             return {}
@@ -46,7 +48,7 @@ class CategoryManagerPreviewConfirmController:
         mn = str((preview.get("meaning") or "")).strip()
         cat = str((preview.get("category") or "")).strip()
 
-        msg = QMessageBox(self.dialog)
+        msg = QMessageBox(self._dlg.dialog)
         msg.setIcon(QMessageBox.Icon.Question)
         msg.setWindowTitle("Confirm Entry")
         msg.setText("Review and confirm this entry:")
@@ -89,21 +91,21 @@ class CategoryManagerPreviewConfirmController:
           - Shown only when the user chooses 'Edit' from the confirmation dialog
         """
         # Canonical: current implementation uses `self.btn_save`
-        btn = getattr(self.dialog, "btn_save", None)
+        btn = self._dlg.get("btn_save")
 
         # Qt-boundary fallback: objectName lookup
         if btn is None:
             try:
                 from PySide6.QtWidgets import QPushButton
-                btn = self.dialog.findChild(QPushButton, "btn_save")
+                btn = self._dlg.dialog.findChild(QPushButton, "btn_save")
             except (TypeError, AttributeError, RuntimeError):
                 btn = None
 
         if btn is None:
             try:
                 from PySide6.QtWidgets import QPushButton
-                btn = self.dialog.findChild(QPushButton, "btnSave")
+                btn = self._dlg.dialog.findChild(QPushButton, "btnSave")
             except (TypeError, AttributeError, RuntimeError):
                 btn = None
 
-        WidgetAccessor.set_visible(btn, visible)
+        set_visible(btn, visible)

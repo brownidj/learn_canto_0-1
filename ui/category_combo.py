@@ -23,11 +23,9 @@ class CategoryComboController:
         *,
         combo: QComboBox,
         on_commit: Callable[[], None] | None,
-        on_add_new: Callable[[str], bool] | None = None,
     ):
         self._combo = combo
         self._on_commit = on_commit
-        self._on_add_new = on_add_new
         self._last_commit_text: str | None = None
 
         # Must be editable to allow free-text entry.
@@ -211,23 +209,6 @@ class CategoryComboController:
             return False
 
         return bool(res == QMessageBox.StandardButton.Yes)
-
-    def confirm_or_add_new_category(self, *, text: str | None = None) -> bool:
-        cat = (text or self.current_text() or "").strip()
-        if not cat:
-            return False
-
-        want_add = self.confirm_add_new_category(text=cat)
-        if not want_add:
-            return False
-
-        fn = self._on_add_new
-        if callable(fn):
-            try:
-                return bool(fn(cat))
-            except (TypeError, AttributeError, RuntimeError, ValueError, OSError):
-                return False
-        return False
 
     def _ensure_item_present(self, text: str) -> None:
         """Ensure `text` exists as an item in the combo list (best-effort)."""

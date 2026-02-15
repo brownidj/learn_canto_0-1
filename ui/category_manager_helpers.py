@@ -9,6 +9,7 @@ import logging
 import time
 
 from domain.jyutping_validation import validate_jyut_syllables
+from ui.category_manager_ui_services import CategoryManagerUIService
 
 logger = logging.getLogger(__name__)
 
@@ -52,19 +53,20 @@ class CategoryManagerHelpers:
     @staticmethod
     def read_add_fields(dialog) -> tuple[str, str, str, str]:
         """Read Add/Edit panel fields safely (legacy compatibility)."""
-        from ui.widget_utils import WidgetAccessor
+        ui = CategoryManagerUIService(dialog)
         return (
-            WidgetAccessor.get_text(getattr(dialog, "_add_jy", None)),
-            WidgetAccessor.get_text(getattr(dialog, "_add_hz", None)),
-            WidgetAccessor.get_text(getattr(dialog, "_add_mn", None)),
-            WidgetAccessor.get_text(getattr(dialog, "_add_cat", None)),
+            ui.get_text("add_jy"),
+            ui.get_text("add_hz"),
+            ui.get_text("add_mn"),
+            ui.get_text("add_cat"),
         )
 
     @staticmethod
     def ensure_category_combo_editable(dialog) -> None:
         """Ensure the Add/Edit category combobox is editable (best-effort)."""
         try:
-            w_cat = getattr(dialog, "_add_cat", None)
+            ui = CategoryManagerUIService(dialog)
+            w_cat = ui.widget("add_cat")
             if w_cat is not None and hasattr(w_cat, "setEditable"):
                 w_cat.setEditable(True)
         except (TypeError, AttributeError, RuntimeError):
@@ -74,38 +76,18 @@ class CategoryManagerHelpers:
     def set_notes(dialog, text: str, *, source: str = "") -> None:
         """Set the Notes field (best-effort; never raises)."""
         try:
-            w = getattr(dialog, "_add_notes", None)
+            ui = CategoryManagerUIService(dialog)
+            ui.set_notes(str(text or ""), source=source)
         except (TypeError, AttributeError, RuntimeError):
-            w = None
-
-        if w is None:
             return
-
-        msg = str(text or "")
-
-        # QLineEdit
-        try:
-            if hasattr(w, "setText"):
-                w.setText(msg)
-                return
-        except (TypeError, AttributeError, RuntimeError):
-            pass
-
-        # QTextEdit
-        try:
-            if hasattr(w, "setPlainText"):
-                w.setPlainText(msg)
-                return
-        except (TypeError, AttributeError, RuntimeError):
-            pass
-
-        return
 
     @staticmethod
     def on_add_jy_user_edited(dialog, *args, **kwargs) -> None:
         """Slot: user edited Jyutping; reset dependent fields to placeholders."""
         try:
-            dialog._reset_add_panel_pre_validation()
+            ctrl = getattr(dialog, "_field_reset", None)
+            if ctrl is not None:
+                ctrl.reset_add_panel_pre_validation()
         except (TypeError, AttributeError, RuntimeError):
             return
 
@@ -113,8 +95,8 @@ class CategoryManagerHelpers:
     def on_add_jy_editing_finished(dialog, *args, **kwargs) -> None:
         """Slot: Jyutping edit committed; focus Category."""
         try:
-            from ui.widget_utils import WidgetAccessor
-            jy = WidgetAccessor.get_text(getattr(dialog, "_add_jy", None))
+            ui = CategoryManagerUIService(dialog)
+            jy = ui.get_text("add_jy")
         except (TypeError, AttributeError, RuntimeError, ImportError, ValueError):
             jy = ""
 
@@ -153,29 +135,15 @@ class CategoryManagerHelpers:
         Keeps Add/Edit context in sync and refreshes Save gating. Must never raise.
         """
         try:
-            w = getattr(dialog, "_add_mn", None)
-        except (TypeError, AttributeError, RuntimeError):
-            w = None
-
-        try:
-            mn = (w.text() or "").strip() if w is not None else ""
+            ui = CategoryManagerUIService(dialog)
+            mn = str(ui.get_text("add_mn") or "").strip()
         except (TypeError, AttributeError, RuntimeError):
             mn = ""
 
         try:
-            ctx = getattr(dialog, "_add_edit_ctx", None)
-        except (TypeError, AttributeError, RuntimeError):
-            ctx = None
-
-        if ctx is not None:
-            try:
-                ctx.meaning = mn
-            except (TypeError, AttributeError, RuntimeError):
-                pass
-            try:
-                setattr(ctx, "mn_ok", bool(mn))
-            except (TypeError, AttributeError, RuntimeError):
-                pass
+            dialog._update_add_edit_state(meaning=mn, mn_ok=bool(mn))
+        except Exception:
+            pass
 
         try:
             fn_gate = getattr(dialog, "_update_save_enabled", None)
@@ -188,12 +156,8 @@ class CategoryManagerHelpers:
     def focus_jy(dialog) -> None:
         """Focus the Jyutping input field."""
         try:
-            w = getattr(dialog, "_add_jy", None)
-            if w is not None:
-                w.setFocus()
-                try:
-                    w.selectAll()
-                except (TypeError, AttributeError, RuntimeError):
-                    pass
+            ctrl = getattr(dialog, "_focus_ctrl", None)
+            if ctrl is not None and hasattr(ctrl, "focus_jyutping"):
+                ctrl.focus_jyutping(select_all=True)
         except (TypeError, AttributeError, RuntimeError):
             pass

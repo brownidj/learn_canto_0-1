@@ -9,6 +9,8 @@ from typing import TYPE_CHECKING
 
 from PySide6.QtGui import QFont, QFontMetrics
 from PySide6.QtWidgets import QFormLayout, QGroupBox, QLabel
+from ui.category_manager_dialog_adapter import CategoryManagerDialogAdapter
+from ui.category_manager_widgets import resolve_category_manager_widgets
 
 if TYPE_CHECKING:
     from category_manager import CategoryManagerDialog
@@ -21,6 +23,7 @@ class CategoryManagerTypographyController:
 
     def __init__(self, dialog: "CategoryManagerDialog"):
         self.dialog = dialog
+        self._dlg = CategoryManagerDialogAdapter(dialog)
 
     def apply_add_edit_typography(
         self,
@@ -45,11 +48,11 @@ class CategoryManagerTypographyController:
 
         # Spacing
         try:
-            form_entry.setVerticalSpacing(int(self.dialog._FORM_VERTICAL_SPACING_PX))
+            form_entry.setVerticalSpacing(int(self._dlg.get("_FORM_VERTICAL_SPACING_PX")))
         except (TypeError, ValueError, AttributeError):
             pass
         try:
-            form_hanzi.setVerticalSpacing(int(self.dialog._FORM_VERTICAL_SPACING_PX))
+            form_hanzi.setVerticalSpacing(int(self._dlg.get("_FORM_VERTICAL_SPACING_PX")))
         except (TypeError, ValueError, AttributeError):
             pass
 
@@ -57,16 +60,16 @@ class CategoryManagerTypographyController:
         base_hanzi = group_hanzi.font()
 
         label_entry = QFont(base_entry)
-        label_entry.setPointSize(label_entry.pointSize() + int(self.dialog._LABEL_FONT_DELTA_PT))
+        label_entry.setPointSize(label_entry.pointSize() + int(self._dlg.get("_LABEL_FONT_DELTA_PT")))
 
         label_hanzi = QFont(base_hanzi)
-        label_hanzi.setPointSize(label_hanzi.pointSize() + int(self.dialog._LABEL_FONT_DELTA_PT))
+        label_hanzi.setPointSize(label_hanzi.pointSize() + int(self._dlg.get("_LABEL_FONT_DELTA_PT")))
 
         input_entry = QFont(base_entry)
-        input_entry.setPointSize(input_entry.pointSize() + int(self.dialog._INPUT_FONT_DELTA_PT))
+        input_entry.setPointSize(input_entry.pointSize() + int(self._dlg.get("_INPUT_FONT_DELTA_PT")))
 
         input_hanzi = QFont(base_hanzi)
-        input_hanzi.setPointSize(int(self.dialog._HANZI_TEXT_DELTA_PT))
+        input_hanzi.setPointSize(int(self._dlg.get("_HANZI_TEXT_DELTA_PT")))
 
         # Apply label fonts
         for _r in range(form_hanzi.rowCount()):
@@ -79,21 +82,22 @@ class CategoryManagerTypographyController:
                     pass
 
         # Apply input fonts
-        jy = getattr(self.dialog, "_add_jy", None)
+        widgets = resolve_category_manager_widgets(self._dlg)
+        jy = widgets.get("add_jy")
         if jy is not None:
             try:
                 jy.setFont(input_entry)
             except (RuntimeError, TypeError, AttributeError):
                 pass
 
-        mn = getattr(self.dialog, "_add_mn", None)
+        mn = widgets.get("add_mn")
         if mn is not None:
             try:
                 mn.setFont(input_entry)
             except (RuntimeError, TypeError, AttributeError):
                 pass
 
-        hz = getattr(self.dialog, "_add_hz", None)
+        hz = widgets.get("add_hz")
         if hz is not None:
             try:
                 hz.setFont(input_hanzi)
@@ -115,7 +119,7 @@ class CategoryManagerTypographyController:
                 pass
 
         # Candidate combobox: leave platform defaults
-        combo = getattr(self.dialog, "_cand_combo", None)
+        combo = widgets.get("cand_combo")
         if combo is not None:
             try:
                 combo.setStyleSheet("")
@@ -133,9 +137,10 @@ class CategoryManagerTypographyController:
         Temporary diagnostic for clipping / sizing issues. Must never raise.
         """
         try:
-            hz = getattr(self.dialog, "_add_hz", None)
-            combo = getattr(self.dialog, "_cand_combo", None)
-            btn = getattr(self.dialog, "_btn_custom_hz", None)
+            widgets = resolve_category_manager_widgets(self._dlg)
+            hz = widgets.get("add_hz")
+            combo = widgets.get("cand_combo")
+            btn = widgets.get("btn_custom_hz")
 
             grp = None
             try:

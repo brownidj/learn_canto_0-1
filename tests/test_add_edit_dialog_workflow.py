@@ -215,9 +215,9 @@ def add_dialog_with_recovery():
     # Attach recovery method
     def reset_dialog_state():
         try:
-            reset_method = getattr(dialog, '_reset_to_initial_state', None)
-            if reset_method:
-                reset_method()
+            reset_ctrl = getattr(dialog, "_field_reset", None)
+            if reset_ctrl is not None and hasattr(reset_ctrl, "reset_to_initial_state"):
+                reset_ctrl.reset_to_initial_state()
             else:
                 logger.warning("No reset method found")
         except Exception as e:
@@ -576,7 +576,7 @@ def test_confirmation_dialog_cancel_resets_form(add_dialog):
 def test_add_entry_preview_captures_edits(add_dialog):
     """Verify that entry preview captures user edits to meaning."""
     import logging
-    from category_manager import AddEntryPreviewBuilder
+    from ui.category_manager_preview_builder import AddEntryPreviewBuilder
 
     logger = logging.getLogger(__name__)
 
@@ -854,9 +854,9 @@ def test_meaning_length_limits(add_dialog):
     # Verify behavior: either truncation or rejection
     # This depends on the specific implementation of meaning validation
     try:
-        preview_method = getattr(add_dialog, "_build_add_entry_preview", None)
-        if preview_method:
-            preview = preview_method()
+        preview_ctrl = getattr(add_dialog, "_preview_confirm", None)
+        if preview_ctrl is not None and hasattr(preview_ctrl, "build_add_entry_preview"):
+            preview = preview_ctrl.build_add_entry_preview()
 
             # Check that meaning was either truncated or rejected
             assert len(preview.get("meaning", "")) <= 1000, "Extremely long meaning should be truncated"

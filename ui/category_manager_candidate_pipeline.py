@@ -7,6 +7,9 @@ Handles Hanzi candidate lookup, style detection, and curation.
 import logging
 from typing import TYPE_CHECKING
 
+from ui.category_manager_dialog_adapter import CategoryManagerDialogAdapter
+from ui.category_manager_candidate_context import CandidatePipelineContext, build_candidate_context
+
 if TYPE_CHECKING:
     from category_manager import CategoryManagerDialog
 
@@ -18,30 +21,39 @@ class CategoryManagerCandidatePipeline:
 
     def __init__(self, dialog: "CategoryManagerDialog"):
         self.dialog = dialog
+        self._dlg = CategoryManagerDialogAdapter(dialog)
 
     def reverse_candidates_for_jy(self, jy: str) -> list[tuple[str, str, int]]:
         """Return Tier-1 reverse candidates for a Jyutping (deterministic, test-friendly)."""
         jy_s = str(jy or "").strip()
         if not jy_s:
             return []
-
-        # Locate reverse index (multiple historical attribute names)
-        rev = None
-        for attr in ("_reverse_index", "_rev_index", "_reverse_jyut_index"):
-            try:
-                v = getattr(self.dialog, attr, None)
-            except (TypeError, AttributeError, RuntimeError):
-                v = None
-            if isinstance(v, dict):
-                rev = v
-                break
+        try:
+            from domain.jyutping_validation import normalize_jyutping
+            jy_s = normalize_jyutping(jy_s)
+        except (ImportError, AttributeError, TypeError, ValueError):
+            jy_s = " ".join(jy_s.lower().split())
 
         items = []
+        rev = build_candidate_context(self._dlg).reverse_index
+        try:
+            print(
+                "DBG[CAND] reverse_candidates_for_jy",
+                f"jy='{jy_s}'",
+                f"rev_none={rev is None}",
+                f"rev_size={len(rev) if isinstance(rev, dict) else 'na'}",
+            )
+        except Exception:
+            pass
         if isinstance(rev, dict):
             try:
                 items = rev.get(jy_s) or []
             except (TypeError, AttributeError, RuntimeError):
                 items = []
+        try:
+            print(f"DBG[CAND] reverse_candidates_for_jy items={len(items) if items is not None else 'None'}")
+        except Exception:
+            pass
 
         out: list[tuple[str, str, int]] = []
         try:
@@ -73,13 +85,54 @@ class CategoryManagerCandidatePipeline:
 
         return out
 
+
+class CandidatePipelineProvider:
+    """Adapter to expose candidate lookup via a stable interface."""
+
+    def __init__(self, dialog: "CategoryManagerDialog"):
+        self._dialog = dialog
+        self._dlg = CategoryManagerDialogAdapter(dialog)
+        self._ctx = build_candidate_context(self._dlg)
+
+    def get_candidates(self, jy: str) -> list[tuple[str, str, int]]:
+        hanzi_pipeline = self._dlg.get("_hanzi_pipeline")
+        if hanzi_pipeline is not None and hasattr(hanzi_pipeline, "run"):
+            try:
+                print(
+                    "DBG[CAND] provider pipeline",
+                    f"type={type(hanzi_pipeline).__name__}",
+                    "mode=hanzi_pipeline",
+                )
+            except Exception:
+                pass
+            try:
+                return list(hanzi_pipeline.run(jy) or [])
+            except Exception:
+                return []
+
+        pipeline = self._dlg.get("_candidate_pipeline")
+        try:
+            print(
+                "DBG[CAND] provider pipeline",
+                f"type={type(pipeline).__name__ if pipeline is not None else 'None'}",
+                f"has_reverse={hasattr(pipeline, 'reverse_candidates_for_jy') if pipeline is not None else False}",
+            )
+        except Exception:
+            pass
+        if pipeline is not None and hasattr(pipeline, "reverse_candidates_for_jy"):
+            try:
+                return list(pipeline.reverse_candidates_for_jy(jy) or [])
+            except Exception:
+                return []
+        return []
+
     def load_hanzi_style_map(self) -> dict:
         """Lazy-load data/hanzi_style.yaml (Hanzi -> {style, source, notes}).
 
         Back-compat wrapper around the internal _HanziStyleIndex.
         """
         try:
-            style_index = getattr(self.dialog, "_style_index", None)
+            style_index = self._ctx.style_index
             if style_index is not None and hasattr(style_index, "load"):
                 return style_index.load()
         except (AttributeError, OSError, TypeError, ValueError, RuntimeError):
@@ -89,7 +142,7 @@ class CategoryManagerCandidatePipeline:
     def hanzi_style(self, hanzi: str) -> str:
         """Back-compat wrapper for style lookup."""
         try:
-            style_index = getattr(self.dialog, "_style_index", None)
+            style_index = self._ctx.style_index
             if style_index is not None and hasattr(style_index, "style_for"):
                 return style_index.style_for(hanzi)
         except (AttributeError, OSError, TypeError, ValueError, RuntimeError):
@@ -99,7 +152,7 @@ class CategoryManagerCandidatePipeline:
     def is_colloquial_hanzi(self, hanzi: str) -> bool:
         """Back-compat wrapper for colloquial detection."""
         try:
-            style_index = getattr(self.dialog, "_style_index", None)
+            style_index = self._ctx.style_index
             if style_index is not None and hasattr(style_index, "is_colloquial"):
                 return style_index.is_colloquial(hanzi)
         except (AttributeError, OSError, TypeError, ValueError, RuntimeError):
@@ -109,11 +162,10 @@ class CategoryManagerCandidatePipeline:
     def curate_top_hanzi_candidates(self, ranked: list[str]) -> list[str]:
         """Back-compat wrapper to curate the top candidates for the UI."""
         try:
-            curator = getattr(self.dialog, "_candidate_curator", None)
+            curator = self._ctx.candidate_curator
             if curator is not None and hasattr(curator, "curate"):
                 return curator.curate(ranked)
         except (AttributeError, OSError, TypeError, ValueError, RuntimeError):
             pass
 
-        max_candidates = getattr(self.dialog, "MAX_HANZI_CANDIDATES", 10)
-        return (ranked or [])[:max_candidates]
+        return (ranked or [])[: self._ctx.max_candidates]

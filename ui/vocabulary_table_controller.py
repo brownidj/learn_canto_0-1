@@ -7,9 +7,6 @@ from __future__ import annotations
 from typing import Any, Callable
 from dataclasses import dataclass
 
-from ui.widget_utils import WidgetAccessor
-
-
 @dataclass(frozen=True)
 class TableRow:
     """Single row in vocabulary table."""

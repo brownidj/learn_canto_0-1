@@ -10,6 +10,8 @@ import os
 import time
 from typing import TYPE_CHECKING
 
+from domain.add_edit_sm import AddEditContext, AddEditState
+
 if TYPE_CHECKING:
     from category_manager import CategoryManagerDialog
 
@@ -29,14 +31,17 @@ class CategoryManagerInitializer:
     ) -> None:
         """Run all initialization steps for the dialog."""
         self._init_session_state()
+        self._init_add_edit_state()
         self._init_style_and_curator()
         self._init_vocab_and_categories(vocab_items, categories_map)
         self._reload_categories_from_disk_if_needed()
         self._init_reverse_lookup_caches()
         self._init_meaning_resolver()
         self._init_cantonese_language_service()
+        self._init_cantonese_meaning_controller()
         self._init_vocabulary_service()
         self._init_hanzi_pipeline()
+        self._init_candidate_provider()
         self._init_optional_category_profiles()
 
     def _init_session_state(self) -> None:
@@ -53,6 +58,28 @@ class CategoryManagerInitializer:
         self.dialog._manual_hanzi_mode = False
         self.dialog._cat_combo_ctrl = None
         self.dialog._add_edit_wired = False
+
+    def _init_add_edit_state(self) -> None:
+        """Initialize Add/Edit state machine baseline."""
+        self.dialog._add_edit_state = AddEditState.EMPTY
+        self.dialog._add_edit_ctx = AddEditContext(
+            jy="",
+            jy_ok=False,
+            duplicate=None,
+            hanzi="",
+            hz_ok=False,
+            manual_hanzi=False,
+            meaning="",
+            mn_ok=False,
+            category="",
+            cat_ok=False,
+            saving=False,
+        )
+        try:
+            state_svc = getattr(self.dialog, "_state_svc", None)
+            self.dialog._add_edit_vm = state_svc.get_state() if state_svc is not None else None
+        except Exception:
+            self.dialog._add_edit_vm = None
 
     def _init_style_and_curator(self) -> None:
         """Initialize UI-free helpers for style and candidate curation."""
@@ -197,11 +224,21 @@ class CategoryManagerInitializer:
 
         # Tier 1: reverse index
         reverse_index = getattr(parent, "_reverse_index", None) if parent else None
-        if not isinstance(reverse_index, dict):
+        if not isinstance(reverse_index, dict) or not reverse_index:
             reverse_index = {}
+            try:
+                from domain.storage_paths import load_reverse_jyut_map, reverse_jyut_yaml_path
+                from domain.jyutping_validation import normalize_jyutping
+
+                reverse_index = load_reverse_jyut_map(
+                    reverse_jyut_yaml_path(),
+                    normalize_key=normalize_jyutping,
+                )
+            except (ImportError, OSError, AttributeError, TypeError, ValueError, RuntimeError):
+                reverse_index = reverse_index or {}
         self.dialog._reverse_index = reverse_index
 
-        src = "parent" if parent and isinstance(getattr(parent, "_reverse_index", None), dict) else "empty"
+        src = "parent" if parent and isinstance(getattr(parent, "_reverse_index", None), dict) else "loaded"
         try:
             size = len(self.dialog._reverse_index)
             logger.debug("CacheAudit: reverse_index source=%s size=%d", src, int(size))
@@ -210,13 +247,21 @@ class CategoryManagerInitializer:
 
         # Tier 2: shared Unihan char map
         char_map = getattr(parent, "_char_map", None) if parent else None
-        if not isinstance(char_map, dict):
+        if not isinstance(char_map, dict) or not char_map:
             char_map = {}
+            try:
+                from infra.paths import project_root
+                from infra.unihan import load_unihan_char_map
+
+                char_map = load_unihan_char_map(project_root())
+            except (ImportError, OSError, AttributeError, TypeError, ValueError, RuntimeError):
+                char_map = char_map or {}
         self.dialog._char_map = char_map
 
         # Share back to parent
         if parent:
             try:
+                setattr(parent, "_reverse_index", self.dialog._reverse_index)
                 setattr(parent, "_char_map", self.dialog._char_map)
             except (AttributeError, TypeError):
                 pass
@@ -238,13 +283,27 @@ class CategoryManagerInitializer:
             )
 
         try:
+            from domain.jyutping_validation import normalize_jyutping
             self.dialog._hanzi_pipeline = HanziCandidatePipeline(
-                normalize_jyutping=self.dialog._normalize_jy
+                normalize_jyutping=normalize_jyutping
             )
         except (AttributeError, TypeError, ValueError, RuntimeError):
             self.dialog._hanzi_pipeline = HanziCandidatePipeline(
                 normalize_jyutping=lambda s: " ".join((s or "").strip().lower().split())
             )
+
+    def _init_candidate_provider(self) -> None:
+        """Initialize candidate provider adapter if not explicitly provided."""
+        try:
+            if getattr(self.dialog, "_candidate_provider", None) is not None:
+                return
+        except Exception:
+            pass
+        try:
+            from ui.category_manager_candidate_pipeline import CandidatePipelineProvider
+            self.dialog._candidate_provider = CandidatePipelineProvider(self.dialog)
+        except Exception:
+            self.dialog._candidate_provider = None
 
     def _init_meaning_resolver(self) -> None:
         """Initialize meaning resolver (optional)."""
@@ -279,6 +338,14 @@ class CategoryManagerInitializer:
             logger.warning("Cantonese language service init failed: %s", e)
             self.dialog._canto_service = None
 
+    def _init_cantonese_meaning_controller(self) -> None:
+        """Initialize Cantonese meaning controller (optional)."""
+        from ui.cantonese_meaning_controller import CantoneseMeaningController
+
+        svc = getattr(self.dialog, "_canto_service", None)
+        self.dialog._canto_ctrl = CantoneseMeaningController(self.dialog, svc)
+        logger.debug("Cantonese meaning controller initialized")
+
     def _init_vocabulary_service(self) -> None:
         """Initialize VocabularyService (Week 2 refactoring)."""
         self.dialog._vocab_service = None
@@ -288,15 +355,16 @@ class CategoryManagerInitializer:
             from domain.vocabulary_service import VocabularyService
             from domain.entry_validation import EntryValidator
 
+            from domain.jyutping_validation import normalize_jyutping
             self.dialog._entry_validator = EntryValidator(
-                normalize_jy=self.dialog._normalize_jy,
+                normalize_jy=normalize_jyutping,
                 valid_categories=set(self.dialog._all_cats) if hasattr(self.dialog, "_all_cats") else None,
             )
 
             self.dialog._vocab_service = VocabularyService(
                 vocab=self.dialog._vocab,
                 categories=self.dialog._cats,
-                normalize_jy=self.dialog._normalize_jy,
+                normalize_jy=normalize_jyutping,
             )
 
             logger.debug("VocabularyService initialized successfully")

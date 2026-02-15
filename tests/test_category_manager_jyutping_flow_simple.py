@@ -46,19 +46,25 @@ class TestSignalDelegationMethods:
     """Test that delegation methods exist and are callable."""
 
     def test_jyutping_enter_delegation_exists(self, empty_dialog):
-        """Verify _on_jyut_enter delegation method exists and is callable."""
-        assert hasattr(empty_dialog, "_on_jyut_enter")
-        assert callable(empty_dialog._on_jyut_enter)
+        """Verify flow controller exposes on_jyut_enter."""
+        flow = getattr(empty_dialog, "_add_edit_flow", None)
+        assert flow is not None
+        assert hasattr(flow, "on_jyut_enter")
+        assert callable(flow.on_jyut_enter)
 
     def test_meaning_enter_delegation_exists(self, empty_dialog):
-        """Verify _on_meaning_enter_committed delegation method exists."""
-        assert hasattr(empty_dialog, "_on_meaning_enter_committed")
-        assert callable(empty_dialog._on_meaning_enter_committed)
+        """Verify flow controller exposes on_meaning_enter_committed."""
+        flow = getattr(empty_dialog, "_add_edit_flow", None)
+        assert flow is not None
+        assert hasattr(flow, "on_meaning_enter_committed")
+        assert callable(flow.on_meaning_enter_committed)
 
     def test_candidate_selection_delegation_exists(self, empty_dialog):
-        """Verify _on_candidate_index_activated delegation method exists."""
-        assert hasattr(empty_dialog, "_on_candidate_index_activated")
-        assert callable(empty_dialog._on_candidate_index_activated)
+        """Verify flow controller exposes on_candidate_index_activated."""
+        flow = getattr(empty_dialog, "_add_edit_flow", None)
+        assert flow is not None
+        assert hasattr(flow, "on_candidate_index_activated")
+        assert callable(flow.on_candidate_index_activated)
 
 
 # ============================================================================
@@ -78,7 +84,7 @@ class TestDuplicateDetection:
             dialog_with_vocab._add_jy.setText("nei5 hou2")
 
             # Simulate Enter
-            dialog_with_vocab._on_jyut_enter()
+            dialog_with_vocab._add_edit_flow.on_jyut_enter()
 
             # Process Qt events
             app = QApplication.instance()
@@ -112,7 +118,7 @@ class TestFocusFlow:
         empty_dialog._add_jy.setFocus()
 
         # Call the delegation method (which should trigger focus advancement)
-        empty_dialog._on_jyut_enter()
+        empty_dialog._add_edit_flow.on_jyut_enter()
 
         # Process Qt events
         app = QApplication.instance()

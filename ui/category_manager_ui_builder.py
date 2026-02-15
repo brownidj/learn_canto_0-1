@@ -64,8 +64,12 @@ class CategoryManagerUIBuilder:
         self.dialog.btn_save = QPushButton("Save")
         self.dialog.btn_save.setObjectName("btn_save")
 
-        if callable(getattr(self.dialog, "_on_save_clicked", None)):
-            self.dialog.btn_save.clicked.connect(self.dialog._on_save_clicked)
+        try:
+            save_ctrl = getattr(self.dialog, "_save_commit", None)
+        except (TypeError, AttributeError, RuntimeError):
+            save_ctrl = None
+        if save_ctrl is not None and hasattr(save_ctrl, "on_save_clicked"):
+            self.dialog.btn_save.clicked.connect(save_ctrl.on_save_clicked)
 
         self.dialog.btn_save.setDefault(False)
         self.dialog.btn_save.setAutoDefault(False)
@@ -74,7 +78,9 @@ class CategoryManagerUIBuilder:
 
         # Hide by default
         try:
-            self.dialog._set_save_button_visible(False)
+            preview_ctrl = getattr(self.dialog, "_preview_confirm", None)
+            if preview_ctrl is not None:
+                preview_ctrl.set_save_button_visible(False)
         except (AttributeError, TypeError, ValueError, RuntimeError):
             pass
 
@@ -84,8 +90,6 @@ class CategoryManagerUIBuilder:
 
     def _create_entry_group(self) -> None:
         """Create Entry group (Jyutping, Meanings, Notes, Category)."""
-        from category_manager import HANZI_CANDIDATE_TOOLTIP
-
         # Save header first
         self._create_save_header()
 
@@ -162,6 +166,15 @@ class CategoryManagerUIBuilder:
         self.dialog._add_cat.setCurrentIndex(-1)
         self.dialog._add_cat.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
+        try:
+            from PySide6.QtWidgets import QListView
+            from PySide6.QtCore import Qt
+            cat_view = QListView(self.dialog._add_cat)
+            cat_view.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            self.dialog._add_cat.setView(cat_view)
+        except Exception:
+            pass
+
         le_cat = self.dialog._add_cat.lineEdit()
         if le_cat is not None:
             le_cat.setPlaceholderText("Type category")
@@ -170,14 +183,35 @@ class CategoryManagerUIBuilder:
         # Wire category controller
         try:
             from ui.category_combo import CategoryComboController
-            _on_cat_commit = getattr(self.dialog, "_on_add_category_committed", None)
+            _on_cat_commit = None
+            try:
+                ops = getattr(self.dialog, "_category_ops", None)
+                if ops is not None and hasattr(ops, "on_add_category_committed"):
+                    _on_cat_commit = ops.on_add_category_committed
+            except (TypeError, AttributeError, RuntimeError):
+                _on_cat_commit = None
+            _on_add_new = None
+            try:
+                ops = getattr(self.dialog, "_category_ops", None)
+                if ops is not None and hasattr(ops, "add_new_category"):
+                    _on_add_new = ops.add_new_category
+            except (TypeError, AttributeError, RuntimeError):
+                _on_add_new = None
             self.dialog._cat_combo_ctrl = CategoryComboController(
                 combo=self.dialog._add_cat,
                 on_commit=_on_cat_commit if callable(_on_cat_commit) else None,
-                on_add_new=None,
             )
+            try:
+                from ui.category_combo_add import CategoryComboAddController
+                self.dialog._cat_combo_add_ctrl = CategoryComboAddController(
+                    combo_ctrl=self.dialog._cat_combo_ctrl,
+                    on_add_new=_on_add_new if callable(_on_add_new) else None,
+                )
+            except Exception:
+                self.dialog._cat_combo_add_ctrl = None
         except (ImportError, TypeError, AttributeError, RuntimeError):
             self.dialog._cat_combo_ctrl = None
+            self.dialog._cat_combo_add_ctrl = None
 
         # Category label with 16pt font
         from PySide6.QtGui import QFont
@@ -232,7 +266,7 @@ class CategoryManagerUIBuilder:
 
     def _create_hanzi_group(self) -> None:
         """Create Hanzi group (display, candidates, manual button)."""
-        from category_manager import HANZI_CANDIDATE_TOOLTIP
+        from ui.category_manager_constants import HANZI_CANDIDATE_TOOLTIP
 
         row = self.dialog._root.itemAt(self.dialog._root.count() - 1)
         if not isinstance(row, QHBoxLayout):
@@ -253,10 +287,23 @@ class CategoryManagerUIBuilder:
         form_hanzi.addRow(self.dialog._add_hz)
 
         # Candidate combo
+        from ui.category_manager_combo_styles import HanziComboBoxProxyStyle
         self.dialog._cand_combo = QComboBox(group_hanzi)
+        try:
+            self.dialog._cand_combo.setStyle(HanziComboBoxProxyStyle())
+        except Exception:
+            pass
         self.dialog._cand_combo.setObjectName("comboHanziCandidates")
         self.dialog._cand_combo.setVisible(False)
         self.dialog._cand_combo.setToolTip(HANZI_CANDIDATE_TOOLTIP)
+        try:
+            from PySide6.QtWidgets import QListView
+            from PySide6.QtCore import Qt
+            cand_view = QListView(self.dialog._cand_combo)
+            cand_view.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            self.dialog._cand_combo.setView(cand_view)
+        except Exception:
+            pass
         if self.dialog._cand_combo.view() is not None:
             self.dialog._cand_combo.view().setToolTip(HANZI_CANDIDATE_TOOLTIP)
 
@@ -319,7 +366,7 @@ class CategoryManagerUIBuilder:
     def _create_table_panel(self) -> None:
         """Create vocabulary table panel."""
         try:
-            from table_scroll_slider_controller import TableScrollSliderController
+            from ui.table_scroll_slider_controller import TableScrollSliderController
         except (ImportError, ModuleNotFoundError):
             TableScrollSliderController = None
 

@@ -34,15 +34,13 @@ def test_category_manager_dialog_smoke_ui():
 
 
 @pytest.mark.ui
-@pytest.mark.skip(reason="Refactoring: Validation moved to domain layer, test needs rewrite")
-def test_category_manager_dialog_uses_domain_validate_jyut_syllables(monkeypatch):
-    """Regression: CategoryManagerDialog must delegate detailed Jyutping validation to domain.jyutping_validation."""
+def test_category_manager_dialog_does_not_wrap_validate_jyut_syllables():
+    """Regression: dialog should not own Jyutping validation helpers; use domain layer directly."""
     _skip_if_headless_ci()
 
     pytest.importorskip("PySide6")
     from PySide6.QtWidgets import QApplication
 
-    import category_manager as cm
     from category_manager import CategoryManagerDialog
 
     app = QApplication.instance() or QApplication([])
@@ -52,18 +50,12 @@ def test_category_manager_dialog_uses_domain_validate_jyut_syllables(monkeypatch
 
     dlg = CategoryManagerDialog(None, vocab_items=vocab, categories_map=cats)
 
-    called = {"n": 0}
+    assert not hasattr(dlg, "_validate_jyut_syllables")
 
-    def fake_validate(jy: str):
-        called["n"] += 1
-        return True, None
-
-    monkeypatch.setattr(cm, "validate_jyut_syllables", fake_validate)
-
-    ok, reason = dlg._validate_jyut_syllables("nei5 hou2")
+    from domain.jyutping_validation import validate_jyut_syllables
+    ok, reason = validate_jyut_syllables("nei5 hou2")
     assert ok is True
     assert reason is None
-    assert called["n"] == 1
 
     dlg.close()
     app.processEvents()

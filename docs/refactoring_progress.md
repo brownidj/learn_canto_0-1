@@ -49,7 +49,6 @@ Transform a monolithic 3000+ line `category_manager.py` with 500+ scattered try/
 - ✅ `ui/widget_utils.py` (350 lines) - Safe widget accessors
 - ✅ `ui/focus_manager.py` (150 lines) - Centralized focus logic
 - ✅ `ui/form_state_controller.py` (120 lines) - Save button management
-- ✅ `ui/add_edit_panel.py` (300 lines) - Complete form controller
 - ✅ 76+ tests, 100% coverage
 - ✅ Integrated into `category_manager.py` (-400 lines)
 
@@ -65,10 +64,10 @@ Transform a monolithic 3000+ line `category_manager.py` with 500+ scattered try/
 
 ## Week 3: Integration & Table Refactoring 🔄
 
-**Goal**: Complete AddEditPanel integration, extract table logic
+**Goal**: Finalize Add/Edit services integration, extract table logic
 
 ### Planned
-- [ ] Replace remaining form logic with AddEditPanel
+- [x] Consolidate Add/Edit flow into services (AddEditStateService + AddEditCandidateService)
 - [ ] Create VocabularyTableModel (Qt MVC)
 - [ ] Extract search/filter logic
 - [ ] Category assignment through model
@@ -124,7 +123,6 @@ Transform a monolithic 3000+ line `category_manager.py` with 500+ scattered try/
 - ✅ `ui/widget_utils.py`
 - ✅ `ui/focus_manager.py`
 - ✅ `ui/form_state_controller.py`
-- ✅ `ui/add_edit_panel.py`
 
 ### Tests (Weeks 1-2)
 - ✅ `tests/test_vocabulary_service_pure.py`
@@ -132,7 +130,6 @@ Transform a monolithic 3000+ line `category_manager.py` with 500+ scattered try/
 - ✅ `tests/test_widget_utils_pure.py`
 - ✅ `tests/test_focus_manager_pure.py`
 - ✅ `tests/test_form_state_controller_pure.py`
-- ✅ `tests/test_add_edit_panel_pure.py`
 - ✅ `tests/test_import_check.py`
 
 **Total**: 13 new files, ~1600 lines of clean, tested code

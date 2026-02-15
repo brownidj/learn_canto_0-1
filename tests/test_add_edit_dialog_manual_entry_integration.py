@@ -157,9 +157,12 @@ def test_add_edit_manual_hanzi_entry_does_not_dead_end(qapp, monkeypatch):
     except Exception:
         pass
 
-    # Patch the dialog's Tier-1/2 hooks if they exist.
-    if hasattr(dlg, "_reverse_candidates_for_jy"):
-        monkeypatch.setattr(dlg, "_reverse_candidates_for_jy", lambda *_a, **_k: [], raising=False)
+    # Patch the dialog's candidate provider if present.
+    try:
+        from domain.candidate_provider import SimpleCandidateProvider
+        dlg._candidate_provider = SimpleCandidateProvider({})
+    except Exception:
+        pass
     if hasattr(dlg, "compose_candidates_from_chars"):
         monkeypatch.setattr(dlg, "compose_candidates_from_chars", lambda *_a, **_k: [], raising=False)
     if hasattr(dlg, "_compose_candidates_from_chars"):

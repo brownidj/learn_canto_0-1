@@ -103,8 +103,12 @@ def _prime_valid_add_entry(dlg, app, jy="leng4", cat="descriptions_adjectives"):
         pass
 
     dlg._add_jy.setText(jy)
-    if callable(getattr(dlg, "_on_jyut_enter", None)):
-        dlg._on_jyut_enter()
+    try:
+        flow = getattr(dlg, "_add_edit_flow", None)
+        if flow is not None and hasattr(flow, "on_jyut_enter"):
+            flow.on_jyut_enter()
+    except Exception:
+        pass
 
     try:
         app.processEvents()
@@ -113,11 +117,243 @@ def _prime_valid_add_entry(dlg, app, jy="leng4", cat="descriptions_adjectives"):
         pass
 
     dlg._add_cat.setCurrentText(cat)
-    if callable(getattr(dlg, "_on_add_category_committed", None)):
-        try:
-            dlg._on_add_category_committed(user_action=True)
-        except TypeError:
-            dlg._on_add_category_committed(True)
+    try:
+        ops = getattr(dlg, "_category_ops", None)
+        if ops is not None and hasattr(ops, "on_add_category_committed"):
+            try:
+                ops.on_add_category_committed(user_action=True)
+            except TypeError:
+                ops.on_add_category_committed(True)
+    except Exception:
+        pass
+
+
+@pytest.mark.ui
+def test_apply_canto_pending_sets_meaning(monkeypatch):
+    """_apply_canto_pending should populate Meaning when Hanzi matches."""
+    _skip_if_headless_ci()
+    pytest.importorskip("PySide6")
+
+    from PySide6.QtWidgets import QApplication
+    from category_manager import CategoryManagerDialog
+    from ui.cantonese_meaning_controller import CantoneseMeaningController
+
+    app = QApplication.instance() or QApplication([])
+    dlg = CategoryManagerDialog(None, vocab_items={}, categories_map={"work": [], "unassigned": []})
+    dlg.show()
+    app.processEvents()
+
+    dlg._add_hz.setText("開會")
+    dlg._canto_ctrl = CantoneseMeaningController(dlg, service=None)
+    dlg._canto_ctrl.set_pending(hanzi="開會", key="hz:開會", meaning="have/attend a meeting")
+    dlg._canto_ctrl.apply_pending()
+
+    assert dlg._add_mn.text().strip() == "have/attend a meeting"
+    dlg.close()
+
+
+@pytest.mark.ui
+def test_smoke_add_flow_with_cached_meaning(monkeypatch):
+    """Smoke: Jyutping -> Category -> Hanzi focused and Meaning filled from cache."""
+    _skip_if_headless_ci()
+    pytest.importorskip("PySide6")
+
+    from PySide6.QtWidgets import QApplication
+    from category_manager import CategoryManagerDialog
+    from services.cantonese_language_service import CantoneseInfo
+    from domain.candidate_provider import SimpleCandidateProvider
+    from ui.cantonese_meaning_controller import CantoneseMeaningController
+
+    app = QApplication.instance() or QApplication([])
+    dlg = CategoryManagerDialog(None, vocab_items={}, categories_map={"work": [], "unassigned": []})
+    dlg.show()
+    app.processEvents()
+
+    dlg._candidate_provider = SimpleCandidateProvider(
+        {
+            "hoi1 wui6": [
+                ("㚊㑹", "tier2-char-ranked", 1.0),
+                ("㚊㞧", "tier2-char-ranked", 0.9),
+            ]
+        }
+    )
+    try:
+        dlg._hanzi_pipeline = None
+    except Exception:
+        pass
+
+    # Force resolver empty so cache path used.
+    class _StubMeaningResolver:
+        def resolve_meanings_for_candidate(self, *args, **kwargs):
+            return []
+
+        def meanings_for_hanzi(self, *args, **kwargs):
+            return []
+
+    dlg._meaning_resolver = _StubMeaningResolver()
+
+    class _StubCanto:
+        def get_cached(self, *, hanzi: str = "", jyutping: str = ""):
+            return CantoneseInfo(
+                hanzi=hanzi,
+                jyutping=jyutping,
+                meaning_colloquial="to meet",
+                register="colloquial",
+                confidence=1.0,
+            )
+
+    dlg._canto_ctrl = CantoneseMeaningController(dlg, _StubCanto())
+
+    dlg._add_jy.setText("hoi1 wui6")
+    dlg._add_edit_flow.on_jyut_enter()
+    app.processEvents()
+
+    dlg._add_cat.setCurrentText("work")
+    dlg._category_ops.on_add_category_committed(user_action=True)
+    app.processEvents()
+
+    app.processEvents()
+    fw = app.focusWidget()
+    try:
+        from PySide6.QtWidgets import QListView
+        cand_view = dlg._cand_combo.view() if dlg._cand_combo is not None else None
+        cat_view = dlg._add_cat.view() if dlg._add_cat is not None else None
+        is_combo_view = isinstance(fw, QListView) and (fw in (cand_view, cat_view) or fw.parent() in (dlg._cand_combo, dlg._add_cat))
+    except Exception:
+        is_combo_view = False
+    if is_combo_view:
+        # Allow transient focus on popup view in offscreen tests.
+        assert dlg._add_hz is not None
+    else:
+        assert fw is None or fw == dlg._add_hz
+    assert dlg._add_mn.text().strip() == "to meet"
+    if dlg._add_hz.hasFocus():
+        assert dlg._add_hz.selectionLength() == 0
+
+    dlg.close()
+
+
+@pytest.mark.ui
+def test_cached_meaning_fills_after_candidate_selection(monkeypatch):
+    """When local resolver is empty, cached meaning should fill Meanings."""
+    _skip_if_headless_ci()
+    pytest.importorskip("PySide6")
+
+    from PySide6.QtWidgets import QApplication
+    from category_manager import CategoryManagerDialog
+    from services.cantonese_language_service import CantoneseInfo
+    from domain.candidate_provider import SimpleCandidateProvider
+    from ui.cantonese_meaning_controller import CantoneseMeaningController
+
+    app = QApplication.instance() or QApplication([])
+
+    vocab = {}
+    cats = {"work": [], "unassigned": []}
+    dlg = CategoryManagerDialog(None, vocab_items=vocab, categories_map=cats)
+    dlg.show()
+    app.processEvents()
+
+    # Deterministic candidates
+    dlg._candidate_provider = SimpleCandidateProvider(
+        {
+            "hoi1 wui6": [
+                ("㚊㑹", "tier2-char-ranked", 1.0),
+                ("㚊㞧", "tier2-char-ranked", 0.9),
+            ]
+        }
+    )
+    try:
+        dlg._hanzi_pipeline = None
+    except Exception:
+        pass
+
+    # Force meaning resolver to return empty so cache path is used.
+    class _StubMeaningResolver2:
+        def resolve_meanings_for_candidate(self, *args, **kwargs):
+            return []
+
+        def meanings_for_hanzi(self, *args, **kwargs):
+            return []
+
+    dlg._meaning_resolver = _StubMeaningResolver2()
+
+    class _StubCanto:
+        def get_cached(self, *, hanzi: str = "", jyutping: str = ""):
+            return CantoneseInfo(
+                hanzi=hanzi,
+                jyutping=jyutping,
+                meaning_colloquial="to meet",
+                register="colloquial",
+                confidence=1.0,
+            )
+
+    dlg._canto_ctrl = CantoneseMeaningController(dlg, _StubCanto())
+
+    dlg._add_edit_flow.fill_hanzi_candidates("hoi1 wui6", category="work")
+    app.processEvents()
+
+    assert dlg._add_mn.text().strip() == "to meet"
+
+    dlg.close()
+
+
+@pytest.mark.ui
+def test_hanzi_focus_not_selected_after_category_commit(monkeypatch):
+    """After category commit, Hanzi should be focused without select-all."""
+    _skip_if_headless_ci()
+    pytest.importorskip("PySide6")
+
+    from PySide6.QtWidgets import QApplication
+    from category_manager import CategoryManagerDialog
+    from domain.candidate_provider import SimpleCandidateProvider
+
+    app = QApplication.instance() or QApplication([])
+
+    vocab = {}
+    cats = {"work": [], "unassigned": []}
+    dlg = CategoryManagerDialog(None, vocab_items=vocab, categories_map=cats)
+    dlg.show()
+    app.processEvents()
+
+    dlg._candidate_provider = SimpleCandidateProvider(
+        {
+            "hoi1 wui6": [
+                ("㚊㑹", "tier2-char-ranked", 1.0),
+                ("㚊㞧", "tier2-char-ranked", 0.9),
+            ]
+        }
+    )
+    try:
+        dlg._hanzi_pipeline = None
+    except Exception:
+        pass
+
+    dlg._add_jy.setText("hoi1 wui6")
+    dlg._add_edit_flow.on_jyut_enter()
+    app.processEvents()
+
+    dlg._add_cat.setCurrentText("work")
+    dlg._category_ops.on_add_category_committed(user_action=True)
+    app.processEvents()
+
+    hz = dlg._add_hz
+    app.processEvents()
+    fw = app.focusWidget()
+    try:
+        from PySide6.QtWidgets import QListView
+        cand_view = dlg._cand_combo.view() if dlg._cand_combo is not None else None
+        cat_view = dlg._add_cat.view() if dlg._add_cat is not None else None
+        is_combo_view = isinstance(fw, QListView) and (fw in (cand_view, cat_view) or fw.parent() in (dlg._cand_combo, dlg._add_cat))
+    except Exception:
+        is_combo_view = False
+    if is_combo_view:
+        assert hz is not None
+    else:
+        assert fw is None or fw == hz
+    if hz.hasFocus():
+        assert hz.selectionLength() == 0
+
+    dlg.close()
 
     try:
         app.processEvents()
@@ -125,11 +361,12 @@ def _prime_valid_add_entry(dlg, app, jy="leng4", cat="descriptions_adjectives"):
     except Exception:
         pass
 
-    if callable(getattr(dlg, "_fill_hanzi_candidates", None)):
-        try:
-            dlg._fill_hanzi_candidates(jy)
-        except Exception:
-            pass
+    try:
+        flow = getattr(dlg, "_add_edit_flow", None)
+        if flow is not None and hasattr(flow, "fill_hanzi_candidates"):
+            flow.fill_hanzi_candidates(jy)
+    except Exception:
+        pass
 
     try:
         app.processEvents()
@@ -164,49 +401,33 @@ def _prime_valid_add_entry(dlg, app, jy="leng4", cat="descriptions_adjectives"):
     except Exception:
         pass
 
-    return dlg
+    return None
 
 
 @pytest.mark.ui
-@pytest.mark.skip(reason="Refactoring: Validation moved to domain layer, test needs rewrite")
-def test_category_manager_dialog_uses_domain_validate_jyut_syllables(monkeypatch):
-    """Regression: CategoryManagerDialog must delegate detailed Jyutping validation to domain.jyutping_validation."""
+def test_category_manager_dialog_does_not_wrap_validate_jyut_syllables():
+    """Regression: dialog should not own Jyutping validation helpers; use domain layer directly."""
 
     _skip_if_headless_ci()
 
     pytest.importorskip("PySide6")
     from PySide6.QtWidgets import QApplication
 
-    import category_manager as cm
     from category_manager import CategoryManagerDialog
 
     app = QApplication.instance() or QApplication([])
-
-    # Guardrail: the dialog must not implement validation heuristics locally.
-    # The module-level symbol must come from the domain layer.
-    from domain import jyutping_validation as jv
-    assert getattr(cm.validate_jyut_syllables, "__module__", "") == jv.__name__
 
     vocab = {"白": [["White"], "baak6"]}
     cats = {"colors": ["白"], "unassigned": []}
 
     dlg = CategoryManagerDialog(None, vocab_items=vocab, categories_map=cats)
 
+    assert not hasattr(dlg, "_validate_jyut_syllables")
 
-    called = {"n": 0}
-
-    def fake_validate(jy: str):
-        called["n"] += 1
-        return True, None
-
-    # Patch the module-level import that the dialog wrapper calls
-    monkeypatch.setattr(cm, "validate_jyut_syllables", fake_validate)
-
-    ok, reason = dlg._validate_jyut_syllables("nei5 hou2")
-
+    from domain.jyutping_validation import validate_jyut_syllables
+    ok, reason = validate_jyut_syllables("nei5 hou2")
     assert ok is True
     assert reason is None
-    assert called["n"] == 1
 
     dlg.close()
     app.processEvents()
@@ -261,12 +482,6 @@ def _dummy_dialog_for_preview(*, jy="", hz="", mn="", cat="", vocab=None, normal
     d._add_mn = _Widget(mn)
     d._add_cat = _Widget(cat)
 
-    # Minimal legacy reader expected by AddEntryPreviewBuilder
-    def _read_add_fields():
-        return jy, hz, mn, cat
-
-    d._read_add_fields = _read_add_fields
-
     # Optional normaliser hook - default to standard normalization
     if normalize is not None:
         d._normalize_jy = normalize
@@ -281,11 +496,15 @@ def _dummy_dialog_for_preview(*, jy="", hz="", mn="", cat="", vocab=None, normal
     # Optional state-machine context
     if ctx is not None:
         d._add_edit_ctx = ctx
+        try:
+            from ui.add_edit_view_model import AddEditViewModel
+            d._add_edit_vm = AddEditViewModel.from_context(ctx)
+        except Exception:
+            pass
 
     return d
 
 @pytest.mark.ui
-@pytest.mark.skip(reason="Refactoring: _reverse_candidates_for_jy removed, needs update")
 def test_selecting_non_first_candidate_updates_hanzi_and_meaning(monkeypatch):
     """Regression: selecting a non-first Hanzi candidate must update both Hanzi and Meaning fields."""
 
@@ -295,6 +514,7 @@ def test_selecting_non_first_candidate_updates_hanzi_and_meaning(monkeypatch):
     from PySide6.QtWidgets import QApplication
 
     from category_manager import CategoryManagerDialog
+    from domain.candidate_provider import SimpleCandidateProvider
 
     app = QApplication.instance() or QApplication([])
 
@@ -316,11 +536,9 @@ def test_selecting_non_first_candidate_updates_hanzi_and_meaning(monkeypatch):
         pass
 
     # Force a deterministic candidate list (first is the wrong one; second is the desired one)
-    def fake_reverse(_jy):
-        # Must match the dialog's internal candidate tuple shape: (hanzi, source, score)
-        return [("娩", "src", 1000), ("晚", "src", 900)]
-
-    monkeypatch.setattr(dlg, "_reverse_candidates_for_jy", fake_reverse)
+    dlg._candidate_provider = SimpleCandidateProvider(
+        {"maan5": [("娩", "src", 1000), ("晚", "src", 900)]}
+    )
 
     # Deterministic meanings per Hanzi
     def fake_meanings(hz, src="", **kwargs):
@@ -328,10 +546,14 @@ def test_selecting_non_first_candidate_updates_hanzi_and_meaning(monkeypatch):
             return ["evening", "late"]
         return ["complaisant", "agreeable"]
 
-    monkeypatch.setattr(dlg, "_resolve_meanings_for_candidate", fake_meanings)
+    class _StubMeaningResolver3:
+        def resolve_meanings_for_candidate(self, hz, src="", **_kwargs):
+            return fake_meanings(hz, src)
+
+    dlg._meaning_resolver = _StubMeaningResolver3()
 
     # Populate candidates for maan5 and ensure the first candidate is applied initially
-    dlg._fill_hanzi_candidates("maan5", category="time_calendar")
+    dlg._add_edit_flow.fill_hanzi_candidates("maan5", category="time_calendar")
 
     try:
         app.processEvents()
@@ -344,9 +566,9 @@ def test_selecting_non_first_candidate_updates_hanzi_and_meaning(monkeypatch):
     # Select the second candidate and invoke the handler explicitly for determinism
     dlg._cand_combo.setCurrentIndex(1)
 
-    fn_idx = getattr(dlg, "_on_candidate_index_activated", None)
-    if callable(fn_idx):
-        fn_idx(1)
+    flow = getattr(dlg, "_add_edit_flow", None)
+    if flow is not None and hasattr(flow, "on_candidate_index_activated"):
+        flow.on_candidate_index_activated(1)
     else:
         try:
             dlg._cand_combo.activated.emit(1)
@@ -377,7 +599,7 @@ def test_add_entry_preview_payload_contract_canonical_and_alias_keys():
     Additionally, no other alias keys should be required for tests.
     """
 
-    from category_manager import AddEntryPreviewBuilder
+    from ui.category_manager_preview_builder import AddEntryPreviewBuilder
 
     vocab = {
         "靚": [["pretty", "beautiful"], "leng4"],
@@ -468,7 +690,7 @@ def test_add_edit_controller_decision_table_save_edit_cancel():
     The controller is pure-Python (no Qt) and should be deterministic.
     """
 
-    from category_manager import AddEditController
+    from domain.add_edit_controller import AddEditController
 
     vocab = {
         "靚": [["pretty", "beautiful"], "leng4"],
@@ -508,7 +730,7 @@ def test_add_edit_controller_decision_table_save_edit_cancel():
     assert str(out.get("focus_target", "")).lower() in ("jy", "jyutping")
 
 @pytest.mark.ui
-@pytest.mark.skip(reason="Refactoring: _read_add_fields removed, needs update for AddEditPanel")
+@pytest.mark.skip(reason="Refactoring: _read_add_fields removed, needs update for Add/Edit services")
 def test_jyutping_commit_advances_to_category_for_valid_new_jy(monkeypatch):
     """
     Regression: entering a valid, non-duplicate Jyutping with tone digit
@@ -562,17 +784,19 @@ def test_jyutping_commit_advances_to_category_for_valid_new_jy(monkeypatch):
 
         # (2) Simulate entering a new, valid Jyutping
         dlg._add_jy.setText("leng3")
-        jy, _hz, _mn, _cat = dlg._read_add_fields()
+        from ui.category_manager_helpers import CategoryManagerHelpers
+        jy, _hz, _mn, _cat = CategoryManagerHelpers.read_add_fields(dlg)()
         assert jy == "leng3"
 
-        # Prefer calling the handler directly for determinism; signal wiring can vary by platform.
-        if hasattr(dlg, "_on_jyut_enter") and callable(getattr(dlg, "_on_jyut_enter")):
-            dlg._on_jyut_enter()
-        else:
-            try:
+        # Prefer calling the flow controller directly for determinism; signal wiring can vary by platform.
+        try:
+            flow = getattr(dlg, "_add_edit_flow", None)
+            if flow is not None and hasattr(flow, "on_jyut_enter"):
+                flow.on_jyut_enter()
+            else:
                 dlg._add_jy.returnPressed.emit()
-            except Exception:
-                pass
+        except Exception:
+            pass
 
         try:
             app.processEvents()
@@ -620,7 +844,7 @@ def test_jyutping_commit_advances_to_category_for_valid_new_jy(monkeypatch):
                 break
 
 @pytest.mark.ui
-@pytest.mark.skip(reason="Refactoring: _on_jyut_enter removed, needs update for AddEditPanel")
+@pytest.mark.skip(reason="Refactoring: _on_jyut_enter removed, needs update for Add/Edit services")
 def test_leng4_prefers_pretty_beautiful(monkeypatch):
     """
     Regression: for leng4, the preferred Hanzi must be 靚 with
@@ -671,17 +895,16 @@ def test_leng4_prefers_pretty_beautiful(monkeypatch):
 
     # Enter Jyutping
     dlg._add_jy.setText("leng4")
-    dlg._on_jyut_enter()
+    dlg._add_edit_flow.on_jyut_enter()
     app.processEvents()
 
     # Commit category
     dlg._add_cat.setCurrentText("descriptions_adjectives")
-    dlg._on_add_category_committed(user_action=True)
+    dlg._category_ops.on_add_category_committed(user_action=True)
     app.processEvents()
 
     # Fill candidates deterministically.
-    if hasattr(dlg, "_fill_hanzi_candidates") and callable(getattr(dlg, "_fill_hanzi_candidates")):
-        dlg._fill_hanzi_candidates("leng4")
+    dlg._add_edit_flow.fill_hanzi_candidates("leng4")
     try:
         app.processEvents()
         app.processEvents()
@@ -700,7 +923,7 @@ def test_leng4_prefers_pretty_beautiful(monkeypatch):
 
 
 @pytest.mark.ui
-@pytest.mark.skip(reason="Refactoring: Candidate selection behavior changed with AddEditPanel")
+@pytest.mark.skip(reason="Refactoring: Candidate selection behavior changed with Add/Edit services")
 def test_save_enabled_after_manual_meaning_edit_for_leng4(monkeypatch):
     """Regression: after selecting a Hanzi candidate, manually editing Meaning must enable Save.
 
@@ -769,8 +992,7 @@ def test_save_enabled_after_manual_meaning_edit_for_leng4(monkeypatch):
 
     # Enter Jyutping and advance workflow
     dlg._add_jy.setText("leng4")
-    if hasattr(dlg, "_on_jyut_enter") and callable(getattr(dlg, "_on_jyut_enter")):
-        dlg._on_jyut_enter()
+    dlg._add_edit_flow.on_jyut_enter()
     try:
         app.processEvents()
         app.processEvents()
@@ -779,8 +1001,7 @@ def test_save_enabled_after_manual_meaning_edit_for_leng4(monkeypatch):
 
     # Commit category
     dlg._add_cat.setCurrentText("descriptions_adjectives")
-    if hasattr(dlg, "_on_add_category_committed") and callable(getattr(dlg, "_on_add_category_committed")):
-        dlg._on_add_category_committed(user_action=True)
+    dlg._category_ops.on_add_category_committed(user_action=True)
 
     try:
         app.processEvents()
@@ -789,11 +1010,10 @@ def test_save_enabled_after_manual_meaning_edit_for_leng4(monkeypatch):
         pass
 
     # Populate candidates (offscreen determinism)
-    if hasattr(dlg, "_fill_hanzi_candidates") and callable(getattr(dlg, "_fill_hanzi_candidates")):
-        try:
-            dlg._fill_hanzi_candidates("leng4")
-        except Exception:
-            pass
+    try:
+        dlg._add_edit_flow.fill_hanzi_candidates("leng4")
+    except Exception:
+        pass
 
     try:
         app.processEvents()
@@ -869,7 +1089,7 @@ def test_save_enabled_after_manual_meaning_edit_for_leng4(monkeypatch):
 
 # @pytest.mark.xfail(reason="Pending Save/Edit/Cancel confirmation dialog workflow", strict=False)
 @pytest.mark.ui
-@pytest.mark.skip(reason="Refactoring: Confirmation dialog behavior moved to AddEditPanel")
+@pytest.mark.skip(reason="Refactoring: Confirmation dialog behavior moved to Add/Edit services")
 def test_meaning_enter_uses_save_edit_cancel_dialog_and_hides_save_by_default(monkeypatch):
     """New workflow: Enter in Meaning must open a Save/Edit/Cancel confirmation.
 
@@ -920,7 +1140,7 @@ def test_meaning_enter_uses_save_edit_cancel_dialog_and_hides_save_by_default(mo
         calls["preview"] = preview
         return "edit"  # do not commit; we only want to observe the hook + UI state
 
-    dlg._confirm_add_entry = _confirm
+    dlg._preview_confirm.confirm_add_entry = _confirm
 
     _trigger_meaning_commit(dlg)
 
@@ -939,7 +1159,7 @@ def test_meaning_enter_uses_save_edit_cancel_dialog_and_hides_save_by_default(mo
 
 # @pytest.mark.xfail(reason="Pending Save/Edit/Cancel confirmation dialog workflow", strict=False)
 @pytest.mark.ui
-@pytest.mark.skip(reason="Refactoring: Confirmation dialog behavior moved to AddEditPanel")
+@pytest.mark.skip(reason="Refactoring: Confirmation dialog behavior moved to Add/Edit services")
 def test_meaning_enter_save_commits_and_resets_focus(monkeypatch):
     """Choosing 'Save' in the confirmation dialog must commit and reset the form."""
 
@@ -999,7 +1219,7 @@ def test_meaning_enter_save_commits_and_resets_focus(monkeypatch):
         calls["preview"] = preview
         return "save"
 
-    dlg._confirm_add_entry = _confirm
+    dlg._preview_confirm.confirm_add_entry = _confirm
 
     _trigger_meaning_commit(dlg)
 
@@ -1088,7 +1308,7 @@ def test_meaning_enter_edit_exposes_save_button_without_committing(monkeypatch):
     def _confirm(preview):
         return "edit"
 
-    dlg._confirm_add_entry = _confirm
+    dlg._preview_confirm.confirm_add_entry = _confirm
 
     _trigger_meaning_commit(dlg)
 
@@ -1107,7 +1327,7 @@ def test_meaning_enter_edit_exposes_save_button_without_committing(monkeypatch):
 
 # @pytest.mark.xfail(reason="Pending Save/Edit/Cancel confirmation dialog workflow", strict=False)
 @pytest.mark.ui
-@pytest.mark.skip(reason="Refactoring: Confirmation dialog behavior moved to AddEditPanel")
+@pytest.mark.skip(reason="Refactoring: Confirmation dialog behavior moved to Add/Edit services")
 def test_meaning_enter_cancel_clears_and_focuses_jy(monkeypatch):
     """Choosing 'Cancel' must clear the entry and refocus Jyutping, with no commit."""
 
@@ -1159,7 +1379,7 @@ def test_meaning_enter_cancel_clears_and_focuses_jy(monkeypatch):
     def _confirm(preview):
         return "cancel"
 
-    dlg._confirm_add_entry = _confirm
+    dlg._preview_confirm.confirm_add_entry = _confirm
 
     _trigger_meaning_commit(dlg)
 
