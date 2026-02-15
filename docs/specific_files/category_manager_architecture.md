@@ -158,5 +158,5 @@ This ensures consistent, testable meaning resolution across all UI contexts.
 - `domain/add_edit_sm.py`: State machine definitions
 - `domain/meaning_sources.py`: Meaning facade
 - `domain/candidate_provider.py`: Candidate provider interface
-- `category_repo.py`: Category repository
-- `category_commit.py`: Category commit service
+- `domain/category_repo.py`: Category repository
+- `domain/category_commit.py`: Category commit service

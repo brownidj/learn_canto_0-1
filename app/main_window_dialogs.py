@@ -7,7 +7,7 @@ from typing import Any
 from PySide6.QtWidgets import QComboBox
 
 from category_manager import CategoryManagerDialog
-from main_helpers import perf_start as _perf_start, perf_end as _perf_end
+from app.main_helpers import perf_start as _perf_start, perf_end as _perf_end
 from services.vocab_loader import load_categories_map as _load_categories_map, commit_vocab_entry
 
 

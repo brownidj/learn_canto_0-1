@@ -103,8 +103,8 @@ class CategoryManagerInitializer:
         categories_map: dict,
     ) -> None:
         """Normalize in-memory vocab + categories and build stable category list."""
-        from category_repo import CategoryRepo
-        from category_commit import CategoryCommitService
+        from domain.category_repo import CategoryRepo
+        from domain.category_commit import CategoryCommitService
         from persistence.categories_store import persist_categories_yaml
 
         # Legacy alias

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from category_commit import CategoryCommitService
+from domain.category_commit import CategoryCommitService
 
 
 class _FakeCategoryRepo:

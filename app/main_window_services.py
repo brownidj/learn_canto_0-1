@@ -13,7 +13,7 @@ from services.vocab_loader import (
 from services.reverse_lookup_service import ReverseLookupService
 from services.tts_service import TTSService
 from domain.candidate_provider import CallableCandidateProvider
-from main_helpers import normalize_reverse_index as _normalize_reverse_index, perf_start as _perf_start, perf_end as _perf_end
+from app.main_helpers import normalize_reverse_index as _normalize_reverse_index, perf_start as _perf_start, perf_end as _perf_end
 
 try:
     from infra.hanzi_composition import compose_candidates_from_chars, shortlist_candidates

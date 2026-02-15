@@ -38,8 +38,8 @@ class CategoryOpsServices:
             return repo, svc
 
         try:
-            from category_repo import CategoryRepo
-            from category_commit import CategoryCommitService
+            from domain.category_repo import CategoryRepo
+            from domain.category_commit import CategoryCommitService
         except (ImportError, ModuleNotFoundError):
             return None, None
 
@@ -79,7 +79,7 @@ class CategoryOpsServices:
 
             try:
                 from typing import cast
-                from category_commit import CategoryRepoLike
+                from domain.category_commit import CategoryRepoLike
                 repo_like = cast(CategoryRepoLike, repo)
             except Exception:
                 repo_like = repo
@@ -91,7 +91,7 @@ class CategoryOpsServices:
         try:
             try:
                 from typing import cast
-                from category_commit import CategoryRepoLike
+                from domain.category_commit import CategoryRepoLike
                 self._dlg.set("_cat_repo", cast(CategoryRepoLike, repo))
             except Exception:
                 self._dlg.set("_cat_repo", repo)

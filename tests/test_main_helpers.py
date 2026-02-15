@@ -3,7 +3,7 @@ Tests for main_helpers.py - Pure utility functions extracted from main.py
 """
 import pytest
 import time
-from main_helpers import (
+from app.main_helpers import (
     normalize_jy,
     ensure_jyut,
     normalize_reverse_index,

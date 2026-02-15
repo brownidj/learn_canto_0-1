@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from category_commit import CategoryCommitService
+from domain.category_commit import CategoryCommitService
 from ui.category_manager_category_commit_flow import decide_category_commit
 
 

@@ -10,7 +10,7 @@ from typing import Dict, List, Tuple, Optional, Any
 import yaml
 
 from infra.paths import data_path
-from main_helpers import normalize_categories_yaml_payload
+from app.main_helpers import normalize_categories_yaml_payload
 
 logger = logging.getLogger(__name__)
 
