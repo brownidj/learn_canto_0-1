@@ -11,6 +11,8 @@ from services.vocab_loader import (
     load_categories_map as _load_categories_map,
 )
 from services.reverse_lookup_service import ReverseLookupService
+import os
+
 from services.tts_service import TTSService
 from domain.candidate_provider import CallableCandidateProvider
 from app.main_helpers import normalize_reverse_index as _normalize_reverse_index, perf_start as _perf_start, perf_end as _perf_end
@@ -118,4 +120,10 @@ def attach_candidate_provider(window, reverse_lookup: ReverseLookupService) -> N
 
 
 def create_tts_service(window) -> TTSService:
+    try:
+        if os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
+            from services.google_tts_service import GoogleTTSService
+            return GoogleTTSService(window)
+    except Exception:
+        pass
     return TTSService(window)

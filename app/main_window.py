@@ -108,6 +108,23 @@ def run() -> int:
         setup_tortoise_and_auto(window, controller, slider_wpm, btn_tortoise, btn_auto, b, save_one)
         tts_service = create_tts_service(window)
         window._tts_service = tts_service
+        # Keep both engines available for UI selection
+        try:
+            from services.google_tts_service import GoogleTTSService
+            window._tts_google = GoogleTTSService(window)
+        except Exception:
+            window._tts_google = None
+        try:
+            from services.tts_service import TTSService as _MacTTS
+            window._tts_macos = _MacTTS(window)
+        except Exception:
+            window._tts_macos = None
+        if window._tts_google is not None:
+            window._tts_engine = "google"
+            window._tts_active = window._tts_google
+        else:
+            window._tts_engine = "macos"
+            window._tts_active = window._tts_macos or tts_service
         ensure_char_map(window)
         ensure_reverse_index(window)
         reverse_lookup = build_reverse_lookup(window)

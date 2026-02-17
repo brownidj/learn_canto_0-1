@@ -15,11 +15,11 @@ import os
 import sys
 from typing import Optional, Any
 
-from PySide6.QtCore import QTimer, Qt
-from PySide6.QtWidgets import QWidget, QLabel, QLineEdit, QTextEdit, QComboBox, QPushButton, QHBoxLayout, QVBoxLayout, QSizePolicy, QSlider
+from PySide6.QtCore import QTimer, Qt, QObject, QEvent
+from PySide6.QtWidgets import QWidget, QLabel, QLineEdit, QTextEdit, QComboBox, QPushButton, QHBoxLayout, QVBoxLayout, QSizePolicy, QSlider, QToolTip
 from PySide6.QtGui import QPixmap, QColor
 
-from domain.jyutping_cue import cue_for_syllable
+from domain.jyutping_cue import cue_for_syllable, hint_for_syllable
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +79,7 @@ class MainController:
         if label_hanzi is not None:
             try:
                 label_hanzi.setText(hanzi)
+                window._hanzi_text = hanzi
                 upd = _get_window_attr(window, "_update_hanzi_font_now", None)
                 if callable(upd):
                     try:
@@ -124,11 +125,33 @@ class MainController:
                     tones = [t[-1] for t in tokens if t[-1].isdigit()]
                     logger.debug("Tone row tokens=%s tones=%s", tokens, tones)
                     cues = [cue_for_syllable(t) for t in tokens] if tokens else []
-                    tts_service = getattr(window, "_tts_service", None)
+                    tts_service = getattr(window, "_tts_active", None) or getattr(window, "_tts_service", None)
                     base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
                     app_dir = os.path.abspath(os.path.dirname(sys.argv[0]))
                     max_h = 0
                     total_w = 0
+                    tone_blocks = []
+                    class _LongPressHelper(QObject):
+                        def __init__(self, widget: QWidget, text: str):
+                            super().__init__(widget)
+                            self.widget = widget
+                            self.text = text
+                            self.timer = QTimer(self)
+                            self.timer.setSingleShot(True)
+                            self.timer.timeout.connect(self._show_tooltip)
+
+                        def _show_tooltip(self):
+                            QToolTip.showText(self.widget.mapToGlobal(self.widget.rect().center()), self.text, self.widget)
+
+                        def eventFilter(self, obj, event):
+                            if obj is self.widget:
+                                if event.type() == QEvent.Type.MouseButtonPress:
+                                    self.timer.start(500)
+                                elif event.type() in (QEvent.Type.MouseButtonRelease, QEvent.Type.Leave):
+                                    self.timer.stop()
+                            return False
+
+                    long_press_helpers = []
                     for idx, tone in enumerate(tones):
                         rel_path = os.path.join("assets", "images", f"tone_{tone}.png")
                         path = os.path.join(app_dir, rel_path)
@@ -141,7 +164,9 @@ class MainController:
                             logger.debug("Tone image missing for tone %s: %s", tone, path)
                         container = QWidget()
                         container.setObjectName(f"toneBlock_{idx}")
-                        container.setStyleSheet("border: 1px solid #4A5568;")
+                        base_border = "border: 1px solid #4A5568;"
+                        highlight_border = "border: 2px solid #C53030;"
+                        container.setStyleSheet(base_border)
                         container.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
                         container.setCursor(Qt.CursorShape.PointingHandCursor)
                         container.setToolTip("Play syllable")
@@ -152,7 +177,9 @@ class MainController:
 
                         caption = QLabel()
                         caption.setText(cues[idx] if idx < len(cues) else "")
-                        caption.setStyleSheet("font-size: 18pt; font-weight: 600;")
+                        base_caption = "font-size: 18pt; font-weight: 600; color: #0C1B33;"
+                        highlight_caption = "font-size: 18pt; font-weight: 600; color: #C53030;"
+                        caption.setStyleSheet(base_caption)
                         caption.setAlignment(Qt.AlignmentFlag.AlignHCenter)
                         caption.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
                         caption.adjustSize()
@@ -179,20 +206,83 @@ class MainController:
                         total_w += width
 
                         layout.addWidget(container)
+                        tone_blocks.append((container, caption, base_border, highlight_border, base_caption, highlight_caption))
 
                         syllable = tokens[idx] if idx < len(tokens) else ""
+                        if syllable:
+                            cue_text = cues[idx] if idx < len(cues) else syllable
+                            hint = hint_for_syllable(syllable)
+                            tip = f"Sounds like: {cue_text}"
+                            if hint:
+                                tip = f"{tip}\nHint: {hint}"
+                            helper = _LongPressHelper(container, tip)
+                            container.installEventFilter(helper)
+                            long_press_helpers.append(helper)
+
                         if syllable and tts_service is not None:
-                            def _play_syllable(_event, text=syllable):
+                            def _set_hanzi_highlight(index: int | None):
+                                label = window.findChild(QLabel, "labelHanzi")
+                                if label is None:
+                                    return
+                                hanzi = getattr(window, "_hanzi_text", "") or ""
+                                chars = [c for c in str(hanzi)]
+                                if index is None or index < 0 or index >= len(chars):
+                                    label.setText(hanzi)
+                                    return
+                                parts = []
+                                for i, ch in enumerate(chars):
+                                    if i == index:
+                                        parts.append(f"<span style='color:#C53030;'>{ch}</span>")
+                                    else:
+                                        parts.append(ch)
+                                label.setText("".join(parts))
+
+                            def _play_syllable(_event, text=syllable, idx=idx):
+                                if getattr(window, "_syllable_tts_busy", False):
+                                    return
                                 try:
                                     slider = window.findChild(QSlider, "sliderWpm")
                                     rate = int(slider.value()) if slider is not None else None
                                 except Exception:
                                     rate = None
                                 try:
-                                    tts_service.play_once(text, rate=rate)
+                                    window._syllable_tts_busy = True
+                                    engine = getattr(window, "_tts_engine", "google")
+                                    if engine == "google":
+                                        hanzi = getattr(window, "_hanzi_text", "")
+                                        chars = [c for c in str(hanzi)]
+                                        if idx < len(chars):
+                                            text = chars[idx]
+                                    voice = getattr(window, "_google_voice", None) if engine == "google" else getattr(window, "_macos_voice", "Sinji")
+                                    _set_hanzi_highlight(idx)
+                                    # Safety clear in case on_finished isn't called.
+                                    try:
+                                        if hasattr(container, "_tts_clear_timer"):
+                                            container._tts_clear_timer.stop()
+                                    except Exception:
+                                        pass
+                                    clear_timer = QTimer(container)
+                                    clear_timer.setSingleShot(True)
+                                    clear_timer.timeout.connect(lambda: _set_hanzi_highlight(None))
+                                    clear_timer.start(4000)
+                                    container._tts_clear_timer = clear_timer
+
+                                    def _done():
+                                        try:
+                                            clear_timer.stop()
+                                        except Exception:
+                                            pass
+                                        _set_hanzi_highlight(None)
+                                        window._syllable_tts_busy = False
+
+                                    tts_service.play_once(text, voice=voice, rate=rate, on_finished=_done)
                                 except Exception:
+                                    window._syllable_tts_busy = False
                                     pass
                             container.mousePressEvent = _play_syllable
+                    window._tone_long_press_helpers = long_press_helpers
+                    window._tone_blocks = tone_blocks
+                    window._tone_syllables = tokens
                     if max_h > 0:
                         tone_row.setMinimumHeight(max_h)
                         tone_row.setFixedHeight(max_h)

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtWidgets import QLabel, QComboBox, QPushButton, QGroupBox, QWidget, QVBoxLayout
+from PySide6.QtWidgets import QLabel, QPushButton, QGroupBox, QWidget, QVBoxLayout, QRadioButton, QButtonGroup
 
 def setup_tortoise_and_auto(window_adapter, controller, slider_wpm, btn_tortoise, btn_auto, bounds_data, save_one):
     window_adapter.set("_tortoise_prev_wpm", None)
@@ -108,22 +108,21 @@ def setup_audio_test(about_disclosure, tts_service, slider_wpm):
     container_layout.setContentsMargins(0, 0, 0, 0)
     container_layout.setSpacing(6)
 
-    lbl_voice = QLabel("macOS voice:")
-    combo_voice = QComboBox()
-    combo_voice.setObjectName("comboVoice")
-    for name, locale, desc in tts_service.available_voices:
-        combo_voice.addItem(name)
-    if tts_service.default_voice:
-        idx = combo_voice.findText(tts_service.default_voice)
-        if idx >= 0:
-            combo_voice.setCurrentIndex(idx)
     row_w = QGroupBox()
     row_w.setFlat(True)
     row_w.setTitle("")
-    from PySide6.QtWidgets import QHBoxLayout
-    row_w.setLayout(QHBoxLayout())
-    row_w.layout().addWidget(lbl_voice)
-    row_w.layout().addWidget(combo_voice)
+    from PySide6.QtWidgets import QVBoxLayout as _VBox
+    row_w.setLayout(_VBox())
+
+    rb_google = QRadioButton("Google (Cantonese)")
+    rb_google.setObjectName("radioGoogleVoice")
+    rb_macos = QRadioButton("macOS (Sinji)")
+    rb_macos.setObjectName("radioMacVoice")
+    group = QButtonGroup(row_w)
+    group.addButton(rb_google)
+    group.addButton(rb_macos)
+    row_w.layout().addWidget(rb_google)
+    row_w.layout().addWidget(rb_macos)
     container_layout.addWidget(row_w)
     btn_audio_test = QPushButton("Audio Test (🔊 你好)")
     btn_audio_test.setObjectName("btnAudioTest")
@@ -138,15 +137,42 @@ def setup_audio_test(about_disclosure, tts_service, slider_wpm):
     else:
         layout.insertWidget(insert_at, container)
 
-    def _get_current_voice():
-        combo = container.findChild(QComboBox, "comboVoice")
-        if combo is not None and combo.currentText().strip():
-            return combo.currentText().strip()
-        return tts_service.default_voice
+    def _select_engine():
+        win = about_disclosure.window()
+        if getattr(win, "_tts_engine", "google") == "google" and getattr(win, "_tts_google", None) is not None:
+            rb_google.setChecked(True)
+        else:
+            rb_macos.setChecked(True)
+
+    def _apply_engine():
+        win = about_disclosure.window()
+        if rb_google.isChecked() and getattr(win, "_tts_google", None) is not None:
+            win._tts_engine = "google"
+            win._tts_active = win._tts_google
+            win._google_voice = "yue-HK-Standard-A"
+        else:
+            win._tts_engine = "macos"
+            win._tts_active = win._tts_macos or tts_service
+            win._macos_voice = "Sinji"
+        try:
+            import logging
+            logging.getLogger(__name__).debug("TTS engine=%s voice=%s",
+                                             win._tts_engine,
+                                             win._google_voice if win._tts_engine == "google" else win._macos_voice)
+        except Exception:
+            pass
+
+    _select_engine()
+    _apply_engine()
+    rb_google.toggled.connect(lambda _=None: _apply_engine())
+    rb_macos.toggled.connect(lambda _=None: _apply_engine())
 
     def _tts_call(text, rate=None):
-        voice = _get_current_voice()
-        tts_service.play_once(text, voice=voice, rate=rate)
+        win = about_disclosure.window()
+        active = getattr(win, "_tts_active", tts_service)
+        engine = getattr(win, "_tts_engine", "google")
+        voice = getattr(win, "_google_voice", None) if engine == "google" else getattr(win, "_macos_voice", "Sinji")
+        active.play_once(text, voice=voice, rate=rate)
         return True
 
     def _fallback_say(text, rate=None):

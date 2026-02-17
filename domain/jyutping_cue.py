@@ -92,6 +92,26 @@ _CODA_MAP = {
     "k": "K",
 }
 
+_FINAL_HINTS: Dict[str, str] = {
+    "aa": "AH like “spa”",
+    "a": "UH like “uh”",
+    "i": "EE like “see”",
+    "u": "OO like “too”",
+    "e": "EH like “bed”",
+    "o": "AW like “law”",
+    "ai": "EYE like “eye”",
+    "au": "OW like “cow”",
+    "ei": "AY like “say”",
+    "ou": "OH like “go”",
+    "oi": "OY like “boy”",
+    "ui": "OO‑EE glide",
+    "eoi": "rounded “uh/er”",
+    "oe": "rounded “uh/er”",
+    "eo": "rounded “uh/er”",
+    "iu": "EE‑OO glide",
+    "yu": "front “oo” (like “you”)",
+}
+
 
 def _split_syllable(syl: str) -> Tuple[str, str, str]:
     m = _SYLLABLE_RE.match(syl.strip().lower())
@@ -141,4 +161,20 @@ def cue_for_phrase(jyutping: str) -> str:
     return " · ".join(cues)
 
 
-__all__ = ["cue_for_phrase", "cue_for_syllable"]
+def hint_for_syllable(syl: str) -> str:
+    initial, final, _tone = _split_syllable(syl)
+    _ = initial  # unused but kept for clarity
+    if not final:
+        return ""
+    for coda in ("ng", "m", "n", "p", "t", "k"):
+        if final.endswith(coda) and final != coda:
+            base = final[: -len(coda)]
+            base_hint = _FINAL_HINTS.get(base)
+            if base_hint:
+                if coda in ("p", "t", "k"):
+                    return f"{base_hint}, checked -{coda}"
+                return f"{base_hint}, ending -{coda}"
+    return _FINAL_HINTS.get(final, "")
+
+
+__all__ = ["cue_for_phrase", "cue_for_syllable", "hint_for_syllable"]
