@@ -104,8 +104,9 @@ def setup_tones_radicals(window):
     )
 
 
-def setup_audio_test(group_about, tts_service, slider_wpm):
-    _setup_audio_test(group_about, tts_service, slider_wpm)
+def setup_audio_test(window, tts_service, slider_wpm):
+    dlg = _adapter(window)
+    _setup_audio_test(find_about_disclosure(dlg), tts_service, slider_wpm)
 
 
 def setup_add_button(window, open_category_manager, debug_open_add_item_dialog=None):

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtWidgets import QLabel, QComboBox, QPushButton, QGroupBox
+from PySide6.QtWidgets import QLabel, QComboBox, QPushButton, QGroupBox, QWidget, QVBoxLayout
 
 def setup_tortoise_and_auto(window_adapter, controller, slider_wpm, btn_tortoise, btn_auto, bounds_data, save_one):
     window_adapter.set("_tortoise_prev_wpm", None)
@@ -87,17 +87,26 @@ def setup_labels_and_reset(window_adapter, ui_setup, controller, save_one, reset
     ui_setup.wire_reset_button(_do_reset)
 
 
-def setup_audio_test(group_about, tts_service, slider_wpm):
-    if group_about is None:
+def setup_audio_test(about_disclosure, tts_service, slider_wpm):
+    if about_disclosure is None:
         return
-    layout = group_about.layout()
+
+    parent = about_disclosure.parentWidget()
+    if parent is None:
+        return
+    layout = parent.layout()
     if layout is None:
-        from PySide6.QtWidgets import QVBoxLayout
-        try:
-            layout = QVBoxLayout(group_about)
-        except Exception:
-            layout = QVBoxLayout()
-        group_about.setLayout(layout)
+        return
+
+    existing = parent.findChild(QPushButton, "btnAudioTest")
+    if existing is not None:
+        return
+
+    container = QWidget(parent)
+    container.setObjectName("audioTestContainer")
+    container_layout = QVBoxLayout(container)
+    container_layout.setContentsMargins(0, 0, 0, 0)
+    container_layout.setSpacing(6)
 
     lbl_voice = QLabel("macOS voice:")
     combo_voice = QComboBox()
@@ -115,13 +124,22 @@ def setup_audio_test(group_about, tts_service, slider_wpm):
     row_w.setLayout(QHBoxLayout())
     row_w.layout().addWidget(lbl_voice)
     row_w.layout().addWidget(combo_voice)
-    layout.addWidget(row_w)
+    container_layout.addWidget(row_w)
     btn_audio_test = QPushButton("Audio Test (🔊 你好)")
     btn_audio_test.setObjectName("btnAudioTest")
-    layout.addWidget(btn_audio_test)
+    container_layout.addWidget(btn_audio_test)
+
+    try:
+        insert_at = layout.indexOf(about_disclosure)
+    except Exception:
+        insert_at = -1
+    if insert_at < 0:
+        layout.addWidget(container)
+    else:
+        layout.insertWidget(insert_at, container)
 
     def _get_current_voice():
-        combo = group_about.findChild(QComboBox, "comboVoice")
+        combo = container.findChild(QComboBox, "comboVoice")
         if combo is not None and combo.currentText().strip():
             return combo.currentText().strip()
         return tts_service.default_voice

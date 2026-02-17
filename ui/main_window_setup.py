@@ -14,10 +14,10 @@ from typing import Optional, Any, List, Callable
 from PySide6.QtWidgets import (
     QWidget, QLabel, QPushButton, QLineEdit, QTextEdit,
     QComboBox, QSlider, QGroupBox, QSizePolicy, QVBoxLayout,
-    QHBoxLayout, QToolButton
+    QHBoxLayout, QToolButton, QDockWidget
 )
 from PySide6.QtCore import Qt, QEvent, QObject
-from PySide6.QtGui import QFontMetrics
+from PySide6.QtGui import QFontMetrics, QAction
 
 from settings import load_all, save_one
 
@@ -52,6 +52,8 @@ class MainWindowSetup:
         self.btn_prev: Optional[QPushButton] = None
         self.btn_reset: Optional[QPushButton] = None
         self.combo_category: Optional[QComboBox] = None
+        self.action_hamburger: Optional[QAction] = None
+        self.nav_drawer: Optional[QDockWidget] = None
 
     def setup_all(self, bounds: dict, categories_map: dict, saved_category: str = "All"):
         """Run all setup steps.
@@ -66,6 +68,7 @@ class MainWindowSetup:
         self._setup_buttons()
         self._setup_sliders(bounds)
         self._setup_category_combo(categories_map, saved_category)
+        self._setup_nav_drawer()
         self._wire_button_clicks()
         logger.debug("MainWindowSetup complete")
 
@@ -91,12 +94,16 @@ class MainWindowSetup:
 
         # Category combo
         self.combo_category = w.findChild(QComboBox, "comboCategory")
+        self.action_hamburger = w.findChild(QAction, "actionHamburger")
+        self.nav_drawer = w.findChild(QDockWidget, "navDrawer")
 
         logger.debug("Found widgets: hanzi=%s jyut=%s meanings=%s sliders=%d combos=%d",
                     bool(self.label_hanzi), bool(self.edit_jyut), bool(self.text_meanings),
                     sum([bool(s) for s in [self.slider_wpm, self.slider_repeats, 
                          self.slider_intro, self.slider_repeat, self.slider_extro, self.slider_auto]]),
                     bool(self.combo_category))
+        logger.debug("Found nav drawer: action=%s drawer=%s",
+                    bool(self.action_hamburger), bool(self.nav_drawer))
 
     def _setup_hanzi_label(self):
         """Configure Hanzi label with auto-sizing font."""
@@ -298,6 +305,37 @@ class MainWindowSetup:
 
         logger.debug("comboCategory populated: %d categories, initial='%s'",
                     len(categories_map), saved_category)
+
+    def _setup_nav_drawer(self):
+        """Wire hamburger action to the navigation drawer."""
+        if self.action_hamburger is None or self.nav_drawer is None:
+            return
+
+        action = self.action_hamburger
+        drawer = self.nav_drawer
+
+        try:
+            drawer.setMinimumWidth(drawer.sizeHint().width() + 50)
+        except Exception:
+            pass
+        action.setCheckable(True)
+        drawer.setVisible(False)
+        action.setChecked(False)
+        action.toggled.connect(drawer.setVisible)
+        drawer.visibilityChanged.connect(action.setChecked)
+        logger.debug("Hamburger action wired to nav drawer")
+
+        class _DrawerCloseFilter(QObject):
+            def eventFilter(self, obj, event):
+                if event.type() == QEvent.Type.MouseButtonPress and drawer.isVisible():
+                    try:
+                        if not drawer.geometry().contains(event.pos()):
+                            drawer.setVisible(False)
+                    except Exception:
+                        pass
+                return False
+
+        self.window.installEventFilter(_DrawerCloseFilter(self.window))
 
     def _wire_button_clicks(self):
         """Connect button click signals to controller actions."""

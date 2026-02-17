@@ -11,10 +11,15 @@ The MainController centralizes high-level UI actions like:
 This allows core behaviors to be tested without signal/slot coupling.
 """
 import logging
+import os
+import sys
 from typing import Optional, Any
 
-from PySide6.QtCore import QTimer
-from PySide6.QtWidgets import QWidget, QLabel, QLineEdit, QTextEdit, QComboBox, QPushButton
+from PySide6.QtCore import QTimer, Qt
+from PySide6.QtWidgets import QWidget, QLabel, QLineEdit, QTextEdit, QComboBox, QPushButton, QHBoxLayout, QVBoxLayout, QSizePolicy, QSlider
+from PySide6.QtGui import QPixmap, QColor
+
+from domain.jyutping_cue import cue_for_syllable
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +106,114 @@ class MainController:
                 text_meanings.setPlainText(", ".join(meanings))
             except Exception:
                 pass
+
+        # Update tone image row
+        try:
+            tone_row = window.findChild(QWidget, "toneImageRow")
+            logger.debug("Tone row found=%s", bool(tone_row))
+            if tone_row is not None:
+                layout = tone_row.layout()
+                logger.debug("Tone row layout=%s", type(layout).__name__ if layout else None)
+                if isinstance(layout, QHBoxLayout):
+                    while layout.count():
+                        item = layout.takeAt(0)
+                        w = item.widget()
+                        if w is not None:
+                            w.deleteLater()
+                    tokens = [t for t in (jyut or "").split() if t]
+                    tones = [t[-1] for t in tokens if t[-1].isdigit()]
+                    logger.debug("Tone row tokens=%s tones=%s", tokens, tones)
+                    cues = [cue_for_syllable(t) for t in tokens] if tokens else []
+                    tts_service = getattr(window, "_tts_service", None)
+                    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+                    app_dir = os.path.abspath(os.path.dirname(sys.argv[0]))
+                    max_h = 0
+                    total_w = 0
+                    for idx, tone in enumerate(tones):
+                        rel_path = os.path.join("assets", "images", f"tone_{tone}.png")
+                        path = os.path.join(app_dir, rel_path)
+                        pix = QPixmap(path)
+                        if pix.isNull():
+                            path = os.path.join(base_dir, rel_path)
+                            pix = QPixmap(path)
+                        logger.debug("Tone image load: tone=%s path=%s ok=%s", tone, path, not pix.isNull())
+                        if pix.isNull():
+                            logger.debug("Tone image missing for tone %s: %s", tone, path)
+                        container = QWidget()
+                        container.setObjectName(f"toneBlock_{idx}")
+                        container.setStyleSheet("border: 1px solid #4A5568;")
+                        container.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+                        container.setCursor(Qt.CursorShape.PointingHandCursor)
+                        container.setToolTip("Play syllable")
+                        vbox = QVBoxLayout(container)
+                        vbox.setContentsMargins(0, 0, 0, 0)
+                        vbox.setSpacing(2)
+                        vbox.setSizeConstraint(QVBoxLayout.SizeConstraint.SetFixedSize)
+
+                        caption = QLabel()
+                        caption.setText(cues[idx] if idx < len(cues) else "")
+                        caption.setStyleSheet("font-size: 18pt; font-weight: 600;")
+                        caption.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+                        caption.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+                        caption.adjustSize()
+
+                        width = caption.sizeHint().width()
+                        img_h = 0
+                        if not pix.isNull():
+                            img = QLabel()
+                            scaled = pix.scaledToHeight(80)
+                            img.setPixmap(scaled)
+                            img.setFixedSize(scaled.size())
+                            vbox.addWidget(img)
+                            width = max(width, scaled.width())
+                            img_h = scaled.height()
+
+                        caption.setFixedWidth(width)
+                        cap_h = caption.sizeHint().height()
+                        caption.setFixedHeight(cap_h)
+                        vbox.insertWidget(0, caption)
+
+                        total_h = cap_h + img_h + vbox.spacing()
+                        container.setFixedSize(width, total_h)
+                        max_h = max(max_h, total_h)
+                        total_w += width
+
+                        layout.addWidget(container)
+
+                        syllable = tokens[idx] if idx < len(tokens) else ""
+                        if syllable and tts_service is not None:
+                            def _play_syllable(_event, text=syllable):
+                                try:
+                                    slider = window.findChild(QSlider, "sliderWpm")
+                                    rate = int(slider.value()) if slider is not None else None
+                                except Exception:
+                                    rate = None
+                                try:
+                                    tts_service.play_once(text, rate=rate)
+                                except Exception:
+                                    pass
+                            container.mousePressEvent = _play_syllable
+                    if max_h > 0:
+                        tone_row.setMinimumHeight(max_h)
+                        tone_row.setFixedHeight(max_h)
+                        layout.setSpacing(8)
+                        if layout.count() > 1:
+                            total_w += layout.spacing() * (layout.count() - 1)
+                        tone_row.setFixedWidth(total_w)
+                        layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+                    try:
+                        tone_row.setAutoFillBackground(True)
+                        pal = tone_row.palette()
+                        pal.setColor(tone_row.backgroundRole(), QColor("#FFFFFF"))
+                        tone_row.setPalette(pal)
+                    except Exception:
+                        tone_row.setStyleSheet("background: #FFFFFF;")
+                    tone_row.setVisible(True)
+                    tone_row.adjustSize()
+                    tone_row.updateGeometry()
+                    logger.debug("Tone row count=%d height=%s", layout.count(), tone_row.height())
+        except Exception:
+            logger.exception("Tone row update failed")
 
     def apply_category_filter(self, cat_name: str):
         """Filter the vocabulary list by the given category name; 'All' shows everything."""

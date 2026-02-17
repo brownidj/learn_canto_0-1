@@ -52,7 +52,7 @@
                                             </size>
                                         </property>
                                         <property name="styleSheet">
-                                            <string notr="true">font-size: 36pt; color: grey; padding: 8px;</string>
+                                            <string notr="true">font-size: 36pt; color: #0C1B33; padding: 8px;</string>
                                         </property>
                                         <property name="readOnly">
                                             <bool>true</bool>
@@ -127,6 +127,72 @@
                                 <property name="alignment">
                                     <set>Qt::AlignmentFlag::AlignCenter</set>
                                 </property>
+                            </widget>
+                        </item>
+                        <item>
+                            <widget class="QGroupBox" name="groupTransliteration">
+                                <property name="title">
+                                    <string>Transliteration (Jyutping)</string>
+                                </property>
+                                <layout class="QVBoxLayout" name="layoutTransliteration">
+                                    <property name="spacing">
+                                        <number>6</number>
+                                    </property>
+                                    <property name="leftMargin">
+                                        <number>6</number>
+                                    </property>
+                                    <property name="topMargin">
+                                        <number>6</number>
+                                    </property>
+                                    <property name="rightMargin">
+                                        <number>6</number>
+                                    </property>
+                                    <property name="bottomMargin">
+                                        <number>6</number>
+                                    </property>
+                                    <item>
+                                        <widget class="QWidget" name="toneImageRow">
+                                            <property name="sizePolicy">
+                                                <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                                                    <horstretch>0</horstretch>
+                                                    <verstretch>0</verstretch>
+                                                </sizepolicy>
+                                            </property>
+                                            <property name="minimumSize">
+                                                <size>
+                                                    <width>0</width>
+                                                    <height>120</height>
+                                                </size>
+                                            </property>
+                                            <property name="minimumSize">
+                                                <size>
+                                                    <width>0</width>
+                                                    <height>32</height>
+                                                </size>
+                                            </property>
+                                            <layout class="QHBoxLayout" name="layoutToneImages">
+                                                <property name="spacing">
+                                                    <number>0</number>
+                                                </property>
+                                                <property name="leftMargin">
+                                                    <number>0</number>
+                                                </property>
+                                                <property name="topMargin">
+                                                    <number>0</number>
+                                                </property>
+                                                <property name="rightMargin">
+                                                    <number>0</number>
+                                                </property>
+                                                <property name="bottomMargin">
+                                                    <number>0</number>
+                                                </property>
+                                                <property name="alignment">
+                                                    <set>Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignTop</set>
+                                                </property>
+                                            </layout>
+                                        </widget>
+                                    </item>
+                                </layout>
                             </widget>
                         </item>
                         <item>
@@ -487,35 +553,10 @@
                         <number>8</number>
                     </property>
                     <item>
-                        <widget class="QGroupBox" name="groupAddEdit">
-                            <property name="title">
+                        <widget class="QPushButton" name="btnAdd">
+                            <property name="text">
                                 <string>Add and Edit</string>
                             </property>
-                            <layout class="QVBoxLayout" name="layoutAddEdit">
-                                <property name="spacing">
-                                    <number>6</number>
-                                </property>
-                                <property name="leftMargin">
-                                    <number>6</number>
-                                </property>
-                                <property name="topMargin">
-                                    <number>6</number>
-                                </property>
-                                <property name="rightMargin">
-                                    <number>6</number>
-                                </property>
-                                <property name="bottomMargin">
-                                    <number>6</number>
-                                </property>
-                                <item>
-                                    <widget class="QPushButton" name="btnAdd">
-                                        <property name="text">
-                                            <string>Add and Edit</string>
-                                        </property>
-                                    </widget>
-                                </item>
-
-                            </layout>
                         </widget>
                     </item>
                     <item>
