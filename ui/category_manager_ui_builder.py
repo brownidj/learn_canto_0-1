@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QFormLayout,
     QLineEdit,
-    QComboBox, QLabel,
+    QComboBox, QLabel, QWidget,
 )
 
 if TYPE_CHECKING:
@@ -34,9 +34,9 @@ class CategoryManagerUIBuilder:
     def build_ui(self) -> None:
         """Build the complete UI for the dialog."""
         self._create_root_layout()
-        self._create_header()
         self._create_entry_group()
         self._create_hanzi_group()
+        self._create_close_row()
         self._create_table_panel()
 
     def _create_root_layout(self) -> None:
@@ -45,18 +45,18 @@ class CategoryManagerUIBuilder:
         self.dialog._root.setContentsMargins(12, 12, 12, 12)
         self.dialog._root.setSpacing(10)
 
-    def _create_header(self) -> None:
-        """Create header with Close button."""
-        header = QHBoxLayout()
-        header.addStretch(1)
+    def _create_close_row(self) -> None:
+        """Create Close button row below the Entry/Hanzi panels."""
+        row = QHBoxLayout()
+        row.addStretch(1)
 
         btn_close = QPushButton("Close", self.dialog)
         btn_close.setDefault(False)
         btn_close.setAutoDefault(False)
         btn_close.clicked.connect(self.dialog.accept)
 
-        header.addWidget(btn_close, 0, _Qt.AlignmentFlag.AlignTop | _Qt.AlignmentFlag.AlignRight)
-        self.dialog._root.addLayout(header)
+        row.addWidget(btn_close, 0, _Qt.AlignmentFlag.AlignRight)
+        self.dialog._root.addLayout(row)
 
     def _create_save_header(self) -> None:
         """Create save button header."""
@@ -97,6 +97,7 @@ class CategoryManagerUIBuilder:
         # Main row for Entry + Hanzi groups
         row = QHBoxLayout()
         row.setSpacing(12)
+        row.setAlignment(_Qt.AlignmentFlag.AlignTop)
 
         # Entry group
         group_entry = QGroupBox("Entry", self.dialog)
@@ -154,8 +155,6 @@ class CategoryManagerUIBuilder:
         label_notes.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
 
         form_entry.addRow(label_jy, self.dialog._add_jy)
-        form_entry.addRow(label_mn, self.dialog._add_mn)
-        form_entry.addRow(label_notes, self.dialog._add_notes)
 
         # Category combobox
         from PySide6.QtWidgets import QSizePolicy
@@ -225,6 +224,8 @@ class CategoryManagerUIBuilder:
         label_cat.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
 
         form_entry.addRow(label_cat, self.dialog._add_cat)
+        form_entry.addRow(label_mn, self.dialog._add_mn)
+        form_entry.addRow(label_notes, self.dialog._add_notes)
 
         # Back-compat aliases
         self.dialog.editJyut = self.dialog._add_jy
@@ -258,12 +259,14 @@ class CategoryManagerUIBuilder:
         le_cat = self.dialog._add_cat.lineEdit()
         if le_cat is not None:
             le_cat.setFont(entry_font)
+            le_cat.setMinimumHeight(40)
 
         # Set Entry panel width to 550px to accommodate wider Category combobox
         group_entry.setMinimumWidth(550)
 
         # Add to layout with stretch factor (Entry:Hanzi = 2:1 ratio)
         row.addWidget(group_entry, 2)
+        row.setAlignment(group_entry, _Qt.AlignmentFlag.AlignTop)
 
     def _create_hanzi_group(self) -> None:
         """Create Hanzi group (display, candidates, manual button)."""
@@ -278,6 +281,8 @@ class CategoryManagerUIBuilder:
 
         # Set vertical spacing to 18pt to match Entry panel
         form_hanzi.setVerticalSpacing(18)
+        form_hanzi.setFormAlignment(_Qt.AlignmentFlag.AlignLeft | _Qt.AlignmentFlag.AlignTop)
+        form_hanzi.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
 
         # Hanzi display field
         from PySide6.QtWidgets import QSizePolicy
@@ -295,7 +300,7 @@ class CategoryManagerUIBuilder:
         except Exception:
             pass
         self.dialog._cand_combo.setObjectName("comboHanziCandidates")
-        self.dialog._cand_combo.setVisible(False)
+        self.dialog._cand_combo.setVisible(True)
         self.dialog._cand_combo.setToolTip(HANZI_CANDIDATE_TOOLTIP)
         try:
             from PySide6.QtWidgets import QListView
@@ -316,8 +321,6 @@ class CategoryManagerUIBuilder:
         label_cand = QLabel("Candidates:")
         label_cand.setFont(label_font_cand)
 
-        form_hanzi.addRow(label_cand, self.dialog._cand_combo)
-
         # Manual Hanzi button
         self.dialog._btn_custom_hz = QPushButton("Enter my own Hanzi", self.dialog)
         self.dialog._btn_custom_hz.setDefault(False)
@@ -328,7 +331,17 @@ class CategoryManagerUIBuilder:
         except (TypeError, AttributeError, RuntimeError):
             pass
 
-        form_hanzi.addWidget(self.dialog._btn_custom_hz)
+        from PySide6.QtWidgets import QSizePolicy
+        cand_row = QWidget(group_hanzi)
+        cand_row.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        cand_row_layout = QHBoxLayout(cand_row)
+        cand_row_layout.setContentsMargins(0, 0, 0, 0)
+        cand_row_layout.addWidget(self.dialog._cand_combo, 1)
+        cand_row_layout.addStretch(1)
+        cand_row_layout.addWidget(self.dialog._btn_custom_hz, 0, _Qt.AlignmentFlag.AlignRight)
+        cand_row_layout.setAlignment(_Qt.AlignmentFlag.AlignRight)
+
+        form_hanzi.addRow(label_cand, cand_row)
 
         # Back-compat alias
         self.dialog.comboCandidates = self.dialog._cand_combo
@@ -348,6 +361,7 @@ class CategoryManagerUIBuilder:
 
         # Add to layout with stretch factor (Entry:Hanzi = 2:1 ratio)
         row.addWidget(group_hanzi, 1)
+        row.setAlignment(group_hanzi, _Qt.AlignmentFlag.AlignTop)
 
         # Add the row to root layout with stretch factor to ensure vertical space
         # This prevents the Entry+Hanzi row from collapsing to zero height
