@@ -23,6 +23,11 @@ class CategoryComboDelegate(QStyledItemDelegate):
         except Exception:
             pass
         try:
+            from ui.combo_arrow_overlay import install_combo_arrow_overlay
+            install_combo_arrow_overlay(editor)
+        except Exception:
+            pass
+        try:
             names = list(self._get_names())
         except Exception:
             names = []

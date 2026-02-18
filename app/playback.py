@@ -40,6 +40,7 @@ def build_playback(window, controller, tts_service, sliders):
         intro = int(slider_intro.value()) if slider_intro is not None else 0
         gap = int(slider_repeat.value()) if slider_repeat is not None else 0
         extro = int(slider_extro.value()) if slider_extro is not None else 0
+        extro_effective = extro if getattr(window, "_auto_mode", False) else 0
 
         if window._is_playing:
             return
@@ -117,7 +118,7 @@ def build_playback(window, controller, tts_service, sliders):
                     repeats=repeats,
                     intro_delay=intro,
                     repeat_delay=gap,
-                    extro_delay=extro,
+                    extro_delay=extro_effective,
                     on_done=on_done,
                 )
                 return
@@ -154,8 +155,8 @@ def build_playback(window, controller, tts_service, sliders):
 
             def _repeat(rep_idx):
                 if rep_idx + 1 > repeats:
-                    if extro and callable(on_done):
-                        QTimer.singleShot(extro * 1000, on_done)
+                    if extro_effective and callable(on_done):
+                        QTimer.singleShot(extro_effective * 1000, on_done)
                     elif callable(on_done):
                         on_done()
                     return
@@ -167,8 +168,8 @@ def build_playback(window, controller, tts_service, sliders):
                         else:
                             _repeat(rep_idx + 1)
                     else:
-                        if extro and callable(on_done):
-                            QTimer.singleShot(extro * 1000, on_done)
+                        if extro_effective and callable(on_done):
+                            QTimer.singleShot(extro_effective * 1000, on_done)
                         elif callable(on_done):
                             on_done()
 
@@ -189,7 +190,7 @@ def build_playback(window, controller, tts_service, sliders):
                 repeats=repeats,
                 intro_delay=intro,
                 repeat_delay=gap,
-                extro_delay=extro,
+                extro_delay=extro_effective,
                 on_done=_sequence_done,
             )
 

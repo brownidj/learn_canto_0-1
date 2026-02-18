@@ -3,10 +3,14 @@
 from __future__ import annotations
 from typing import Any, Callable
 
+import logging
+
 from ui.vocab_table_category_editor import make_category_combo_delegate
-from ui.vocab_table_layout import apply_column_widths
+from ui.vocab_table_layout import apply_column_widths, install_column_width_resizer
 from ui.vocab_table_rows import TableRow, build_rows_from_vocab
 from ui.vocab_table_sorting import sync_header_arrows_from_native
+
+logger = logging.getLogger(__name__)
 
 
 class VocabularyTableController:
@@ -139,6 +143,7 @@ class VocabularyTableController:
         self._apply_filter()
         self._sync_header_arrows_from_native()
         apply_column_widths(self._table)
+        install_column_width_resizer(self._table)
 
     def _sync_header_arrows_from_native(self, *, force_col: int | None = None, force_order: int | None = None) -> None:
         if not self._table:
@@ -193,6 +198,11 @@ class VocabularyTableController:
                             from PySide6.QtWidgets import QTableWidgetItem
                             item = QTableWidgetItem(value)
                             try:
+                                from PySide6.QtGui import QBrush, QColor
+                                item.setBackground(QBrush(QColor("#FDEEE6")))
+                            except Exception:
+                                pass
+                            try:
                                 from PySide6.QtCore import Qt
                                 if j != 3:
                                     item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
@@ -212,6 +222,38 @@ class VocabularyTableController:
             except Exception:
                 pass
             self._updating_table = False
+        try:
+            from PySide6.QtGui import QPalette
+            msg = (
+                "Vocab table debug: type=%s altRows=%s selBehavior=%s selMode=%s ss_len=%s"
+            )
+            if self._table is not None:
+                logger.debug(
+                    msg,
+                    type(self._table).__name__,
+                    bool(self._table.alternatingRowColors()),
+                    int(self._table.selectionBehavior()),
+                    int(self._table.selectionMode()),
+                    len(self._table.styleSheet() or ""),
+                )
+                pal = self._table.palette()
+                logger.debug(
+                    "Vocab table palette: base=%s altBase=%s text=%s",
+                    pal.color(QPalette.Base).name(),
+                    pal.color(QPalette.AlternateBase).name(),
+                    pal.color(QPalette.Text).name(),
+                )
+                try:
+                    item0 = self._table.item(0, 0)
+                    if item0 is not None:
+                        logger.debug(
+                            "Vocab table item(0,0) bg=%s",
+                            item0.background().color().name(),
+                        )
+                except Exception:
+                    pass
+        except Exception:
+            pass
         apply_column_widths(self._table)
 
 
@@ -232,6 +274,17 @@ class VocabularyTableController:
             try:
                 self._table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectItems)
                 self._table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+            except Exception:
+                pass
+            try:
+                self._table.setStyleSheet(
+                    "QTableWidget, QTableView { background: #FDEEE6; }"
+                    "QTableWidget::item, QTableView::item { background: #FDEEE6; }"
+                    "QTableWidget::item:selected:active, QTableView::item:selected:active {"
+                    " background: #DCE8F6; color: #0C1B33; }"
+                    "QTableWidget::item:selected:!active, QTableView::item:selected:!active {"
+                    " background: #FDEEE6; color: #0C1B33; }"
+                )
             except Exception:
                 pass
             try:

@@ -8,6 +8,7 @@ from PySide6.QtWidgets import QComboBox
 
 from category_manager import CategoryManagerDialog
 from app.main_helpers import perf_start as _perf_start, perf_end as _perf_end
+from ui.combo_arrow_overlay import install_combo_arrow_overlay
 from services.vocab_loader import load_categories_map as _load_categories_map, commit_vocab_entry
 
 
@@ -42,6 +43,7 @@ def open_category_manager(
             cats = {}
 
     dlg = CategoryManagerDialog(window, vocab_dict, cats)
+    install_combo_arrow_overlay(dlg)
 
     try:
         def _commit_with_dialog(entry: dict):

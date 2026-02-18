@@ -60,8 +60,18 @@ def wire_category_change(ui_setup, window, controller, save_one):
         save_one("category", name)
         try:
             dlg.set("_tts_armed", False)
+            dlg.set("_auto_mode", False)
             if ui_setup.btn_play is not None:
                 ui_setup.btn_play.setText("Play")
+        except Exception:
+            pass
+        try:
+            btn_auto = window.findChild(QPushButton, "btnAuto")
+            if btn_auto is not None:
+                btn_auto.setChecked(False)
+            btn_tortoise = window.findChild(QPushButton, "btnTortoise")
+            if btn_tortoise is not None:
+                btn_tortoise.setChecked(False)
         except Exception:
             pass
         controller.update_buttons()

@@ -31,6 +31,24 @@ def _get_window_attr(window: QWidget, name: str, default=None):
         return default
 
 
+def _mark_syllable_tts_busy(window) -> bool:
+    """Return True if caller may start syllable TTS; sets busy flag."""
+    try:
+        if getattr(window, "_syllable_tts_busy", False):
+            return False
+        window._syllable_tts_busy = True
+        return True
+    except Exception:
+        return True
+
+
+def _clear_syllable_tts_busy(window) -> None:
+    try:
+        window._syllable_tts_busy = False
+    except Exception:
+        pass
+
+
 class MainController:
     """Lightweight controller wrapper that centralises high-level UI actions.
 
@@ -238,7 +256,7 @@ class MainController:
                                 label.setText("".join(parts))
 
                             def _play_syllable(_event, text=syllable, idx=idx):
-                                if getattr(window, "_syllable_tts_busy", False):
+                                if not _mark_syllable_tts_busy(window):
                                     return
                                 try:
                                     slider = window.findChild(QSlider, "sliderWpm")
@@ -273,11 +291,11 @@ class MainController:
                                         except Exception:
                                             pass
                                         _set_hanzi_highlight(None)
-                                        window._syllable_tts_busy = False
+                                        _clear_syllable_tts_busy(window)
 
                                     tts_service.play_once(text, voice=voice, rate=rate, on_finished=_done)
                                 except Exception:
-                                    window._syllable_tts_busy = False
+                                    _clear_syllable_tts_busy(window)
                                     pass
                             container.mousePressEvent = _play_syllable
                     window._tone_long_press_helpers = long_press_helpers
@@ -447,6 +465,19 @@ class MainController:
             combo = window.findChild(QComboBox, "comboCategory")
             if combo is not None:
                 combo.setEnabled(not auto_on)
+        except Exception:
+            pass
+
+        # Tortoise / Auto buttons: disabled until first Play arms TTS
+        try:
+            btn_tortoise = window.findChild(QPushButton, "btnTortoise")
+            btn_auto = window.findChild(QPushButton, "btnAuto")
+            can_use = bool(_get_window_attr(window, "_tts_armed", False)) and not _get_window_attr(window, "_is_playing", False)
+            if btn_tortoise is not None:
+                btn_tortoise.setEnabled(can_use and not auto_on)
+            if btn_auto is not None:
+                # Keep enabled if auto is already on so it can be turned off
+                btn_auto.setEnabled((can_use or auto_on))
         except Exception:
             pass
 

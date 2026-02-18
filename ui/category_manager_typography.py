@@ -61,9 +61,11 @@ class CategoryManagerTypographyController:
 
         label_entry = QFont(base_entry)
         label_entry.setPointSize(label_entry.pointSize() + int(self._dlg.get("_LABEL_FONT_DELTA_PT")))
+        label_entry.setBold(True)
 
         label_hanzi = QFont(base_hanzi)
         label_hanzi.setPointSize(label_hanzi.pointSize() + int(self._dlg.get("_LABEL_FONT_DELTA_PT")))
+        label_hanzi.setBold(True)
 
         input_entry = QFont(base_entry)
         input_entry.setPointSize(input_entry.pointSize() + int(self._dlg.get("_INPUT_FONT_DELTA_PT")))
@@ -71,13 +73,27 @@ class CategoryManagerTypographyController:
         input_hanzi = QFont(base_hanzi)
         input_hanzi.setPointSize(int(self._dlg.get("_HANZI_TEXT_DELTA_PT")))
 
-        # Apply label fonts
+        label_style = "background: #FDEEE6; padding: 4px 6px; border-radius: 4px;"
+
+        # Apply label fonts/styles (entry form)
+        for _r in range(form_entry.rowCount()):
+            _it = form_entry.itemAt(_r, QFormLayout.ItemRole.LabelRole)
+            _w = _it.widget() if _it is not None else None
+            if isinstance(_w, QLabel):
+                try:
+                    _w.setFont(label_entry)
+                    _w.setStyleSheet(label_style)
+                except (RuntimeError, TypeError, AttributeError):
+                    pass
+
+        # Apply label fonts/styles (hanzi form)
         for _r in range(form_hanzi.rowCount()):
             _it = form_hanzi.itemAt(_r, QFormLayout.ItemRole.LabelRole)
             _w = _it.widget() if _it is not None else None
             if isinstance(_w, QLabel):
                 try:
                     _w.setFont(label_hanzi)
+                    _w.setStyleSheet(label_style)
                 except (RuntimeError, TypeError, AttributeError):
                     pass
 

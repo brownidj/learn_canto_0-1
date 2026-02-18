@@ -59,12 +59,12 @@
      </property>
 
      <item>
-      <widget class="QTableView" name="tableVocab">
+      <widget class="QTableWidget" name="tableVocab">
        <property name="alternatingRowColors">
-        <bool>true</bool>
+        <bool>false</bool>
        </property>
        <property name="selectionBehavior">
-        <enum>QAbstractItemView::SelectRows</enum>
+        <enum>QAbstractItemView::SelectItems</enum>
        </property>
        <property name="selectionMode">
         <enum>QAbstractItemView::SingleSelection</enum>

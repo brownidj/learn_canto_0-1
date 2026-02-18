@@ -98,6 +98,7 @@ class CategoryManagerUIBuilder:
         row = QHBoxLayout()
         row.setSpacing(12)
         row.setAlignment(_Qt.AlignmentFlag.AlignTop)
+        self._entry_row = row
 
         # Entry group
         group_entry = QGroupBox("Entry", self.dialog)
@@ -272,9 +273,12 @@ class CategoryManagerUIBuilder:
         """Create Hanzi group (display, candidates, manual button)."""
         from ui.category_manager_constants import HANZI_CANDIDATE_TOOLTIP
 
-        row = self.dialog._root.itemAt(self.dialog._root.count() - 1)
+        row = getattr(self, "_entry_row", None)
         if not isinstance(row, QHBoxLayout):
-            return
+            # Fallback to last layout if entry row wasn't captured.
+            row = self.dialog._root.itemAt(self.dialog._root.count() - 1)
+            if not isinstance(row, QHBoxLayout):
+                return
 
         group_hanzi = QGroupBox("Hanzi", self.dialog)
         form_hanzi = QFormLayout(group_hanzi)
@@ -424,8 +428,35 @@ class CategoryManagerUIBuilder:
                     try:
                         from PySide6.QtWidgets import QAbstractItemView
                         if self.dialog._table is not None:
+                            try:
+                                if hasattr(self.dialog._table, "setColumnCount"):
+                                    self.dialog._table.setColumnCount(4)
+                                    self.dialog._table.setHorizontalHeaderLabels(
+                                        ["Hanzi", "Jyutping", "Meanings", "Categories"]
+                                    )
+                                    try:
+                                        header = self.dialog._table.horizontalHeader()
+                                        header.setStretchLastSection(False)
+                                    except Exception:
+                                        pass
+                            except Exception:
+                                pass
                             self.dialog._table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectItems)
                             self.dialog._table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+                            try:
+                                self.dialog._table.setAlternatingRowColors(False)
+                            except Exception:
+                                pass
+                            try:
+                                logger.debug(
+                                    "Table debug: altRows=%s selBehavior=%s selMode=%s ss_len=%d",
+                                    bool(self.dialog._table.alternatingRowColors()),
+                                    int(self.dialog._table.selectionBehavior()),
+                                    int(self.dialog._table.selectionMode()),
+                                    len(self.dialog._table.styleSheet() or ""),
+                                )
+                            except Exception:
+                                pass
                             try:
                                 self.dialog._table.setEditTriggers(QAbstractItemView.EditTrigger.AllEditTriggers)
                             except Exception:
@@ -462,6 +493,10 @@ class CategoryManagerUIBuilder:
                                 on_category_changed=self._make_table_category_handler(),
                             )
                             self.dialog._vocab_table_ctrl.populate()
+                            try:
+                                self.dialog._table.clearSelection()
+                            except Exception:
+                                pass
                             self._ensure_table_sort_indicator(self.dialog._table)
                             self._defer_table_sort_indicator(self.dialog._vocab_table_ctrl)
                             try:

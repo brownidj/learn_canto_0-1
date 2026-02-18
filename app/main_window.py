@@ -25,6 +25,7 @@ from app.main_window_services import (
     attach_candidate_provider,
     create_tts_service,
 )
+from ui.combo_arrow_overlay import install_combo_arrow_overlay
 from app.main_window_dialogs import open_category_manager
 from app.main_window_ui import (
     setup_label_hanzi,
@@ -145,7 +146,7 @@ def run() -> int:
 
         setup_audio_test(window, tts_service, slider_wpm)
         _apply_combo_arrow_style_to_window(window, combo_arrow_style)
-        _install_combo_arrow_glyphs(window)
+        install_combo_arrow_overlay(window)
         _install_combo_selection_highlight(window)
         setup_add_button(window, _open_category_manager, debug_open_add_item_dialog)
         _play_once, _play_sequence = build_playback(
@@ -182,23 +183,23 @@ def _apply_victoria_harbour_theme(app: QApplication) -> None:
     app.setStyleSheet(
         """
         QWidget {
-            background: #E6E8EA;
+            background: #DCE8F6;
             color: #0C1B33;
         }
         QMainWindow, QDialog {
-            background: #E6E8EA;
+            background: #DCE8F6;
         }
         QDockWidget, QWidget#dockContents {
-            background: #D7DADF;
+            background: #B2E0D4;
         }
         QGroupBox {
-            background: #FFFFFF;
-            border: 1px solid #4A5568;
+            background: #FDEEE6;
+            border: 1px solid #B2E0D4;
             border-radius: 8px;
             margin-top: 10px;
         }
         QWidget#toneImageRow {
-            background: #FFFFFF;
+            background: #FDEEE6;
         }
         QGroupBox::title {
             subcontrol-origin: margin;
@@ -210,99 +211,138 @@ def _apply_victoria_harbour_theme(app: QApplication) -> None:
             color: #0C1B33;
         }
         QLineEdit, QTextEdit {
-            background: #FFFFFF;
+            background: #FDEEE6;
             color: #0C1B33;
-            border: 1px solid #4A5568;
+            border: 1px solid #B2E0D4;
             border-radius: 6px;
             padding: 6px 8px;
-            selection-background-color: #2C7A7B;
-            selection-color: #E6E8EA;
+            selection-background-color: #B2E0D4;
+            selection-color: #0C1B33;
         }
         QLineEdit:read-only, QTextEdit:read-only {
-            background: #F3F4F6;
-            color: #4A5568;
+            background: #FDEEE6;
+            color: #0C1B33;
         }
         QComboBox {
-            background: #FFFFFF;
+            background: #FDEEE6;
             color: #0C1B33;
-            border: 1px solid #4A5568;
+            border: 1px solid #B2E0D4;
             border-radius: 6px;
             padding: 4px 28px 4px 8px;
+        }
+        QComboBox#comboCategory {
+            background: #DCE8F6;
         }
         QComboBox::drop-down {
             subcontrol-origin: padding;
             subcontrol-position: top right;
             width: 24px;
-            border-left: 1px solid #4A5568;
-            background: #E6E8EA;
+            border-left: 1px solid #B2E0D4;
+            background: #DCE8F6;
         }
         QComboBox QAbstractItemView {
-            background: #FFFFFF;
+            background: #FDEEE6;
             color: #0C1B33;
-            selection-background-color: #2C7A7B;
-            selection-color: #E6E8EA;
+            selection-background-color: #B2E0D4;
+            selection-color: #0C1B33;
+        }
+        QComboBox#comboCategory QAbstractItemView {
+            background: #DCE8F6;
+            selection-background-color: #DCE8F6;
         }
         QComboBox QAbstractItemView::item:selected,
         QComboBox QAbstractItemView::item:selected:active,
         QComboBox QAbstractItemView::item:selected:!active {
-            background: #2C7A7B;
-            color: #E6E8EA;
+            background: #B2E0D4;
+            color: #0C1B33;
+        }
+        QComboBox#comboCategory QAbstractItemView::item:selected,
+        QComboBox#comboCategory QAbstractItemView::item:selected:active,
+        QComboBox#comboCategory QAbstractItemView::item:selected:!active {
+            background: #DCE8F6;
+            color: #0C1B33;
         }
         QComboBox QAbstractItemView::item:hover {
-            background: #D7DADF;
+            background: #E1B7E2;
         }
         QPushButton {
-            background: #246;
-            color: #E6E8EA;
-            border: 1px solid #2c7;
+            background: #F5C2D3;
+            color: #0C1B33;
+            border: 1px solid #B2E0D4;
             border-radius: 6px;
             padding: 6px 12px;
+            font-weight: 700;
         }
         QPushButton:hover {
-            background: #2c7;
+            background: #B2E0D4;
         }
         QPushButton:pressed {
-            background: #1F5A5A;
+            background: #DCE8F6;
         }
         QPushButton:disabled {
-            background: #9AA6B2;
-            color: #E6E8EA;
-            border-color: #9AA6B2;
+            background: #C9CDD3;
+            color: #0C1B33;
+            border-color: #C9CDD3;
         }
         QToolButton {
-            background: #2C7A7B;
-            color: #E6E8EA;
-            border: 1px solid #246B6B;
+            background: #B2E0D4;
+            color: #0C1B33;
+            border: 1px solid #A3C1E0;
             border-radius: 6px;
             padding: 4px 8px;
         }
+        QToolBar QToolButton {
+            font-size: 24pt;
+            font-weight: 700;
+        }
         QToolButton:hover {
-            background: #246B6B;
+            background: #DCE8F6;
         }
         QSlider::groove:horizontal {
             height: 6px;
-            background: #9AA6B2;
+            background: #B2E0D4;
             border-radius: 3px;
         }
         QSlider::handle:horizontal {
             width: 18px;
             margin: -6px 0;
-            background: #FF6B6B;
-            border: 1px solid #C85757;
+            background: #F5C2D3;
+            border: 1px solid #E1B7E2;
             border-radius: 9px;
         }
         QScrollBar:vertical {
-            background: #E6E8EA;
+            background: #A3C1E0;
             width: 12px;
             margin: 0;
         }
         QScrollBar::handle:vertical {
-            background: #4A5568;
+            background: #B2E0D4;
             border-radius: 6px;
             min-height: 24px;
         }
         QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
             height: 0;
+        }
+        QTableWidget, QTableView {
+            background: #FDEEE6;
+            gridline-color: #B2E0D4;
+        }
+        QTableWidget::item, QTableView::item {
+            background: #FDEEE6;
+        }
+        QTableWidget::item:alternate, QTableView::item:alternate {
+            background: #FDEEE6;
+        }
+        QTableWidget::item:editing, QTableView::item:editing {
+            background: #DCE8F6;
+        }
+        QTableWidget::item:selected:active, QTableView::item:selected:active {
+            background: #DCE8F6;
+            color: #0C1B33;
+        }
+        QTableWidget::item:selected:!active, QTableView::item:selected:!active {
+            background: #FDEEE6;
+            color: #0C1B33;
         }
         """
     )
@@ -357,9 +397,11 @@ def _install_combo_arrow_glyphs(window) -> None:
             self.label = QLabel("▼", combo)
             self.label.setObjectName("comboArrowGlyph")
             self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.label.setStyleSheet("color: #0C1B33; background: transparent;")
+            self.label.setStyleSheet("color: #0C1B33; background: transparent; font-weight: 700; font-size: 14pt;")
             self.label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
             self._reposition()
+            self.label.raise_()
+            self.label.show()
 
         def _reposition(self):
             rect = self.combo.rect()
@@ -373,6 +415,7 @@ def _install_combo_arrow_glyphs(window) -> None:
                 QEvent.Type.Move,
                 QEvent.Type.StyleChange,
                 QEvent.Type.FontChange,
+                QEvent.Type.Show,
             ):
                 self._reposition()
             return False

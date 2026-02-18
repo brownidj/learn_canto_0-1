@@ -100,6 +100,14 @@ class TableScrollWidgets:
 class TableScrollSliderController:
     """Controller that keeps a table, a vertical slider, and a search bar in sync."""
 
+    @classmethod
+    def create(cls, parent: Optional["QWidget"] = None) -> "TableScrollSliderController":
+        """Create a controller backed by the UI panel if available."""
+        panel = _load_vocab_table_scroll_panel_ui(parent)
+        if panel is None:
+            panel = cls.build_panel(parent, use_ui=False)
+        return cls(panel)
+
     def __init__(self, panel: "QWidget") -> None:
         _pyside6_or_skip()
         from PySide6.QtCore import Qt
@@ -231,7 +239,7 @@ class TableScrollSliderController:
         table = QTableWidget(rows, 2, panel)
         table.setObjectName("tableVocab")
         table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectItems)
         table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         table.horizontalHeader().setStretchLastSection(True)
         table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
