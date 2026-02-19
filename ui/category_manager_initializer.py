@@ -242,6 +242,19 @@ class CategoryManagerInitializer:
             HanziCandidatePipeline,
             build_pipeline_from_category_manager,
         )
+        try:
+            from services.hk_words import load_words_hk
+            freq_map, colloq_set, attested_set = load_words_hk()
+            if isinstance(freq_map, dict):
+                self.dialog._hk_word_freq_map = freq_map
+            if isinstance(colloq_set, set):
+                self.dialog._hk_word_colloq = colloq_set
+            if isinstance(attested_set, set):
+                self.dialog._hk_word_attested = attested_set
+        except Exception:
+            self.dialog._hk_word_freq_map = {}
+            self.dialog._hk_word_colloq = set()
+            self.dialog._hk_word_attested = set()
 
         try:
             if self._dialog_data.get("_compose_candidates_from_chars") is None:
