@@ -129,7 +129,7 @@ def normalize_reverse_index(obj: Any) -> dict:
 
 
 def normalize_categories_yaml_payload(doc: Any) -> dict:
-    """Coerce categories.yaml into a mapping of category -> list[hanzi].
+    """Coerce a categories mapping into category -> list[hanzi].
 
     Supports both:
       - {category: ["漢字", ...], ...}

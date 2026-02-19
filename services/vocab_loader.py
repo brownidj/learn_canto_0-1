@@ -5,12 +5,11 @@ Extracted from main.py to improve testability and maintainability.
 """
 import os
 import logging
-from typing import Dict, List, Tuple, Optional, Any
+from typing import Dict, List, Tuple, Optional, Any, Iterable
 
 import yaml
 
 from infra.paths import data_path
-from app.main_helpers import normalize_categories_yaml_payload
 
 logger = logging.getLogger(__name__)
 
@@ -97,68 +96,125 @@ def load_vocab_from_unified_yaml() -> Tuple[Dict[str, List], Dict[str, List[str]
 
 
 def load_categories_from_disk() -> dict:
-    """Load categories from data/categories.yaml (authoritative for category list)."""
+    """Load categories from vocab.yaml (single source of truth)."""
     try:
-        from domain.storage_paths import categories_yaml_path
+        _v, cats = load_vocab_from_unified_yaml()
     except Exception:
-        categories_yaml_path = None
-
-    if not callable(categories_yaml_path):
-        return {}
-
-    try:
-        p = categories_yaml_path()
-    except Exception:
-        return {}
-
-    try:
-        if p is None:
-            return {}
-    except Exception:
-        pass
-
-    try:
-        path_s = str(p)
-    except Exception:
-        path_s = ""
-
-    if not path_s:
-        return {}
-
-    try:
-        if not os.path.exists(path_s):
-            return {}
-    except Exception:
-        return {}
-
-    try:
-        with open(path_s, "r", encoding="utf-8") as fh:
-            doc = yaml.safe_load(fh) or {}
-    except Exception:
-        return {}
-
-    return normalize_categories_yaml_payload(doc)
+        cats = {}
+    return cats or {}
 
 
 def load_categories_map() -> dict:
     """Return the best-available categories map.
 
     Source order:
-      1) data/categories.yaml (authoritative list of categories)
-      2) vocab.yaml-derived categories (fallback)
+      1) vocab.yaml-derived categories (single source of truth)
     """
     try:
         cats_disk = load_categories_from_disk()
-        if isinstance(cats_disk, dict) and cats_disk:
+        if isinstance(cats_disk, dict):
             return cats_disk
     except Exception:
-        pass
+        return {}
+    return {}
+
+
+def persist_categories_block(categories: dict | Iterable[str]) -> None:
+    """Persist category keys into vocab.yaml's categories block (best-effort)."""
+    try:
+        if isinstance(categories, dict):
+            cats = [str(k).strip() for k in categories.keys()]
+        else:
+            cats = [str(k).strip() for k in categories]
+    except Exception:
+        cats = []
+
+    cats = [c for c in cats if c]
+    if not cats:
+        return
 
     try:
-        _v, cats = load_vocab_from_unified_yaml()
+        vocab_path = data_path("vocab.yaml")
+        if not os.path.exists(vocab_path):
+            return
+        with open(vocab_path, "r", encoding="utf-8") as fh:
+            data = yaml.safe_load(fh) or {}
+        if not isinstance(data, dict):
+            data = {}
+        categories_block = data.get("categories")
+        if not isinstance(categories_block, dict):
+            categories_block = {}
+
+        changed = False
+        for cat in cats:
+            if cat not in categories_block:
+                categories_block[cat] = {}
+                changed = True
+
+        if not changed:
+            return
+
+        data["categories"] = categories_block
+        with open(vocab_path, "w", encoding="utf-8") as fh:
+            yaml.safe_dump(data, fh, allow_unicode=True, sort_keys=True)
     except Exception:
-        cats = {}
-    return cats or {}
+        return
+
+
+def update_entry_categories(
+    *,
+    hanzi: str,
+    categories: list[str],
+) -> bool:
+    """Update categories for a Hanzi entry inside vocab.yaml (best-effort)."""
+    hz = str(hanzi or "").strip()
+    cats = [str(c).strip() for c in (categories or []) if str(c).strip()]
+    if not hz:
+        return False
+
+    try:
+        vocab_path = data_path("vocab.yaml")
+        if not os.path.exists(vocab_path):
+            return False
+        with open(vocab_path, "r", encoding="utf-8") as fh:
+            data = yaml.safe_load(fh) or {}
+        if not isinstance(data, dict):
+            data = {}
+
+        entries_block = data.get("entries")
+        if not isinstance(entries_block, dict):
+            entries_block = {}
+
+        updated = False
+        for _jy, entry in entries_block.items():
+            if not isinstance(entry, dict):
+                continue
+            senses = entry.get("senses")
+            if not isinstance(senses, list):
+                continue
+            for s in senses:
+                if not isinstance(s, dict):
+                    continue
+                if s.get("hanzi") == hz:
+                    s["categories"] = cats
+                    updated = True
+
+        if not updated:
+            return False
+
+        categories_block = data.get("categories")
+        if not isinstance(categories_block, dict):
+            categories_block = {}
+        for cat in cats:
+            categories_block.setdefault(cat, {})
+        data["categories"] = categories_block
+        data["entries"] = entries_block
+
+        with open(vocab_path, "w", encoding="utf-8") as fh:
+            yaml.safe_dump(data, fh, allow_unicode=True, sort_keys=True)
+        return True
+    except Exception:
+        return False
 
 
 def commit_vocab_entry(

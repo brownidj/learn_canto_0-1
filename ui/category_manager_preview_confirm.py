@@ -46,7 +46,11 @@ class CategoryManagerPreviewConfirmController:
         jy = str((preview.get("jyutping") or "")).strip()
         hz = str((preview.get("hanzi") or "")).strip()
         mn = str((preview.get("meaning") or "")).strip()
-        cat = str((preview.get("category") or "")).strip()
+        cats = preview.get("categories")
+        if isinstance(cats, (list, tuple)) and cats:
+            cat = ", ".join([str(c).strip() for c in cats if str(c).strip()])
+        else:
+            cat = str((preview.get("category") or "")).strip()
 
         msg = QMessageBox(self._dlg.dialog)
         msg.setIcon(QMessageBox.Icon.Question)

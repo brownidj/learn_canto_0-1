@@ -195,6 +195,45 @@ class CategoryManagerComboService:
         combo = self._ui.widget("add_cat")
         if combo is None or not hasattr(combo, "clear") or not hasattr(combo, "addItems"):
             return
+
+        try:
+            multi = bool(self._dlg.get("_cat_multi_select", False))
+        except Exception:
+            multi = False
+
+        if multi:
+            try:
+                from PySide6.QtGui import QStandardItemModel, QStandardItem
+                from PySide6.QtCore import Qt
+            except Exception:
+                multi = False
+
+        if multi:
+            try:
+                selected_list = list(self._dlg.get("_selected_categories", []) or [])
+            except Exception:
+                selected_list = []
+            model = QStandardItemModel()
+            for cat in self._dlg.get("_all_cats", []):
+                item = QStandardItem(str(cat))
+                item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+                state = Qt.CheckState.Checked if str(cat) in selected_list else Qt.CheckState.Unchecked
+                item.setData(state, Qt.ItemDataRole.CheckStateRole)
+                model.appendRow(item)
+            combo.setModel(model)
+            try:
+                handler = self._dlg.get("_cat_on_view_pressed")
+                if callable(handler):
+                    combo.view().pressed.connect(handler)
+            except Exception:
+                pass
+            try:
+                sync_fn = self._dlg.get("_sync_selected_categories")
+                if callable(sync_fn):
+                    sync_fn()
+            except Exception:
+                pass
+            return
         with self._ui.block_signals("add_cat"):
             try:
                 combo.clear()

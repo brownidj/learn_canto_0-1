@@ -96,4 +96,10 @@ class AddEditUIActions:
                     committed = True
             except (TypeError, AttributeError, RuntimeError, ValueError):
                 committed = False
+        if committed:
+            try:
+                from ui.category_manager_vocab_display import refresh_table
+                refresh_table(self._dlg.dialog)
+            except (TypeError, AttributeError, RuntimeError, ImportError, ValueError):
+                pass
         return committed

@@ -35,7 +35,6 @@ class CategoryManagerInitializer:
         self._init_add_edit_state()
         self._init_style_and_curator()
         self._init_vocab_and_categories(vocab_items, categories_map)
-        self._reload_categories_from_disk_if_needed()
         self._init_reverse_lookup_caches()
         self._init_meaning_resolver()
         self._init_cantonese_language_service()
@@ -106,7 +105,7 @@ class CategoryManagerInitializer:
         """Normalize in-memory vocab + categories and build stable category list."""
         from domain.category_repo import CategoryRepo
         from domain.category_commit import CategoryCommitService
-        from persistence.categories_store import persist_categories_yaml
+        from services.vocab_loader import persist_categories_block
 
         # Legacy alias
         if isinstance(vocab_items, dict):
@@ -137,7 +136,7 @@ class CategoryManagerInitializer:
 
             def persist_cb(_cats_map: dict) -> None:
                 try:
-                    persist_categories_yaml(_cats_map)
+                    persist_categories_block(_cats_map)
                 except (TypeError, AttributeError, RuntimeError, ValueError, OSError):
                     return
 
@@ -184,37 +183,7 @@ class CategoryManagerInitializer:
             pass
 
     def _reload_categories_from_disk_if_needed(self) -> None:
-        """If categories input is empty, attempt one-time reload from disk."""
-        import yaml
-        from domain.storage_paths import categories_yaml_path
-
-        if len(self.dialog._all_cats) <= 1:
-            try:
-                cat_path = categories_yaml_path()
-                if cat_path.exists():
-                    with cat_path.open("r", encoding="utf-8") as fh:
-                        raw = yaml.safe_load(fh) or {}
-            except (OSError, yaml.YAMLError) as e:
-                logger.warning("Failed to reload categories from disk: %s", e)
-            else:
-                if isinstance(raw, dict):
-                    keys = [
-                        str(k).strip()
-                        for k in raw.keys()
-                        if str(k).strip() and str(k).lower() != "all"
-                    ]
-                    if keys:
-                        self.dialog._all_cats = sorted(
-                            set(keys + ["unassigned"]),
-                            key=lambda s: s.lower(),
-                        )
-                        logger.debug(
-                            "AddItem: categories reloaded from %s -> %d keys",
-                            cat_path,
-                            len(self.dialog._all_cats),
-                        )
-
-        # Final safety
+        """Deprecated (single source of truth is vocab.yaml)."""
         if "unassigned" not in (c.lower() for c in self.dialog._all_cats):
             self.dialog._all_cats.append("unassigned")
             self.dialog._all_cats.sort(key=lambda s: s.lower())

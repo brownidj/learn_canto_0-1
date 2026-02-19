@@ -161,11 +161,12 @@ class CategoryManagerUIBuilder:
         from PySide6.QtWidgets import QSizePolicy
         self.dialog._add_cat = QComboBox(group_entry)
         self.dialog._add_cat.setObjectName("comboAddCategories")
-        self.dialog._add_cat.setEditable(True)
+        self.dialog._add_cat.setEditable(False)
         self.dialog._add_cat.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
         self.dialog._add_cat.addItems(self.dialog._all_cats)
         self.dialog._add_cat.setCurrentIndex(-1)
         self.dialog._add_cat.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.dialog._cat_multi_select = True
 
         try:
             from PySide6.QtWidgets import QListView
@@ -214,6 +215,112 @@ class CategoryManagerUIBuilder:
             self.dialog._cat_combo_ctrl = None
             self.dialog._cat_combo_add_ctrl = None
 
+        # Add Category action button
+        from PySide6.QtWidgets import QToolButton
+        btn_add_cat = QToolButton(group_entry)
+        btn_add_cat.setObjectName("btnAddCategory")
+        btn_add_cat.setText("Add Category")
+        btn_add_cat.setToolTip("Create a new category immediately")
+        btn_add_cat.setAutoRaise(True)
+
+        def _on_add_category_clicked():
+            try:
+                cat = str(self.dialog._add_cat.currentText() or "").strip()
+            except Exception:
+                cat = ""
+            if not cat:
+                try:
+                    from PySide6.QtWidgets import QInputDialog
+                    cat, ok = QInputDialog.getText(
+                        self.dialog,
+                        "Add Category",
+                        "Category name:",
+                    )
+                    if not ok:
+                        return
+                    cat = str(cat or "").strip()
+                except Exception:
+                    return
+            if not cat:
+                return
+
+            try:
+                self.dialog._add_cat.setEditText(cat)
+            except Exception:
+                pass
+
+            added = False
+            add_ctrl = getattr(self.dialog, "_cat_combo_add_ctrl", None)
+            if add_ctrl is not None and hasattr(add_ctrl, "confirm_or_add_new_category"):
+                try:
+                    added = bool(add_ctrl.confirm_or_add_new_category(text=cat))
+                except Exception:
+                    added = False
+            if not added:
+                try:
+                    ops = self._dialog_data.get("_category_ops")
+                    if ops is not None and hasattr(ops, "add_new_category"):
+                        added = bool(ops.add_new_category(cat))
+                except Exception:
+                    added = False
+
+            if added:
+                try:
+                    all_cats = getattr(self.dialog, "_all_cats", None)
+                    if isinstance(all_cats, list) and cat not in all_cats:
+                        all_cats.append(cat)
+                        all_cats.sort(key=lambda s: str(s).lower())
+                except Exception:
+                    pass
+                try:
+                    from ui.category_manager_vocab_categories import CategoryManagerVocabCategories
+                    CategoryManagerVocabCategories.refresh_category_dropdown_from_cats(
+                        self.dialog, selected=cat
+                    )
+                except Exception:
+                    pass
+                try:
+                    self.dialog._add_cat.setCurrentText(cat)
+                except Exception:
+                    pass
+                # If multi-select, check the newly added item
+                try:
+                    if getattr(self.dialog, "_cat_multi_select", False):
+                        from PySide6.QtCore import Qt
+                        model = self.dialog._add_cat.model()
+                        for i in range(model.rowCount()):
+                            item = model.item(i) if hasattr(model, "item") else None
+                            if item is not None and str(item.text() or "") == cat:
+                                item.setData(Qt.CheckState.Checked, Qt.ItemDataRole.CheckStateRole)
+                                break
+                        # Sync selection state after change
+                        sync_fn = getattr(self.dialog, "_sync_selected_categories", None)
+                        if callable(sync_fn):
+                            sync_fn()
+                except Exception:
+                    pass
+
+        try:
+            btn_add_cat.clicked.connect(_on_add_category_clicked)
+        except Exception:
+            pass
+
+        cat_row = QWidget(group_entry)
+        cat_row_layout = QHBoxLayout(cat_row)
+        cat_row_layout.setContentsMargins(0, 0, 0, 0)
+        cat_row_layout.setSpacing(8)
+        cat_row_layout.addWidget(self.dialog._add_cat, 1)
+        cat_row_layout.addWidget(btn_add_cat, 0)
+
+        # Selected categories chips preview
+        label_selected = QLabel("")
+        label_selected.setObjectName("labelSelectedCategories")
+        label_selected.setWordWrap(True)
+        label_selected.setStyleSheet(
+            "QLabel { color: #444; font-size: 12pt; }"
+        )
+        self.dialog._cat_selected_label = label_selected
+
         # Category label with 16pt font
         from PySide6.QtGui import QFont
         label_font_cat = QFont()
@@ -224,9 +331,13 @@ class CategoryManagerUIBuilder:
         label_cat.setMinimumHeight(40)
         label_cat.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
 
-        form_entry.addRow(label_cat, self.dialog._add_cat)
+        form_entry.addRow(label_cat, cat_row)
+        form_entry.addRow(QLabel(""), label_selected)
         form_entry.addRow(label_mn, self.dialog._add_mn)
         form_entry.addRow(label_notes, self.dialog._add_notes)
+
+        # Install checkable category list + selection wiring
+        self._wire_category_multiselect()
 
         # Back-compat aliases
         self.dialog.editJyut = self.dialog._add_jy
@@ -268,6 +379,116 @@ class CategoryManagerUIBuilder:
         # Add to layout with stretch factor (Entry:Hanzi = 2:1 ratio)
         row.addWidget(group_entry, 2)
         row.setAlignment(group_entry, _Qt.AlignmentFlag.AlignTop)
+
+    def _wire_category_multiselect(self) -> None:
+        combo = getattr(self.dialog, "_add_cat", None)
+        if combo is None:
+            return
+        try:
+            from PySide6.QtGui import QStandardItemModel, QStandardItem
+            from PySide6.QtCore import Qt
+        except Exception:
+            return
+
+        cats = self._dialog_data.get("_all_cats", []) if isinstance(self._dialog_data, dict) else []
+        model = QStandardItemModel()
+        for cat in (cats or []):
+            item = QStandardItem(str(cat))
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            item.setData(Qt.CheckState.Unchecked, Qt.ItemDataRole.CheckStateRole)
+            model.appendRow(item)
+        combo.setModel(model)
+
+        def _current_selected() -> list[str]:
+            out = []
+            for row in range(model.rowCount()):
+                item = model.item(row)
+                if item is None:
+                    continue
+                try:
+                    state = item.data(Qt.ItemDataRole.CheckStateRole)
+                except Exception:
+                    state = None
+                if state == Qt.CheckState.Checked:
+                    out.append(str(item.text() or "").strip())
+            return [c for c in out if c]
+
+        def _set_selected_label(cats_list: list[str]) -> None:
+            label = getattr(self.dialog, "_cat_selected_label", None)
+            if label is None:
+                return
+            if not cats_list:
+                label.setText("No categories selected")
+                return
+            chips = " ".join(
+                (
+                    "<span style='background:#F2F2F2; border:1px solid #DDD; padding:2px 6px; "
+                    f"border-radius:10px;'>{c}</span>"
+                )
+                for c in cats_list
+            )
+            label.setText(chips)
+
+        def _sync_selected_state() -> None:
+            cats_list = _current_selected()
+            try:
+                self.dialog._selected_categories = list(cats_list)
+            except Exception:
+                pass
+            _set_selected_label(cats_list)
+            # Update state machine with first selected category (if any)
+            try:
+                cat_first = cats_list[0] if cats_list else ""
+            except Exception:
+                cat_first = ""
+            try:
+                self.dialog._update_add_edit_state(category=cat_first, cat_ok=bool(cat_first))
+            except Exception:
+                pass
+            # If Jyutping already present, refresh candidates using first category
+            try:
+                flow = getattr(self.dialog, "_add_edit_flow", None)
+                jy_widget = getattr(self.dialog, "_add_jy", None)
+                jy_val = str(jy_widget.text() or "").strip() if jy_widget is not None else ""
+                if flow is not None and hasattr(flow, "fill_hanzi_candidates") and jy_val:
+                    try:
+                        flow.fill_hanzi_candidates(jy_val, category=cat_first or None)
+                    except TypeError:
+                        flow.fill_hanzi_candidates(jy_val)
+            except Exception:
+                pass
+            try:
+                self.dialog._update_save_enabled()
+            except Exception:
+                pass
+
+        def _on_view_pressed(index):
+            try:
+                item = model.itemFromIndex(index)
+            except Exception:
+                item = None
+            if item is None:
+                return
+            try:
+                state = item.data(Qt.ItemDataRole.CheckStateRole)
+                new_state = Qt.CheckState.Unchecked if state == Qt.CheckState.Checked else Qt.CheckState.Checked
+                item.setData(new_state, Qt.ItemDataRole.CheckStateRole)
+            except Exception:
+                return
+            _sync_selected_state()
+
+        try:
+            combo.view().pressed.connect(_on_view_pressed)
+        except Exception:
+            pass
+
+        try:
+            self.dialog._sync_selected_categories = _sync_selected_state
+            self.dialog._cat_on_view_pressed = _on_view_pressed
+        except Exception:
+            pass
+
+        _sync_selected_state()
 
     def _create_hanzi_group(self) -> None:
         """Create Hanzi group (display, candidates, manual button)."""
@@ -654,8 +875,9 @@ class CategoryManagerUIBuilder:
                     members.append(hz)
 
             try:
-                from persistence.categories_store import persist_categories_yaml
-                persist_categories_yaml(cats_map)
+                from services.vocab_loader import update_entry_categories, persist_categories_block
+                update_entry_categories(hanzi=hz, categories=sorted(new_set, key=lambda s: s.lower()))
+                persist_categories_block(cats_map)
             except Exception:
                 pass
 

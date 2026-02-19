@@ -1,33 +1,26 @@
 def test_persist_categories_does_not_truncate_existing(tmp_path, monkeypatch):
-    from persistence import categories_store
-    from domain.storage_paths import categories_yaml_path
+    from services import vocab_loader
     import yaml
 
-    # Arrange: fake categories.yaml with many categories
-    p = tmp_path / "categories.yaml"
+    # Arrange: fake vocab.yaml with many categories
+    p = tmp_path / "vocab.yaml"
     monkeypatch.setattr(
-        "domain.storage_paths.categories_yaml_path",
-        lambda: p,
+        "services.vocab_loader.data_path",
+        lambda name: p,
     )
 
-    original = {
-        "animals": ["狗", "貓"],
-        "verbs": ["食", "行"],
-        "emotions": ["開心"],
-        "work": ["做嘢"],
-    }
+    original = {"animals": {}, "verbs": {}, "emotions": {}, "work": {}}
 
     with p.open("w", encoding="utf-8") as f:
-        yaml.safe_dump(original, f)
+        yaml.safe_dump({"categories": original, "entries": {}}, f)
 
     # Act: persist a *partial* map
-    categories_store.persist_categories_yaml({
+    vocab_loader.persist_categories_block({
         "work": ["返工"],
     })
 
     # Assert: nothing else was lost
     with p.open("r", encoding="utf-8") as f:
-        merged = yaml.safe_load(f)
+        merged = (yaml.safe_load(f) or {}).get("categories")
 
     assert set(merged.keys()) == set(original.keys())
-    assert "返工" in merged["work"]

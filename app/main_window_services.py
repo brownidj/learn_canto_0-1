@@ -2,20 +2,19 @@
 
 from __future__ import annotations
 
-from typing import Any, Tuple
+import os
+from typing import Tuple
 
+from app.main_helpers import normalize_reverse_index as _normalize_reverse_index, perf_start as _perf_start, \
+    perf_end as _perf_end
+from domain.candidate_provider import CallableCandidateProvider
 from infra.paths import project_root
+from services.reverse_lookup_service import ReverseLookupService
+from services.tts_service import TTSService
 from services.vocab_loader import (
     load_vocab_from_unified_yaml as _load_vocab_from_unified_yaml,
-    load_categories_from_disk as _load_categories_from_disk,
     load_categories_map as _load_categories_map,
 )
-from services.reverse_lookup_service import ReverseLookupService
-import os
-
-from services.tts_service import TTSService
-from domain.candidate_provider import CallableCandidateProvider
-from app.main_helpers import normalize_reverse_index as _normalize_reverse_index, perf_start as _perf_start, perf_end as _perf_end
 
 try:
     from infra.hanzi_composition import compose_candidates_from_chars, shortlist_candidates
@@ -36,12 +35,6 @@ except Exception:
 
 def load_vocab_and_categories() -> Tuple[dict, dict]:
     vocab, categories_map = _load_vocab_from_unified_yaml()
-    try:
-        cats_disk = _load_categories_from_disk()
-    except Exception:
-        cats_disk = {}
-    if isinstance(cats_disk, dict) and cats_disk:
-        categories_map = cats_disk
     return vocab, categories_map
 
 
@@ -82,7 +75,7 @@ def ensure_char_map(window) -> None:
 def ensure_reverse_index(window) -> None:
     try:
         prev_idx = getattr(window, "_reverse_index", None)
-    except Exception:
+    except ():
         prev_idx = None
     try:
         if isinstance(prev_idx, dict) and prev_idx:

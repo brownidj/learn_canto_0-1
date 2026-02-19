@@ -19,7 +19,6 @@ from domain.storage_paths_core import (
 from domain.storage_paths_files import (
     andys_list_yaml_path,
     cantonese_language_cache_path,
-    categories_yaml_path,
     cccanto_meanings_map_path,
     cedict_meanings_map_json_path,
     cedict_meanings_map_yaml_path,
@@ -37,7 +36,6 @@ __all__ = [
     "ProjectPaths",
     "andys_list_yaml_path",
     "cantonese_language_cache_path",
-    "categories_yaml_path",
     "cccanto_meanings_map_path",
     "cedict_meanings_map_json_path",
     "cedict_meanings_map_yaml_path",

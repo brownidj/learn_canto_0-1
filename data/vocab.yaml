@@ -1,16 +1,17 @@
 categories:
+  adjectives:
+    description: Adjectives or short descriptive expressions.
+    label: Descriptions & adjectives
   animals:
     description: Animals, insects and other living creatures.
     label: Animals
-  colors:
+  body_parts: {}
+  colour:
     description: Basic colors and color expressions.
     label: Colors
   communication:
     description: Verbs and phrases about speaking, asking, understanding, and information.
     label: Communication & questions
-  adjectives:
-    description: Adjectives or short descriptive expressions.
-    label: Descriptions & adjectives
   direction:
     description: Spatial terms like up, down, here, there.
     label: Direction & location words
@@ -66,9 +67,10 @@ categories:
   roles_titles:
     description: Social or professional roles and titles.
     label: Roles & titles
-  school_tests:
+  school:
     description: Exam, test and study-related words.
     label: School & tests
+  school_tests: {}
   technology_media:
     description: Technology, phones, media and related things.
     label: Technology & media
@@ -81,6 +83,8 @@ categories:
   vehicle:
     description: Vehicles and transport-related words.
     label: Vehicles & transport
+  verb: {}
+  verbs: {}
   weather:
     description: Weather conditions and related expressions.
     label: Weather
@@ -105,7 +109,7 @@ entries:
     jyutping: baak6
     senses:
     - categories:
-      - colors
+      - colour
       gloss: White, snow
       hanzi: 白
   baat3:
@@ -117,11 +121,20 @@ entries:
       gloss: eight
       hanzi: 八
       register: both
+  baat3 jat6:
+    jyutping: baat3 jat6
+    senses:
+    - categories:
+      - time_calendar
+      gloss: eighth day
+      hanzi: 八日
+      register: both
   bei2:
     jyutping: bei2
     senses:
     - categories:
       - communication
+      - verb
       gloss: give
       hanzi: 畀
   bin1 dou6:
@@ -157,9 +170,17 @@ entries:
     jyutping: caang2
     senses:
     - categories:
-      - colors
+      - colour
       gloss: orange tree, orange (color)
       hanzi: 橙
+  caau1:
+    jyutping: caau1
+    senses:
+    - categories:
+      - money_shopping
+      gloss: banknote; cash (note)
+      hanzi: 钞
+      register: both
   cat1:
     headword: 七
     jyutping: cat1
@@ -189,9 +210,16 @@ entries:
     jyutping: ceng1
     senses:
     - categories:
-      - colors
+      - colour
       gloss: cyan
       hanzi: 青
+  ceng1 luk6:
+    jyutping: ceng1 luk6
+    senses:
+    - categories:
+      - colour
+      gloss: green colour, turquoise
+      hanzi: 青綠
   ceon1:
     headword: 春
     jyutping: ceon1
@@ -200,6 +228,14 @@ entries:
       - time_calendar
       gloss: spring
       hanzi: 春
+      register: both
+  cin1:
+    jyutping: cin1
+    senses:
+    - categories:
+      - numbers
+      gloss: thousand
+      hanzi: 千
       register: both
   cin2:
     headword: 錢
@@ -214,7 +250,7 @@ entries:
     jyutping: cin2 laam4
     senses:
     - categories:
-      - colors
+      - colour
       gloss: light blue
       hanzi: 淺藍
   cin4:
@@ -266,7 +302,8 @@ entries:
     senses:
     - categories:
       - technology_media
-      gloss: (noun) electricity, (verb) to get electric shock, (slang) to flirt
+      - verb
+      gloss: electricity, (verb) to get electric shock, (slang) to flirt
       hanzi: 電
   din6 waa2:
     headword: 電話
@@ -306,7 +343,7 @@ entries:
     senses:
     - categories:
       - adjectives
-      gloss: (adjective) short, deficient
+      gloss: short, deficient
       hanzi: 短
   faa1:
     jyutping: faa1
@@ -315,19 +352,35 @@ entries:
       - nature_land
       gloss: variant of 花[hua1], flower, blossom
       hanzi: 花
+  faan1 gung1:
+    jyutping: faan1 gung1
+    senses:
+    - categories:
+      - work
+      - verb
+      gloss: go to work; commute to work
+      hanzi: 返工
+      register: colloquial
+  fan1 ji1 cou3 zi2:
+    jyutping: fan1 ji1 cou3 zi2
+    senses:
+    - categories:
+      - colour
+      gloss: lavender purple, as in a product/paint/fashion shade name
+      hanzi: 薰衣草紫
   fan2 hung4:
     jyutping: fan2 hung4
     senses:
     - categories:
-      - colors
+      - colour
       gloss: pink
       hanzi: 粉紅
   fe1:
     jyutping: fe1
     senses:
     - categories:
-      - colors
-      gloss: (noun) (of color) 1. brown, (beverage) coffee
+      - colour
+      gloss: (of color) 1. brown, (beverage) coffee
       hanzi: 啡
   fei1 gei1:
     headword: 飛機
@@ -344,7 +397,8 @@ entries:
     senses:
     - categories:
       - time_calendar
-      - school_tests
+      - school
+      - verb
       gloss: have a day off; be on holiday
       hanzi: 放假
       register: colloquial
@@ -364,7 +418,7 @@ entries:
     senses:
     - categories:
       - time_calendar
-      - school_tests
+      - school
       gloss: holiday
       hanzi: 假期
       register: both
@@ -382,7 +436,7 @@ entries:
     jyutping: gam1
     senses:
     - categories:
-      - colors
+      - colour
       gloss: golden colour
       hanzi: 金
   gam1 jat6 hai6:
@@ -457,6 +511,14 @@ entries:
       gloss: there
       hanzi: 嗰度
       register: colloquial
+  go3:
+    jyutping: go3
+    senses:
+    - categories:
+      - numbers
+      gloss: classifier; one (for counting)
+      hanzi: 個
+      register: colloquial
   gon1 cou3:
     headword: 乾燥
     jyutping: gon1 cou3
@@ -472,6 +534,7 @@ entries:
     senses:
     - categories:
       - communication
+      - verb
       gloss: speak; say
       hanzi: 講
       register: colloquial
@@ -480,6 +543,7 @@ entries:
     senses:
     - categories:
       - work
+      - verb
       gloss: work
       hanzi: 工作
   gwong2 dung1 waa2:
@@ -528,6 +592,38 @@ entries:
       gloss: thunder
       hanzi: 行雷
       register: both
+  haau2 si3:
+    jyutping: haau2 si3
+    senses:
+    - categories:
+      - school_tests
+      gloss: exam
+      hanzi: 考試
+      register: both
+  hai6 sing1 kei4 saam1:
+    jyutping: hai6 sing1 kei4 saam1
+    senses:
+    - categories:
+      - time_calendar
+      gloss: it’s Wednesday
+      hanzi: 係星期三
+      register: colloquial
+  hak1:
+    jyutping: hak1
+    senses:
+    - categories:
+      - colour
+      gloss: black
+      hanzi: 黑
+      register: both
+  hau2:
+    jyutping: hau2
+    senses:
+    - categories:
+      - body_parts
+      gloss: mouth
+      hanzi: 口
+      register: both
   hau4:
     headword: 猴
     jyutping: hau4
@@ -545,6 +641,7 @@ entries:
     - categories:
       - communication
       - people
+      - verb
       gloss: meet
       hanzi: 去見面
       register: colloquial
@@ -554,6 +651,7 @@ entries:
     senses:
     - categories:
       - communication
+      - verb
       gloss: can; may
       hanzi: 可以
       register: colloquial
@@ -642,7 +740,7 @@ entries:
     jyutping: hung4
     senses:
     - categories:
-      - colors
+      - colour
       gloss: surname Hong
       hanzi: 紅
   jam2 je5:
@@ -651,9 +749,18 @@ entries:
     senses:
     - categories:
       - food_drink_eating_drinking
+      - verb
       gloss: drinks; drink something
       hanzi: 飲野
       register: colloquial
+  jan4:
+    jyutping: jan4
+    senses:
+    - categories:
+      - people
+      gloss: person
+      hanzi: 人
+      register: both
   jat1:
     headword: 一
     jyutping: jat1
@@ -662,6 +769,22 @@ entries:
       - numbers
       gloss: one
       hanzi: 一
+      register: both
+  jat1 dim2:
+    jyutping: jat1 dim2
+    senses:
+    - categories:
+      - time_calendar
+      gloss: one o'clock
+      hanzi: 一點
+      register: both
+  jat1 maan6:
+    jyutping: jat1 maan6
+    senses:
+    - categories:
+      - numbers
+      gloss: ten thousand
+      hanzi: 一萬
       register: both
   jat6:
     headword: 日
@@ -687,6 +810,7 @@ entries:
     senses:
     - categories:
       - communication
+      - verb
       gloss: to forgive, to help, profound
       hanzi: 宥
   ji1 jyun2:
@@ -750,6 +874,14 @@ entries:
       gloss: month
       hanzi: 月
       register: both
+  jyut6 loeng6:
+    jyutping: jyut6 loeng6
+    senses:
+    - categories:
+      - nature_air
+      gloss: moon
+      hanzi: 月亮
+      register: both
   keoi5:
     headword: 佢
     jyutping: keoi5
@@ -794,7 +926,7 @@ entries:
     jyutping: laam4
     senses:
     - categories:
-      - colors
+      - colour
       gloss: surname Lan
       hanzi: 藍
   leng4:
@@ -802,13 +934,13 @@ entries:
     senses:
     - categories:
       - adjectives
-      gloss: (adjective) pretty, beautiful, young
+      gloss: pretty, beautiful, young
       hanzi: 靚
   leot6 sik1:
     jyutping: leot6 sik1
     senses:
     - categories:
-      - colors
+      - colour
       gloss: maroon, chestnut brown
       hanzi: 栗色
   ling4:
@@ -891,6 +1023,7 @@ entries:
     senses:
     - categories:
       - communication
+      - verb
       gloss: not know; don&apos;t know
       hanzi: 唔識
       register: colloquial
@@ -940,7 +1073,7 @@ entries:
     jyutping: mai5 sik1
     senses:
     - categories:
-      - colors
+      - colour
       gloss: beige
       hanzi: 米色
   man4:
@@ -955,7 +1088,8 @@ entries:
     senses:
     - categories:
       - communication
-      gloss: (verb) to question, ask
+      - verb
+      gloss: to question, ask
       hanzi: 問
   mei6 loi4:
     headword: 未來
@@ -971,7 +1105,7 @@ entries:
     senses:
     - categories:
       - adjectives
-      gloss: (adjective) bright, obvious
+      gloss: bright, obvious
       hanzi: 明
   miu5:
     headword: 秒
@@ -990,6 +1124,7 @@ entries:
     - categories:
       - communication
       - adjectives
+      - verb
       gloss: not have; there is not
       hanzi: 冇
       register: colloquial
@@ -1146,7 +1281,7 @@ entries:
     jyutping: ngan4
     senses:
     - categories:
-      - colors
+      - colour
       gloss: silvery colour
       hanzi: 銀
   ngau4:
@@ -1229,6 +1364,7 @@ entries:
     - categories:
       - food_drink_eating_drinking
       - communication
+      - verb
       gloss: I want to drink
       hanzi: 我想飲
       register: colloquial
@@ -1239,6 +1375,7 @@ entries:
     - categories:
       - food_drink_eating_drinking
       - communication
+      - verb
       gloss: I like to eat
       hanzi: 我鐘意食
       register: colloquial
@@ -1384,7 +1521,7 @@ entries:
     jyutping: sam1 luk6
     senses:
     - categories:
-      - colors
+      - colour
       gloss: dark green
       hanzi: 深綠
   sap6:
@@ -1395,6 +1532,14 @@ entries:
       - numbers
       gloss: ten
       hanzi: 十
+      register: both
+  sap6 cat1 fan1:
+    jyutping: sap6 cat1 fan1
+    senses:
+    - categories:
+      - time_calendar
+      gloss: seventeen minutes
+      hanzi: 十七分
       register: both
   sap6 jat1 jyut6:
     headword: 十一月
@@ -1422,6 +1567,14 @@ entries:
       - time_calendar
       gloss: October
       hanzi: 十月
+      register: both
+  sau2:
+    jyutping: sau2
+    senses:
+    - categories:
+      - body_parts
+      gloss: hand
+      hanzi: 手
       register: both
   se4:
     headword: 蛇
@@ -1485,6 +1638,7 @@ entries:
     senses:
     - categories:
       - communication
+      - verb
       gloss: know; be familiar with
       hanzi: 識
       register: colloquial
@@ -1494,9 +1648,18 @@ entries:
     senses:
     - categories:
       - communication
+      - verb
       gloss: do you know
       hanzi: 識唔識
       register: colloquial
+  sin1 saang1:
+    jyutping: sin1 saang1
+    senses:
+    - categories:
+      - family
+      gloss: Mr.; teacher
+      hanzi: 先生
+      register: both
   sing1 kei4:
     headword: 星期
     jyutping: sing1 kei4
@@ -1610,6 +1773,14 @@ entries:
       gloss: sun; the sun
       hanzi: 太陽
       register: both
+  tau4:
+    jyutping: tau4
+    senses:
+    - categories:
+      - body_parts
+      gloss: head
+      hanzi: 頭
+      register: both
   tin1 hung1:
     headword: 天空
     jyutping: tin1 hung1
@@ -1642,7 +1813,7 @@ entries:
     jyutping: wong4
     senses:
     - categories:
-      - colors
+      - colour
       gloss: Yellow
       hanzi: 黃
   zam1:
@@ -1705,6 +1876,7 @@ entries:
     senses:
     - categories:
       - work
+      - verb
       gloss: to work on, to work (action-focussed)
       hanzi: 做嘢
   zung1:

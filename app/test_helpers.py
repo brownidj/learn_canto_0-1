@@ -7,8 +7,10 @@ from typing import Optional
 from PySide6.QtWidgets import QWidget
 
 from app.bootstrap import ensure_qt_app
-from persistence.categories_store import load_categories as _load_categories
-from services.vocab_loader import load_vocab_from_unified_yaml as _load_vocab_from_unified_yaml
+from services.vocab_loader import (
+    load_vocab_from_unified_yaml as _load_vocab_from_unified_yaml,
+    load_categories_map as _load_categories_map,
+)
 from category_manager import CategoryManagerDialog
 
 
@@ -23,11 +25,11 @@ def load_add_dialog(parent: Optional[QWidget] = None) -> CategoryManagerDialog:
 
     cats_map = None
     try:
-        cats_map = _load_categories()
+        cats_map = _load_categories_map()
     except Exception:
         cats_map = None
 
-    if not isinstance(cats_map, dict) or not cats_map:
+    if not isinstance(cats_map, dict):
         cats_map = vocab_categories_map if isinstance(vocab_categories_map, dict) else {}
 
     return CategoryManagerDialog(parent, vocab_dict if isinstance(vocab_dict, dict) else {}, cats_map)

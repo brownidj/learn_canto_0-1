@@ -4,7 +4,7 @@ Add/Edit preview builder for CategoryManager.
 UI-aware builder that reads widget state with minimal fallbacks.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from ui.category_manager_add_edit_state_service import AddEditStateService
 from ui.category_manager_ui_services import CategoryManagerUIService
@@ -16,12 +16,14 @@ class AddEntryPreview:
     hanzi: str = ""
     meaning: str = ""
     category: str = ""
+    categories: list[str] = field(default_factory=list)
 
     def to_payload(self) -> dict:
         jy = (self.jyutping or "").strip()
         hz = (self.hanzi or "").strip()
         mn = (self.meaning or "").strip()
         cat = (self.category or "").strip()
+        cats_list = [str(c).strip() for c in (self.categories or []) if str(c).strip()]
 
         # Canonical keys are always present.
         payload = {
@@ -33,7 +35,10 @@ class AddEntryPreview:
 
         # Required legacy/test aliases.
         payload["gloss"] = mn
-        payload["categories"] = ([cat] if cat else [])
+        if cats_list:
+            payload["categories"] = cats_list
+        else:
+            payload["categories"] = ([cat] if cat else [])
 
         return payload
 
@@ -140,6 +145,11 @@ class AddEntryPreviewBuilder:
                 cat = ui.get_text_widget(cat_widget)
         except Exception:
             cat = ""
+        cats_multi: list[str] = []
+        try:
+            cats_multi = list(getattr(dialog, "_selected_categories", []) or [])
+        except Exception:
+            cats_multi = []
 
         # 2) Normalise Jyutping using the dialog normaliser when available
         if jy:
@@ -207,4 +217,8 @@ class AddEntryPreviewBuilder:
             except Exception:
                 mn = ""
 
-        return AddEntryPreview(jyutping=jy, hanzi=hz, meaning=mn, category=cat)
+        # Prefer multi-select categories if present
+        if cats_multi and not cat:
+            cat = cats_multi[0]
+
+        return AddEntryPreview(jyutping=jy, hanzi=hz, meaning=mn, category=cat, categories=cats_multi)

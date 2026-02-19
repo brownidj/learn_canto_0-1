@@ -51,8 +51,8 @@ class CategoryOpsServices:
 
         def _persist_cb(_cats_map: dict) -> None:
             try:
-                from persistence.categories_store import persist_categories_yaml
-                persist_categories_yaml(_cats_map)
+                from services.vocab_loader import persist_categories_block
+                persist_categories_block(_cats_map)
             except Exception:
                 return
 
@@ -117,22 +117,31 @@ class CategoryOpsServices:
                 ok = bool(repo.add(cat_s))
             except Exception:
                 ok = False
+        elif repo is not None and hasattr(repo, "ensure_category"):
+            try:
+                ok = bool(repo.ensure_category(cat_s))
+            except Exception:
+                ok = False
+        else:
+            ok = False
 
-            if ok:
+        if ok:
+            try:
+                widgets = resolve_category_manager_widgets(self._dlg)
+                w_cat = widgets.get("add_cat")
+            except Exception:
+                w_cat = None
+
+            if w_cat is not None:
                 try:
-                    widgets = resolve_category_manager_widgets(self._dlg)
-                    w_cat = widgets.get("add_cat")
+                    if hasattr(w_cat, "findText") and hasattr(w_cat, "addItem"):
+                        canon = repo.canon(cat_s) if repo is not None and hasattr(repo, "canon") else cat_s
+                        if int(w_cat.findText(canon)) < 0:
+                            w_cat.addItem(canon)
                 except Exception:
-                    w_cat = None
+                    pass
 
-                if w_cat is not None:
-                    try:
-                        if hasattr(w_cat, "findText") and hasattr(w_cat, "addItem"):
-                            if int(w_cat.findText(repo.canon(cat_s))) < 0:
-                                w_cat.addItem(repo.canon(cat_s))
-                    except Exception:
-                        pass
-
+        if ok:
             return ok
 
         try:
@@ -154,4 +163,9 @@ class CategoryOpsServices:
 
         if cat_key not in cats_map:
             cats_map[cat_key] = []
+            try:
+                from services.vocab_loader import persist_categories_block
+                persist_categories_block(cats_map)
+            except Exception:
+                pass
         return True

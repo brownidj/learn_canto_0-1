@@ -15,7 +15,7 @@ def test_plan_clear_add_entry_fields_flags():
     assert plan.clear_mn is True
     assert plan.clear_notes is True
     assert plan.reset_category is True
-    assert plan.hide_candidates is False
+    assert plan.hide_candidates is True
     assert plan.reset_state is True
     assert plan.reset_manual_mode is True
     assert plan.reset_hanzi_committed is False

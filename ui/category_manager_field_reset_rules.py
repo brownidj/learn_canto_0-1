@@ -24,7 +24,7 @@ def plan_clear_add_entry_fields() -> ResetPlan:
         clear_mn=True,
         clear_notes=True,
         reset_category=True,
-        hide_candidates=False,
+        hide_candidates=True,
         reset_state=True,
         reset_manual_mode=True,
         reset_hanzi_committed=False,

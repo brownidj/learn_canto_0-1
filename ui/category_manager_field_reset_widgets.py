@@ -38,7 +38,38 @@ def reset_category(dialog_or_adapter, plan) -> None:
     if not plan.reset_category:
         return
     dlg = _adapter(dialog_or_adapter)
-    _ui(dialog_or_adapter).set_combo_index("add_cat", -1)
+    try:
+        multi = bool(dlg.get("_cat_multi_select", False))
+    except Exception:
+        multi = False
+    if multi:
+        try:
+            combo = _ui(dialog_or_adapter).widget("add_cat")
+        except Exception:
+            combo = None
+        if combo is not None:
+            try:
+                from PySide6.QtCore import Qt
+                model = combo.model() if hasattr(combo, "model") else None
+                if model is not None and hasattr(model, "rowCount"):
+                    for i in range(model.rowCount()):
+                        item = model.item(i) if hasattr(model, "item") else None
+                        if item is not None:
+                            item.setData(Qt.CheckState.Unchecked, Qt.ItemDataRole.CheckStateRole)
+            except Exception:
+                pass
+        try:
+            dlg.set("_selected_categories", [])
+        except Exception:
+            pass
+        try:
+            label = dlg.get("_cat_selected_label")
+            if label is not None and hasattr(label, "setText"):
+                label.setText("No categories selected")
+        except Exception:
+            pass
+    else:
+        _ui(dialog_or_adapter).set_combo_index("add_cat", -1)
     try:
         dlg.set("_last_committed_category", "")
     except (TypeError, AttributeError, RuntimeError):

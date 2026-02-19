@@ -7,7 +7,7 @@ Responsibilities:
   - Apply canonicalisation of category names (optional)
   - Provide a small API used by CategoryCommitService / CategoryManagerDialog
   - Persist categories via an injected callback (preferred) or via
-    persistence.categories_store.save_categories (merge-on-write)
+    services.vocab_loader.persist_categories_block (best-effort)
 
 This module must not import any UI / Qt code.
 """
@@ -17,10 +17,10 @@ from __future__ import annotations
 from typing import Any, Callable, Dict, List, Optional
 
 try:
-    # Single source of truth for persistence (merge-on-write).
-    from persistence.categories_store import save_categories as _save_categories
+    # Single source of truth for persistence (vocab.yaml categories block).
+    from services.vocab_loader import persist_categories_block as _persist_categories_block
 except Exception:  # pragma: no cover
-    _save_categories = None  # type: ignore[assignment]
+    _persist_categories_block = None  # type: ignore[assignment]
 
 
 CatsMap = Dict[str, List[str]]
@@ -110,6 +110,10 @@ class CategoryRepo:
         except Exception:
             return False
 
+    def add(self, name: str) -> bool:
+        """Compatibility alias for CategoryCommitService."""
+        return self.ensure_category(name)
+
     def add_hanzi(self, category: str, hanzi: str) -> None:
         key = self.canon(category)
         try:
@@ -167,7 +171,7 @@ class CategoryRepo:
 
         Priority:
           1) injected persist callback (tests/UI can provide)
-          2) persistence.categories_store.save_categories (merge-on-write)
+          2) services.vocab_loader.persist_categories_block
 
         Must never raise.
         """
@@ -179,7 +183,7 @@ class CategoryRepo:
             pass
 
         try:
-            if _save_categories is not None:
-                _save_categories(self._cats)  # merge-on-write
+            if _persist_categories_block is not None:
+                _persist_categories_block(self._cats)
         except Exception:
             return

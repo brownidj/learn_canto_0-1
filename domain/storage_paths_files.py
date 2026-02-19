@@ -49,8 +49,6 @@ def cedict_meanings_map_yaml_path(*, project_dir: Optional[Path] = None) -> Opti
     )
 
 
-def categories_yaml_path(*, project_dir: Optional[Path] = None) -> Path:
-    return resolve_data_file("categories.yaml", project_dir=project_dir, prefer_data_dir=True)
 
 
 def data_dir(*, project_dir: Optional[Path] = None) -> Path:

@@ -55,12 +55,17 @@ def wire_add_edit(wiring, fn_gate) -> None:
     wiring._wire_line_edit_common(w_mn, on_enter=fn_mn_enter, on_change=fn_gate)
 
     # Category
-    if w_cat is not None and hasattr(w_cat, "setEditable"):
-        try:
-            w_cat.setEditable(True)
-        except (TypeError, AttributeError, RuntimeError):
-            pass
-    wiring._wire_combo_common(w_cat, on_change=fn_gate)
+    try:
+        multi = bool(wiring._dlg.get("_cat_multi_select", False))
+    except Exception:
+        multi = False
+    if not multi:
+        if w_cat is not None and hasattr(w_cat, "setEditable"):
+            try:
+                w_cat.setEditable(True)
+            except (TypeError, AttributeError, RuntimeError):
+                pass
+        wiring._wire_combo_common(w_cat, on_change=fn_gate)
 
     fn_cat_commit = None
     try:
@@ -69,7 +74,7 @@ def wire_add_edit(wiring, fn_gate) -> None:
             fn_cat_commit = ops.on_add_category_committed
     except (TypeError, AttributeError, RuntimeError):
         fn_cat_commit = None
-    if w_cat is not None and callable(fn_cat_commit):
+    if (not multi) and w_cat is not None and callable(fn_cat_commit):
         try:
             sig = w_cat.activated
         except Exception:

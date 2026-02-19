@@ -68,6 +68,13 @@ class AddEditStateCoordinator:
         hz_s = (hz or "").strip()
         mn_s = (mn or "").strip()
         cat_s = (cat or "").strip()
+        if not cat_s:
+            try:
+                cats_multi = list(getattr(dialog, "_selected_categories", []) or [])
+            except Exception:
+                cats_multi = []
+            if cats_multi:
+                cat_s = str(cats_multi[0] or "").strip()
 
         vm = self._state.get_state()
         try:
