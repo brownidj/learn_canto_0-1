@@ -11,7 +11,7 @@ def load_unihan_char_map(project_dir: Union[str, os.PathLike]) -> UnihanCharMap:
     """Load and normalize the Unihan Cantonese char map JSON.
 
     Expected default location:
-      data/Unihan/unihan_cantonese_chars.json
+      data/unihan_cantonese_chars.json
 
     Returns:
       {single_hanzi_char: [jyutping_syllables...]}
@@ -19,7 +19,7 @@ def load_unihan_char_map(project_dir: Union[str, os.PathLike]) -> UnihanCharMap:
     Never raises; returns {} on failure.
     """
     base_dir = os.fspath(project_dir)
-    json_path = os.path.join(base_dir, "data", "Unihan", "unihan_cantonese_chars.json")
+    json_path = os.path.join(base_dir, "data", "unihan_cantonese_chars.json")
     if not os.path.exists(json_path):
         return {}
 

@@ -24,6 +24,11 @@ class HanziPipelineDeps:
     cedict_meanings_for: Optional[Callable[[str], Sequence[str]]] = None
     gloss_cleaner: Optional[Callable[[Sequence[str]], Sequence[str]]] = None
     curate: Optional[Callable[[Sequence[HanziCandidate]], Sequence[HanziCandidate]]] = None
+    active_category_provider: Optional[Callable[[], str]] = None
+    category_profiles: Optional[Mapping[str, Mapping[str, float]]] = None
+    hk_freq_map: Optional[Mapping[str, float]] = None
+    hk_colloquial: Optional[set[str]] = None
+    hk_attested: Optional[set[str]] = None
     max_candidates: int = 10
 
 
@@ -57,6 +62,11 @@ class HanziCandidatePipeline:
         self._cedict_meanings_for = deps.cedict_meanings_for
         self._gloss_cleaner = deps.gloss_cleaner
         self._curate = deps.curate
+        self._active_category_provider = deps.active_category_provider
+        self._category_profiles = deps.category_profiles
+        self._hk_freq_map = deps.hk_freq_map
+        self._hk_colloquial = deps.hk_colloquial
+        self._hk_attested = deps.hk_attested
         try:
             m = int(deps.max_candidates)
         except Exception:
@@ -109,6 +119,41 @@ class HanziCandidatePipeline:
                 cands = _simple_rank(cands)
         else:
             cands = _simple_rank(cands)
+
+        # Meaning-aware rerank + HK frequency boost (best-effort)
+        try:
+            from domain.hanzi_candidate_ranker import rerank_candidates_with_meanings
+            active_cat = ""
+            if callable(self._active_category_provider):
+                try:
+                    active_cat = str(self._active_category_provider() or "").strip()
+                except Exception:
+                    active_cat = ""
+            ranked = rerank_candidates_with_meanings(
+                [(c.hanzi, c.source, float(c.freq or 0.0)) for c in cands],
+                meanings_for_hanzi=self.glosses_for_candidate,
+                active_category=active_cat,
+                category_profiles=self._category_profiles,
+                hk_freq_map=self._hk_freq_map,
+                hk_colloquial=self._hk_colloquial,
+                hk_attested=self._hk_attested,
+            )
+            # Reorder candidates to match ranked order
+            bucket: dict[tuple[str, str], list[HanziCandidate]] = {}
+            for c in cands:
+                key = (c.hanzi, c.source)
+                bucket.setdefault(key, []).append(c)
+            reordered: list[HanziCandidate] = []
+            for hz, src, _freq in ranked:
+                key = (hz, src)
+                if key in bucket and bucket[key]:
+                    reordered.append(bucket[key].pop(0))
+            # Append any leftovers
+            for rest in bucket.values():
+                reordered.extend(rest)
+            cands = reordered
+        except Exception:
+            pass
 
         if len(cands) > self._max:
             cands = cands[: self._max]
@@ -273,6 +318,36 @@ def build_pipeline_from_category_manager(dialog: object) -> HanziCandidatePipeli
     except Exception:
         max_cands = 10
 
+    def _active_category() -> str:
+        try:
+            cats_multi = list(getattr(dialog, "_selected_categories", []) or [])
+        except Exception:
+            cats_multi = []
+        if cats_multi:
+            return str(cats_multi[0] or "").strip()
+        try:
+            last = getattr(dialog, "_last_committed_category", "")
+        except Exception:
+            last = ""
+        if str(last or "").strip():
+            return str(last or "").strip()
+        try:
+            combo = getattr(dialog, "_add_cat", None)
+            if combo is not None and hasattr(combo, "currentText"):
+                return str(combo.currentText() or "").strip()
+        except Exception:
+            pass
+        return ""
+
+    try:
+        hk_freq_map = dialog.__dict__.get("_hk_word_freq_map")
+        hk_colloquial = dialog.__dict__.get("_hk_word_colloq")
+        hk_attested = dialog.__dict__.get("_hk_word_attested")
+    except Exception:
+        hk_freq_map = None
+        hk_colloquial = None
+        hk_attested = None
+
     deps = HanziPipelineDeps(
         normalize_jyutping=normalize,
         tier1_reverse_candidates=tier1 if callable(tier1) else None,
@@ -284,6 +359,11 @@ def build_pipeline_from_category_manager(dialog: object) -> HanziCandidatePipeli
         cedict_meanings_for=cedict_for,
         gloss_cleaner=gloss_cleaner,
         curate=curate,
+        active_category_provider=_active_category,
+        category_profiles=None,
+        hk_freq_map=hk_freq_map if isinstance(hk_freq_map, dict) else None,
+        hk_colloquial=hk_colloquial if isinstance(hk_colloquial, set) else None,
+        hk_attested=hk_attested if isinstance(hk_attested, set) else None,
         max_candidates=int(max_cands) if isinstance(max_cands, int) else 10,
     )
     return HanziCandidatePipeline(deps)

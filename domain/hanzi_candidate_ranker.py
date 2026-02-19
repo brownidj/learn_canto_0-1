@@ -15,6 +15,9 @@ def rerank_candidates_with_meanings(
     meanings_for_hanzi: Callable[[str], Sequence[str]],
     active_category: str = "",
     category_profiles: Optional[Mapping[str, Mapping[str, float]]] = None,
+    hk_freq_map: Optional[Mapping[str, float]] = None,
+    hk_colloquial: Optional[set[str]] = None,
+    hk_attested: Optional[set[str]] = None,
 ) -> list[tuple[str, str, float]]:
     """Rerank (hanzi, source, freq) candidates using meanings-derived heuristics."""
 
@@ -104,7 +107,12 @@ def rerank_candidates_with_meanings(
             return 0
         return 1
 
-    scored: list[tuple[tuple[float, int, int, int, int, int, int], tuple[str, str, float]]] = []
+    scored: list[tuple[tuple[float, int, int, int, int, int, int, int, int, int], tuple[str, str, float]]] = []
+
+    has_hk = bool(hk_freq_map or hk_colloquial or hk_attested)
+    hk_freq_map = hk_freq_map or {}
+    hk_colloquial = hk_colloquial or set()
+    hk_attested = hk_attested or set()
 
     for (hz, src, freq) in list(cands or []):
         try:
@@ -125,12 +133,27 @@ def rerank_candidates_with_meanings(
         except Exception:
             freq_i = 0
 
+        hk_freq = 0
+        try:
+            hk_freq = int(hk_freq_map.get(hz, 0) or 0)
+        except Exception:
+            hk_freq = 0
+
+        hk_col = 1 if hz in hk_colloquial else 0
+        if has_hk:
+            hk_known = 1 if hz in hk_attested else 0
+        else:
+            hk_known = 1
+
         score_tuple = (
             float(reg_score),
             int(cat_score > 0.0),
+            hk_col,
+            hk_known,
             has_clean_phrase,
             has_any_phrase,
             colloquial_bonus,
+            hk_freq,
             freq_i,
             source_score(str(src)),
         )
