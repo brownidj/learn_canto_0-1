@@ -342,9 +342,8 @@ def commit_vocab_entry(
         # Upsert the entry under its Jyutping key
         entry_obj = entries_block.get(jy)
         if not isinstance(entry_obj, dict):
-            entry_obj = {"jyutping": jy, "senses": []}
+            entry_obj = {"senses": []}
         else:
-            entry_obj.setdefault("jyutping", jy)
             if not isinstance(entry_obj.get("senses"), list):
                 entry_obj["senses"] = []
 

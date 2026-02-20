@@ -100,11 +100,7 @@ def analyse_vocab(vocab):
             errors.append("Entry '{0}' should be a mapping.".format(key))
             continue
 
-        jy = entry.get("jyutping")
         senses = entry.get("senses")
-
-        if jy is None:
-            warnings.append("Entry '{0}' has no 'jyutping' field.".format(key))
 
         if not isinstance(senses, list) or not senses:
             warnings.append("Entry '{0}' has no 'senses' list.".format(key))

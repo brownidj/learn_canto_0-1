@@ -1,0 +1,1018 @@
+[
+  {
+    "function": "normalize_jyutping",
+    "input": "  Nei5   Hou2 ",
+    "output": "nei5 hou2"
+  },
+  {
+    "function": "normalize_jyutping",
+    "input": "zi6-ji2",
+    "output": "zi6-ji2"
+  },
+  {
+    "function": "normalize_jyutping",
+    "input": "",
+    "output": ""
+  },
+  {
+    "function": "normalize_jyutping",
+    "input": null,
+    "output": ""
+  },
+  {
+    "function": "validate_jyut_syllables",
+    "input": "nei5 hou2",
+    "output": [
+      true,
+      null
+    ]
+  },
+  {
+    "function": "validate_jyut_syllables",
+    "input": "nei5hou2",
+    "output": [
+      false,
+      "Tone digit must be at the end of syllable 1: nei5hou2"
+    ]
+  },
+  {
+    "function": "validate_jyut_syllables",
+    "input": "nei5 hou",
+    "output": [
+      false,
+      "Missing tone digit (0–6) in syllable 2: hou"
+    ]
+  },
+  {
+    "function": "validate_jyut_syllables",
+    "input": "nei5, hou2",
+    "output": [
+      false,
+      "Unexpected punctuation in syllable 1: nei5,"
+    ]
+  },
+  {
+    "function": "validate_jyut_syllables",
+    "input": "",
+    "output": [
+      false,
+      "Jyutping is empty"
+    ]
+  },
+  {
+    "function": "is_category_placeholder",
+    "input": null,
+    "output": true
+  },
+  {
+    "function": "is_category_placeholder",
+    "input": "",
+    "output": true
+  },
+  {
+    "function": "is_category_placeholder",
+    "input": "— choose category —",
+    "output": true
+  },
+  {
+    "function": "is_category_placeholder",
+    "input": "- choose category -",
+    "output": true
+  },
+  {
+    "function": "is_category_placeholder",
+    "input": "greetings",
+    "output": false
+  },
+  {
+    "function": "save_enabled_gate",
+    "input": {
+      "jyut": "nei5 hou2",
+      "hanzi": "你好",
+      "meanings": [
+        "hello"
+      ],
+      "category": "greetings"
+    },
+    "output": true
+  },
+  {
+    "function": "save_enabled_gate",
+    "input": {
+      "jyut": "",
+      "hanzi": "你好",
+      "meanings": [
+        "hello"
+      ],
+      "category": "greetings"
+    },
+    "output": false
+  },
+  {
+    "function": "save_enabled_gate",
+    "input": {
+      "jyut": "nei5 hou2",
+      "hanzi": "",
+      "meanings": [
+        "hello"
+      ],
+      "category": "greetings"
+    },
+    "output": false
+  },
+  {
+    "function": "save_enabled_gate",
+    "input": {
+      "jyut": "nei5 hou2",
+      "hanzi": "你好",
+      "meanings": [],
+      "category": "greetings"
+    },
+    "output": false
+  },
+  {
+    "function": "save_enabled_gate",
+    "input": {
+      "jyut": "nei5 hou2",
+      "hanzi": "你好",
+      "meanings": [
+        "hello"
+      ],
+      "category": "— choose category —"
+    },
+    "output": false
+  },
+  {
+    "function": "should_show_custom_hanzi_button",
+    "input": null,
+    "output": true
+  },
+  {
+    "function": "should_show_custom_hanzi_button",
+    "input": [],
+    "output": true
+  },
+  {
+    "function": "should_show_custom_hanzi_button",
+    "input": [
+      ""
+    ],
+    "output": true
+  },
+  {
+    "function": "should_show_custom_hanzi_button",
+    "input": [
+      "飲",
+      " "
+    ],
+    "output": false
+  },
+  {
+    "function": "should_show_custom_hanzi_button",
+    "input": [
+      " ",
+      "\t"
+    ],
+    "output": true
+  },
+  {
+    "function": "prefer_meanings",
+    "input": {
+      "primary": [
+        "",
+        " hello "
+      ],
+      "fallback": [
+        "bye"
+      ]
+    },
+    "output": [
+      "hello"
+    ]
+  },
+  {
+    "function": "prefer_meanings",
+    "input": {
+      "primary": [
+        ""
+      ],
+      "fallback": [
+        "bye"
+      ]
+    },
+    "output": [
+      "bye"
+    ]
+  },
+  {
+    "function": "prefer_meanings",
+    "input": {
+      "primary": null,
+      "fallback": [
+        "bye",
+        ""
+      ]
+    },
+    "output": [
+      "bye"
+    ]
+  },
+  {
+    "function": "prefer_meanings",
+    "input": {
+      "primary": [
+        "foo",
+        "bar"
+      ],
+      "fallback": [
+        "baz"
+      ]
+    },
+    "output": [
+      "foo",
+      "bar"
+    ]
+  },
+  {
+    "function": "detect_ambiguity",
+    "input": {
+      "candidates": [
+        "飲",
+        "喝"
+      ],
+      "n_syllables": 1,
+      "meanings_for_hanzi": null
+    },
+    "output": true
+  },
+  {
+    "function": "detect_ambiguity",
+    "input": {
+      "candidates": [],
+      "n_syllables": 2,
+      "meanings_for_hanzi": null
+    },
+    "output": true
+  },
+  {
+    "function": "detect_ambiguity",
+    "input": {
+      "candidates": [
+        "飲"
+      ],
+      "n_syllables": 1,
+      "meanings_for_hanzi": [
+        "drink",
+        "beverage"
+      ]
+    },
+    "output": true
+  },
+  {
+    "function": "detect_ambiguity",
+    "input": {
+      "candidates": [
+        "飲"
+      ],
+      "n_syllables": 1,
+      "meanings_for_hanzi": [
+        "drink"
+      ]
+    },
+    "output": false
+  },
+  {
+    "function": "is_duplicate_jy",
+    "input": {
+      "jy": "nei5 hou2",
+      "vocab": {
+        "entries": {
+          "nei5 hou2": {
+            "jyutping": "nei5 hou2",
+            "senses": [
+              {
+                "hanzi": "你好",
+                "gloss": "hello",
+                "categories": [
+                  "greetings"
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    "output": true
+  },
+  {
+    "function": "is_duplicate_jy",
+    "input": {
+      "jy": " Nei5   Hou2 ",
+      "vocab": {
+        "entries": {
+          "nei5 hou2": {
+            "jyutping": "nei5 hou2",
+            "senses": [
+              {
+                "hanzi": "你好",
+                "gloss": "hello",
+                "categories": [
+                  "greetings"
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    "output": true
+  },
+  {
+    "function": "is_duplicate_jy",
+    "input": {
+      "jy": "nei5 hou3",
+      "vocab": {
+        "entries": {
+          "nei5 hou2": {
+            "jyutping": "nei5 hou2",
+            "senses": [
+              {
+                "hanzi": "你好",
+                "gloss": "hello",
+                "categories": [
+                  "greetings"
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    "output": false
+  },
+  {
+    "function": "is_duplicate_jy",
+    "input": {
+      "jy": "nei5 hou2",
+      "vocab": {
+        "你好": [
+          [
+            "hello"
+          ],
+          "nei5 hou2"
+        ]
+      }
+    },
+    "output": true
+  },
+  {
+    "function": "is_exact_duplicate_entry",
+    "input": {
+      "jy": "nei5 hou2",
+      "hz": "你好",
+      "vocab": {
+        "entries": {
+          "nei5 hou2": {
+            "headword": "你好",
+            "jyutping": "nei5 hou2",
+            "senses": [
+              {
+                "hanzi": "你好",
+                "gloss": "hello",
+                "categories": [
+                  "greetings"
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    "output": true
+  },
+  {
+    "function": "is_exact_duplicate_entry",
+    "input": {
+      "jy": "nei5 hou2",
+      "hz": "哈囉",
+      "vocab": {
+        "entries": {
+          "nei5 hou2": {
+            "headword": "你好",
+            "jyutping": "nei5 hou2",
+            "senses": [
+              {
+                "hanzi": "你好",
+                "gloss": "hello",
+                "categories": [
+                  "greetings"
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    "output": false
+  },
+  {
+    "function": "is_exact_duplicate_entry",
+    "input": {
+      "jy": " Nei5   Hou2 ",
+      "hz": "你好",
+      "vocab": {
+        "entries": {
+          "nei5 hou2": {
+            "headword": "你好",
+            "jyutping": "nei5 hou2",
+            "senses": [
+              {
+                "hanzi": "你好",
+                "gloss": "hello",
+                "categories": [
+                  "greetings"
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    "output": true
+  },
+  {
+    "function": "clean_glosses_for_display",
+    "input": [
+      " hello ",
+      "",
+      "bye"
+    ],
+    "output": [
+      "hello",
+      "bye"
+    ]
+  },
+  {
+    "function": "clean_glosses_for_display",
+    "input": "notlist",
+    "output": []
+  },
+  {
+    "function": "clean_glosses_for_display",
+    "input": [],
+    "output": []
+  },
+  {
+    "function": "norm_space",
+    "input": "  nei5   hou2 ",
+    "output": "nei5 hou2"
+  },
+  {
+    "function": "norm_space",
+    "input": "a  b   c",
+    "output": "a b c"
+  },
+  {
+    "function": "norm_space",
+    "input": "",
+    "output": ""
+  },
+  {
+    "function": "split_syllables",
+    "input": "nei5 hou2",
+    "output": [
+      "nei5",
+      "hou2"
+    ]
+  },
+  {
+    "function": "split_syllables",
+    "input": "zi6-ji2",
+    "output": [
+      "zi6-ji2"
+    ]
+  },
+  {
+    "function": "split_syllables",
+    "input": "",
+    "output": []
+  },
+  {
+    "function": "coerce_candidates",
+    "input": {
+      "raw": [
+        "飲",
+        [
+          "喝",
+          "tier1",
+          2
+        ],
+        [
+          "飲",
+          3
+        ]
+      ],
+      "default_source": "tier2"
+    },
+    "output": [
+      [
+        "飲",
+        "tier2",
+        0.0
+      ],
+      [
+        "喝",
+        "tier1",
+        2.0
+      ],
+      [
+        "飲",
+        "tier2",
+        3.0
+      ]
+    ]
+  },
+  {
+    "function": "coerce_candidates",
+    "input": {
+      "raw": [
+        [
+          "  ",
+          "tier1",
+          1
+        ]
+      ],
+      "default_source": "tier2"
+    },
+    "output": []
+  },
+  {
+    "function": "coerce_candidates",
+    "input": {
+      "raw": null,
+      "default_source": "tier2"
+    },
+    "output": []
+  },
+  {
+    "function": "dedupe_keep_first",
+    "input": null,
+    "output": [
+      [
+        "飲",
+        "tier2",
+        0.0
+      ],
+      [
+        "喝",
+        "tier2",
+        1.0
+      ]
+    ]
+  },
+  {
+    "function": "simple_rank",
+    "input": null,
+    "output": [
+      [
+        "啦",
+        "tier1",
+        3.0
+      ],
+      [
+        "飲",
+        "tier1",
+        3.0
+      ],
+      [
+        "喝",
+        "tier2",
+        1.0
+      ]
+    ]
+  },
+  {
+    "function": "rerank_candidates_with_meanings",
+    "input": {
+      "cands": [
+        [
+          "喝",
+          "tier1",
+          1.0
+        ],
+        [
+          "飲",
+          "tier2",
+          1.0
+        ],
+        [
+          "阿飲",
+          "tier2",
+          1.0
+        ]
+      ],
+      "meaning_map": {
+        "飲": [
+          "drink",
+          "beverage"
+        ],
+        "喝": [
+          "drink"
+        ],
+        "阿飲": [
+          "[yue] to drink"
+        ]
+      },
+      "active_category": "food",
+      "category_profiles": {
+        "food": {
+          "drink": 2.0,
+          "beverage": 1.0
+        }
+      },
+      "hk_freq_map": {
+        "阿飲": 50,
+        "飲": 10
+      },
+      "hk_colloquial": [
+        "阿飲"
+      ],
+      "hk_attested": [
+        "阿飲",
+        "飲",
+        "喝"
+      ]
+    },
+    "output": [
+      [
+        "阿飲",
+        "tier2",
+        1.0
+      ],
+      [
+        "飲",
+        "tier2",
+        1.0
+      ],
+      [
+        "喝",
+        "tier1",
+        1.0
+      ]
+    ]
+  },
+  {
+    "function": "rerank_candidates_with_meanings_nohk",
+    "input": {
+      "cands": [
+        [
+          "話",
+          "tier2",
+          1.0
+        ],
+        [
+          "文",
+          "tier1",
+          2.0
+        ],
+        [
+          "口語",
+          "tier1",
+          1.0
+        ]
+      ],
+      "meaning_map": {
+        "文": [
+          "[lit] written language"
+        ],
+        "話": [
+          "speech"
+        ],
+        "口語": [
+          "(colloquial) spoken language"
+        ]
+      },
+      "active_category": "",
+      "category_profiles": {},
+      "hk_freq_map": {},
+      "hk_colloquial": [],
+      "hk_attested": []
+    },
+    "output": [
+      [
+        "口語",
+        "tier1",
+        1.0
+      ],
+      [
+        "話",
+        "tier2",
+        1.0
+      ],
+      [
+        "文",
+        "tier1",
+        2.0
+      ]
+    ]
+  },
+  {
+    "function": "rerank_candidates_with_meanings_tagged",
+    "input": {
+      "cands": [
+        [
+          "乙",
+          "tier1",
+          1.0
+        ],
+        [
+          "甲",
+          "tier1",
+          1.0
+        ],
+        [
+          "丙",
+          "tier1",
+          1.0
+        ]
+      ],
+      "meaning_map": {
+        "甲": [
+          "[char] jia3",
+          "alpha"
+        ],
+        "乙": [
+          "[char] yi3"
+        ],
+        "丙": [
+          "beta"
+        ]
+      },
+      "active_category": "",
+      "category_profiles": {},
+      "hk_freq_map": {},
+      "hk_colloquial": [],
+      "hk_attested": []
+    },
+    "output": [
+      [
+        "甲",
+        "tier1",
+        1.0
+      ],
+      [
+        "丙",
+        "tier1",
+        1.0
+      ],
+      [
+        "乙",
+        "tier1",
+        1.0
+      ]
+    ]
+  },
+  {
+    "function": "coerce_candidates_freq",
+    "input": {
+      "raw": [
+        [
+          "飲",
+          5
+        ],
+        [
+          "喝",
+          "tier1",
+          7.5
+        ]
+      ],
+      "default_source": "tier2"
+    },
+    "output": [
+      [
+        "飲",
+        "tier2",
+        5.0
+      ],
+      [
+        "喝",
+        "tier1",
+        7.5
+      ]
+    ]
+  },
+  {
+    "function": "pipeline_tier1",
+    "input": {
+      "jyut": "jam2"
+    },
+    "output": [
+      [
+        "喝",
+        "tier1",
+        1.0
+      ],
+      [
+        "飲",
+        "tier1",
+        1.0
+      ]
+    ]
+  },
+  {
+    "function": "pipeline_tier2",
+    "input": {
+      "jyut": "jam2"
+    },
+    "output": [
+      [
+        "飲",
+        "tier2-char",
+        1.0
+      ]
+    ]
+  },
+  {
+    "function": "pipeline_manual",
+    "input": {
+      "jyut": "jam2"
+    },
+    "output": []
+  },
+  {
+    "function": "build_pipeline_from_category_manager",
+    "input": {
+      "jyut": "jam2"
+    },
+    "output": [
+      [
+        "飲",
+        "tier1",
+        1.0
+      ]
+    ]
+  },
+  {
+    "function": "meaning_resolver_glosses_for",
+    "input": {
+      "hanzi": "飲",
+      "limit": 2
+    },
+    "output": [
+      "drink",
+      "beverage"
+    ]
+  },
+  {
+    "function": "meaning_resolver_glosses_fallback",
+    "input": {
+      "hanzi": "話",
+      "limit": 2
+    },
+    "output": [
+      "speech"
+    ]
+  },
+  {
+    "function": "meaning_facade_meanings_for_display",
+    "input": {
+      "hanzi": "飲"
+    },
+    "output": [
+      "drink",
+      "beverage"
+    ]
+  },
+  {
+    "function": "meaning_facade_preview",
+    "input": {
+      "hanzi": "飲",
+      "max_items": 1
+    },
+    "output": [
+      "drink"
+    ]
+  },
+  {
+    "function": "meaning_facade_candidate_label",
+    "input": {
+      "hanzi": "飲",
+      "source": "cccanto",
+      "preferred": true
+    },
+    "output": "✓ 飲 — drink, beverage (CC)"
+  },
+  {
+    "function": "meaning_facade_select_candidate",
+    "input": {
+      "hanzi": "飲",
+      "source": "cccanto"
+    },
+    "output": {
+      "hanzi": "飲",
+      "source": "cccanto",
+      "meanings": [
+        "drink",
+        "beverage"
+      ],
+      "label": "✓ 飲 — drink, beverage (CC)"
+    }
+  },
+  {
+    "function": "entry_validator_validate_all",
+    "input": {},
+    "output": {
+      "jyutping": {
+        "valid": true,
+        "field": "jyutping",
+        "value": "nei5 hou2",
+        "error_message": null
+      },
+      "hanzi": {
+        "valid": true,
+        "field": "hanzi",
+        "value": "你好",
+        "error_message": null
+      },
+      "meanings": {
+        "valid": true,
+        "field": "meanings",
+        "value": "hello, hi",
+        "error_message": null
+      },
+      "category": {
+        "valid": true,
+        "field": "category",
+        "value": "greetings",
+        "error_message": null
+      }
+    }
+  },
+  {
+    "function": "entry_validator_is_valid_entry",
+    "input": {},
+    "output": true
+  },
+  {
+    "function": "vocab_service_add_entry",
+    "input": {},
+    "output": {
+      "entry": {
+        "jyutping": "nei5 hou2",
+        "hanzi": "你好",
+        "meaning": "hello",
+        "gloss": "hello",
+        "categories": [
+          "greetings"
+        ],
+        "category": "greetings",
+        "notes": ""
+      },
+      "vocab": {
+        "你好": [
+          [
+            "hello"
+          ],
+          "nei5 hou2"
+        ]
+      },
+      "categories": {
+        "unassigned": [],
+        "greetings": [
+          "你好"
+        ]
+      }
+    }
+  },
+  {
+    "function": "vocab_service_update_entry",
+    "input": {},
+    "output": {
+      "entry": {
+        "jyutping": "nei5 hou2",
+        "hanzi": "你好呀",
+        "meaning": "hello there",
+        "gloss": "hello there",
+        "categories": [
+          "greetings"
+        ],
+        "category": "greetings",
+        "notes": ""
+      },
+      "vocab": {
+        "你好呀": [
+          [
+            "hello there"
+          ],
+          "nei5 hou2"
+        ]
+      },
+      "categories": {
+        "unassigned": [],
+        "greetings": [
+          "你好呀"
+        ]
+      }
+    }
+  }
+]

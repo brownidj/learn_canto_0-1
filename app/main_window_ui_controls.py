@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtWidgets import QLabel, QPushButton, QGroupBox, QWidget, QVBoxLayout, QRadioButton, QButtonGroup
+from PySide6.QtWidgets import QLabel, QPushButton, QGroupBox, QWidget, QVBoxLayout, QRadioButton, QButtonGroup, QComboBox
 
 def setup_tortoise_and_auto(window_adapter, controller, slider_wpm, btn_tortoise, btn_auto, bounds_data, save_one):
     window_adapter.set("_tortoise_prev_wpm", None)
@@ -114,15 +114,19 @@ def setup_audio_test(about_disclosure, tts_service, slider_wpm):
     from PySide6.QtWidgets import QVBoxLayout as _VBox
     row_w.setLayout(_VBox())
 
-    rb_google = QRadioButton("Google (Cantonese)")
-    rb_google.setObjectName("radioGoogleVoice")
     rb_macos = QRadioButton("macOS (Sinji)")
     rb_macos.setObjectName("radioMacVoice")
+    rb_google = QRadioButton("Google (Cantonese)")
+    rb_google.setObjectName("radioGoogleVoice")
     group = QButtonGroup(row_w)
     group.addButton(rb_google)
     group.addButton(rb_macos)
-    row_w.layout().addWidget(rb_google)
     row_w.layout().addWidget(rb_macos)
+    row_w.layout().addWidget(rb_google)
+    combo_google = QComboBox()
+    combo_google.setObjectName("comboGoogleVoice")
+    combo_google.setEnabled(False)
+    row_w.layout().addWidget(combo_google)
     container_layout.addWidget(row_w)
     btn_audio_test = QPushButton("Audio Test (🔊 你好)")
     btn_audio_test.setObjectName("btnAudioTest")
@@ -137,23 +141,63 @@ def setup_audio_test(about_disclosure, tts_service, slider_wpm):
     else:
         layout.insertWidget(insert_at, container)
 
+    def _list_google_voices():
+        win = about_disclosure.window()
+        tts_google = getattr(win, "_tts_google", None)
+        voices = []
+        if tts_google is not None:
+            for name, locale, label in getattr(tts_google, "available_voices", []) or []:
+                if locale.startswith("yue"):
+                    voices.append((name, label))
+        return voices
+
+    def _populate_google_voices():
+        voices = _list_google_voices()
+        combo_google.blockSignals(True)
+        combo_google.clear()
+        if voices:
+            for name, label in voices:
+                combo_google.addItem(label, name)
+            combo_google.setEnabled(True)
+        else:
+            combo_google.addItem("No Cantonese voices found", "")
+            combo_google.setEnabled(False)
+        combo_google.blockSignals(False)
+
+    def _sync_google_voice_selection():
+        win = about_disclosure.window()
+        voice = getattr(win, "_google_voice", None)
+        if voice:
+            idx = combo_google.findData(voice)
+            if idx >= 0:
+                combo_google.setCurrentIndex(idx)
+
     def _select_engine():
         win = about_disclosure.window()
-        if getattr(win, "_tts_engine", "google") == "google" and getattr(win, "_tts_google", None) is not None:
+        if (getattr(win, "_tts_engine", "google") == "google"
+                and getattr(win, "_tts_google", None) is not None
+                and _list_google_voices()):
             rb_google.setChecked(True)
         else:
             rb_macos.setChecked(True)
 
     def _apply_engine():
         win = about_disclosure.window()
-        if rb_google.isChecked() and getattr(win, "_tts_google", None) is not None:
+        google_ok = rb_google.isChecked() and getattr(win, "_tts_google", None) is not None and _list_google_voices()
+        if rb_google.isChecked() and not google_ok:
+            rb_macos.setChecked(True)
+        if google_ok:
             win._tts_engine = "google"
             win._tts_active = win._tts_google
-            win._google_voice = "yue-HK-Standard-A"
+            if combo_google.currentData():
+                win._google_voice = combo_google.currentData()
+            else:
+                win._google_voice = None
         else:
             win._tts_engine = "macos"
             win._tts_active = win._tts_macos or tts_service
             win._macos_voice = "Sinji"
+        combo_google.setEnabled(bool(google_ok))
         try:
             import logging
             logging.getLogger(__name__).debug("TTS engine=%s voice=%s",
@@ -162,10 +206,13 @@ def setup_audio_test(about_disclosure, tts_service, slider_wpm):
         except Exception:
             pass
 
+    _populate_google_voices()
     _select_engine()
+    _sync_google_voice_selection()
     _apply_engine()
     rb_google.toggled.connect(lambda _=None: _apply_engine())
     rb_macos.toggled.connect(lambda _=None: _apply_engine())
+    combo_google.currentIndexChanged.connect(lambda _=None: _apply_engine())
 
     def _tts_call(text, rate=None):
         win = about_disclosure.window()

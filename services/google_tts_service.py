@@ -44,7 +44,9 @@ class GoogleTTSService:
             for v in voices:
                 name = v.name or ""
                 locale = v.language_codes[0] if v.language_codes else ""
-                out.append((name, locale, f"{name} ({locale})"))
+                short = name.split("-")[-1] if name else ""
+                label = f"{short} ({locale})" if short else f"{name} ({locale})"
+                out.append((name, locale, label))
             return out
         except Exception as e:
             logger.warning("Google TTS voice list failed: %s", e)
@@ -55,7 +57,7 @@ class GoogleTTSService:
         for name, locale, _ in self.available_voices:
             if locale.startswith("yue") or locale == "yue-HK":
                 return name
-        return self.available_voices[0][0] if self.available_voices else None
+        return None
 
     def get_voice(self, voice_name: Optional[str] = None) -> Optional[str]:
         if voice_name and voice_name.strip():
@@ -179,8 +181,8 @@ class GoogleTTSService:
                 "audioConfig": {
                     "audioEncoding": "MP3",
                     "speakingRate": self._speaking_rate(rate) or 1.0,
-                    "enableTimePointing": ["SSML_MARK"],
                 },
+                "enableTimePointing": ["SSML_MARK"],
             }
             headers = {"Authorization": f"Bearer {creds.token}"}
             resp = requests.post(url, json=payload, headers=headers, timeout=10)

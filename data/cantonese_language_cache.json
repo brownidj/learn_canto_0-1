@@ -1,0 +1,155 @@
+{
+  "hz:㚊㞧": {
+    "hanzi": "㚊㞧",
+    "jyutping": "hoi1 wui6",
+    "meaning_colloquial": "to be able to do something",
+    "register": "colloquial",
+    "confidence": 0.9,
+    "notes": "Commonly used in everyday conversation to express capability.",
+    "examples": [
+      {
+        "hanzi": "我可以㚊㞧呢個。",
+        "jyutping": "ngo5 ho2 ji5 hoi1 wui6 ni1 go3.",
+        "gloss": "I can do this."
+      }
+    ],
+    "model": "gpt-4o-mini",
+    "ts": 1770968655.7416582
+  },
+  "hz:㚊㑹": {
+    "hanzi": "㚊㑹",
+    "jyutping": "hoi1 wui6",
+    "meaning_colloquial": "to meet",
+    "register": "colloquial",
+    "confidence": 0.9,
+    "notes": "Commonly used in everyday conversation to refer to meeting someone.",
+    "examples": [
+      {
+        "hanzi": "我哋今晚㚊㑹。",
+        "jyutping": "ngo5 dei6 gam1 maan5 hoi1 wui6.",
+        "gloss": "We will meet tonight."
+      }
+    ],
+    "model": "gpt-4o-mini",
+    "ts": 1770968662.264592
+  },
+  "hz:㚊㱱": {
+    "hanzi": "㚊㱱",
+    "jyutping": "hoi1 wui6",
+    "meaning_colloquial": "to be happy and carefree",
+    "register": "colloquial",
+    "confidence": 0.8,
+    "notes": "This term is often used to describe a light-hearted or joyful state.",
+    "examples": [
+      {
+        "hanzi": "我今日心情好㚊㱱。",
+        "jyutping": "ngo5 gam1 jat6 sam1 cing4 hou2 hoi1 wui6.",
+        "gloss": "I feel very happy today."
+      }
+    ],
+    "model": "gpt-4o-mini",
+    "ts": 1771035694.560058
+  },
+  "hz:㚊会": {
+    "hanzi": "㚊会",
+    "jyutping": "hoi1 wui6",
+    "meaning_colloquial": "to meet or gather",
+    "register": "colloquial",
+    "confidence": 0.9,
+    "notes": "This term is often used in informal contexts to refer to meetings or gatherings.",
+    "examples": [
+      {
+        "hanzi": "我哋今晚㚊会。",
+        "jyutping": "ngo5 dei6 gam1 maan5 hoi1 wui6.",
+        "gloss": "We are meeting tonight."
+      }
+    ],
+    "model": "gpt-4o-mini",
+    "ts": 1771036663.4839349
+  },
+  "hz:㚊䜋": {
+    "hanzi": "㚊䜋",
+    "jyutping": "hoi1 wui6",
+    "meaning_colloquial": "to be happy and carefree",
+    "register": "colloquial",
+    "confidence": 0.8,
+    "notes": "This term is often used to describe a light-hearted or joyful state.",
+    "examples": [
+      {
+        "hanzi": "我今日心情好㚊䜋。",
+        "jyutping": "ngo5 gam1 jat6 sam1 cing4 hou2 hoi1 wui6.",
+        "gloss": "I am feeling very happy today."
+      }
+    ],
+    "model": "gpt-4o-mini",
+    "ts": 1771036668.162807
+  },
+  "hz:剝㮰䋅": {
+    "hanzi": "剝㮰䋅",
+    "jyutping": "mok1 pei4 ngau4",
+    "meaning_colloquial": "peel and eat a fruit (like a peach)",
+    "register": "colloquial",
+    "confidence": 0.8,
+    "notes": "This phrase is often used in the context of enjoying fresh fruit.",
+    "examples": [
+      {
+        "hanzi": "我想剝㮰䋅食。",
+        "jyutping": "ngo5 seung2 mok1 pei4 ngau4 sik6.",
+        "gloss": "I want to peel and eat a peach."
+      }
+    ],
+    "model": "gpt-4o-mini",
+    "ts": 1771156031.9982898
+  },
+  "hz:㘵䯻": {
+    "hanzi": "㘵䯻",
+    "jyutping": "bou3 gou3",
+    "meaning_colloquial": "to be very busy or occupied",
+    "register": "colloquial",
+    "confidence": 0.9,
+    "notes": "Commonly used to describe someone who is overwhelmed with tasks or activities.",
+    "examples": [
+      {
+        "hanzi": "我今日㘵䯻，冇時間休息。",
+        "jyutping": "ngo5 gam1 jat6 bou3 gou3, mou5 si4 gaan3 jau1 sik1.",
+        "gloss": "I'm very busy today, I have no time to rest."
+      }
+    ],
+    "model": "gpt-4o-mini",
+    "ts": 1771191549.316154
+  },
+  "hz:㛰伊䆆㜽": {
+    "hanzi": "㛰伊䆆㜽",
+    "jyutping": "fan1 ji1 cou3 zi2",
+    "meaning_colloquial": "to be very close or intimate with someone",
+    "register": "colloquial",
+    "confidence": 0.8,
+    "notes": "This phrase is often used to describe a close relationship or bond between people.",
+    "examples": [
+      {
+        "hanzi": "我同佢㛰伊䆆㜽。",
+        "jyutping": "ngo5 tung4 keoi5 fan1 ji1 cou3 zi2.",
+        "gloss": "I am very close with him/her."
+      }
+    ],
+    "model": "gpt-4o-mini",
+    "ts": 1771446296.287138
+  },
+  "hz:薰衣草紫": {
+    "hanzi": "薰衣草紫",
+    "jyutping": "fan1 ji1 cou3 zi2",
+    "meaning_colloquial": "lavender purple",
+    "register": "neutral",
+    "confidence": 0.95,
+    "notes": "Refers to the color associated with lavender flowers.",
+    "examples": [
+      {
+        "hanzi": "我鍾意呢個薰衣草紫嘅顏色。",
+        "jyutping": "ngo5 zung1 ji3 ni1 go3 fan1 ji1 cou3 zi2 ge3 ngaan4 sik1.",
+        "gloss": "I like this lavender purple color."
+      }
+    ],
+    "model": "gpt-4o-mini",
+    "ts": 1771446373.3842702
+  }
+}

@@ -26,7 +26,6 @@ def temp_vocab_yaml():
             },
             "entries": {
                 "faan6": {
-                    "jyutping": "faan6",
                     "senses": [
                         {
                             "hanzi": "飯",
@@ -36,7 +35,6 @@ def temp_vocab_yaml():
                     ]
                 },
                 "hung4": {
-                    "jyutping": "hung4",
                     "senses": [
                         {
                             "hanzi": "紅",
@@ -51,7 +49,6 @@ def temp_vocab_yaml():
                     ]
                 },
                 "jat1": {
-                    "jyutping": "jat1",
                     "senses": [
                         {
                             "hanzi": "一",
@@ -114,7 +111,6 @@ class TestLoadVocabFromUnifiedYaml:
                 "categories": {"food": {}},
                 "entries": {
                     "faan6": {
-                        "jyutping": "faan6",
                         "senses": [
                             {"hanzi": "飯", "gloss": "rice", "categories": ["food"]},
                             {"hanzi": "飯", "gloss": "meal", "categories": ["food"]}
