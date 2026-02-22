@@ -1,144 +1,328 @@
-2026-02-20 09:01:41,950 - ui.main_window_setup - DEBUG - Found widgets: hanzi=True jyut=True meanings=True sliders=6 combos=1
-2026-02-20 09:01:41,951 - ui.main_window_setup - DEBUG - Found nav drawer: action=True drawer=True
-2026-02-20 09:01:41,951 - ui.main_window_setup - DEBUG - labelHanzi sizePolicy set to Ignored/Preferred
-2026-02-20 09:01:41,952 - ui.main_window_setup - DEBUG - Buttons resolved -> play:True next:True prev:True
-2026-02-20 09:01:41,952 - ui.main_window_setup - DEBUG - Sliders configured with persisted values
-2026-02-20 09:01:41,954 - ui.main_window_setup - DEBUG - comboCategory populated: 36 categories, initial='food_drink_eating_drinking'
-2026-02-20 09:01:41,958 - ui.main_window_setup - DEBUG - Hamburger action wired to nav drawer
-2026-02-20 09:01:41,961 - ui.main_window_setup - DEBUG - Connecting Play button
-2026-02-20 09:01:41,961 - ui.main_window_setup - DEBUG - MainWindowSetup complete
-2026-02-20 09:01:41,999 - ui.main_window_setup - DEBUG - comboCategory change wired
-2026-02-20 09:01:41,999 - controllers.main_controller - DEBUG - Category set to food_drink_eating_drinking -> 5 items
-2026-02-20 09:01:41,999 - controllers.main_controller - DEBUG - Show index=0 hanzi='飲野' jyut='jam2 je5' meanings=['drinks; drink something']
-2026-02-20 09:01:42,000 - controllers.main_controller - DEBUG - Tone row found=True
-2026-02-20 09:01:42,000 - controllers.main_controller - DEBUG - Tone row layout=QHBoxLayout
-2026-02-20 09:01:42,000 - controllers.main_controller - DEBUG - Tone row tokens=['jam2', 'je5'] tones=['2', '5']
-2026-02-20 09:01:42,002 - controllers.main_controller - DEBUG - Tone image load: tone=2 path=/Users/david/PycharmProjects/LearnCanto_01/assets/images/tone_2.png ok=True
-2026-02-20 09:01:42,007 - controllers.main_controller - DEBUG - Tone image load: tone=5 path=/Users/david/PycharmProjects/LearnCanto_01/assets/images/tone_5.png ok=True
-2026-02-20 09:01:42,011 - controllers.main_controller - DEBUG - Tone row count=2 height=104
-2026-02-20 09:01:44,742 - services.tts_service - DEBUG - Detected 188 voices
-2026-02-20 09:01:44,742 - services.tts_service - DEBUG - TTSService initialized: 188 voices, default=Sinji
-2026-02-20 09:01:44,742 - app.main_helpers - DEBUG - PERF start: load_unihan_char_map
-2026-02-20 09:01:44,758 - app.main_helpers - DEBUG - PERF end: load_unihan_char_map (15.2 ms)
-2026-02-20 09:01:44,758 - app.main_helpers - DEBUG - PERF start: load_reverse_index_files
-2026-02-20 09:01:45,624 - app.main_helpers - DEBUG - PERF end: load_reverse_index_files (866.1 ms)
-2026-02-20 09:01:45,624 - ui.disclosure_handlers - DEBUG - Delays disclosure configured
-2026-02-20 09:01:45,624 - ui.disclosure_handlers - DEBUG - About disclosure configured
-2026-02-20 09:01:45,624 - ui.disclosure_handlers - DEBUG - Tones & Radicals toggle configured
-2026-02-20 09:01:45,627 - app.main_window_ui_controls - DEBUG - TTS engine=google voice=yue-HK-Chirp3-HD-Achernar
-2026-02-20 09:01:45,632 - controllers.main_controller - DEBUG - Show index=0 hanzi='飲野' jyut='jam2 je5' meanings=['drinks; drink something']
-2026-02-20 09:01:45,712 - ui.hanzi_font_controller - DEBUG - fit try: sz=103 text_px=193x93 avail_w=76 max_h=360
-2026-02-20 09:01:45,714 - ui.hanzi_font_controller - DEBUG - fit try: sz=54 text_px=102x49 avail_w=76 max_h=360
-2026-02-20 09:01:45,716 - ui.hanzi_font_controller - DEBUG - fit try: sz=29 text_px=56x26 avail_w=76 max_h=360
-2026-02-20 09:01:45,718 - ui.hanzi_font_controller - DEBUG - fit try: sz=41 text_px=78x38 avail_w=76 max_h=360
-2026-02-20 09:01:45,719 - ui.hanzi_font_controller - DEBUG - fit try: sz=35 text_px=67x32 avail_w=76 max_h=360
-2026-02-20 09:01:45,721 - ui.hanzi_font_controller - DEBUG - fit try: sz=38 text_px=72x35 avail_w=76 max_h=360
-2026-02-20 09:01:45,723 - ui.hanzi_font_controller - DEBUG - fit try: sz=39 text_px=74x35 avail_w=76 max_h=360
-2026-02-20 09:01:45,724 - ui.hanzi_font_controller - DEBUG - fit try: sz=40 text_px=76x37 avail_w=76 max_h=360
-2026-02-20 09:01:45,724 - ui.hanzi_font_controller - DEBUG - fit final: applied_pt=38 (best=40) text_px=72x35 avail_w=76
-2026-02-20 09:01:45,724 - controllers.main_controller - DEBUG - Tone row found=True
-2026-02-20 09:01:45,724 - controllers.main_controller - DEBUG - Tone row layout=QHBoxLayout
-2026-02-20 09:01:45,725 - controllers.main_controller - DEBUG - Tone row tokens=['jam2', 'je5'] tones=['2', '5']
-2026-02-20 09:01:45,725 - controllers.main_controller - DEBUG - Tone image load: tone=2 path=/Users/david/PycharmProjects/LearnCanto_01/assets/images/tone_2.png ok=True
-2026-02-20 09:01:45,725 - controllers.main_controller - DEBUG - Tone image load: tone=5 path=/Users/david/PycharmProjects/LearnCanto_01/assets/images/tone_5.png ok=True
-2026-02-20 09:01:45,725 - controllers.main_controller - DEBUG - Tone row count=2 height=104
-2026-02-20 09:01:45,726 - ui.main_window_setup - DEBUG - Slider changes wired with persistence
-2026-02-20 09:01:45,726 - ui.main_window_setup - DEBUG - Reset button wired
-2026-02-20 09:01:45,748 - ui.hanzi_font_controller - DEBUG - fit try: sz=103 text_px=193x93 avail_w=660 max_h=360
-2026-02-20 09:01:45,750 - ui.hanzi_font_controller - DEBUG - fit try: sz=152 text_px=284x137 avail_w=660 max_h=360
-2026-02-20 09:01:45,752 - ui.hanzi_font_controller - DEBUG - fit try: sz=176 text_px=330x159 avail_w=660 max_h=360
-2026-02-20 09:01:45,753 - ui.hanzi_font_controller - DEBUG - fit try: sz=188 text_px=352x169 avail_w=660 max_h=360
-2026-02-20 09:01:45,755 - ui.hanzi_font_controller - DEBUG - fit try: sz=194 text_px=363x174 avail_w=660 max_h=360
-2026-02-20 09:01:45,757 - ui.hanzi_font_controller - DEBUG - fit try: sz=197 text_px=369x178 avail_w=660 max_h=360
-2026-02-20 09:01:45,758 - ui.hanzi_font_controller - DEBUG - fit try: sz=199 text_px=372x179 avail_w=660 max_h=360
-2026-02-20 09:01:45,760 - ui.hanzi_font_controller - DEBUG - fit try: sz=200 text_px=374x181 avail_w=660 max_h=360
-2026-02-20 09:01:45,762 - ui.hanzi_font_controller - DEBUG - fit final: applied_pt=198 (best=200) text_px=370x178 avail_w=660
-2026-02-20 09:01:45,805 - ui.hanzi_font_controller - DEBUG - Initial sizes: window_w=720 labelHanzi_w=684 contentsRect_w=684
-2026-02-20 09:01:45,805 - ui.hanzi_font_controller - DEBUG - Hanzi baseline avail_w0 set to 684
-2026-02-20 09:01:45,805 - ui.hanzi_font_controller - DEBUG - fit try: sz=103 text_px=193x93 avail_w=660 max_h=360
-2026-02-20 09:01:45,805 - ui.hanzi_font_controller - DEBUG - fit try: sz=152 text_px=284x137 avail_w=660 max_h=360
-2026-02-20 09:01:45,805 - ui.hanzi_font_controller - DEBUG - fit try: sz=176 text_px=330x159 avail_w=660 max_h=360
-2026-02-20 09:01:45,805 - ui.hanzi_font_controller - DEBUG - fit try: sz=188 text_px=352x169 avail_w=660 max_h=360
-2026-02-20 09:01:45,805 - ui.hanzi_font_controller - DEBUG - fit try: sz=194 text_px=363x174 avail_w=660 max_h=360
-2026-02-20 09:01:45,805 - ui.hanzi_font_controller - DEBUG - fit try: sz=197 text_px=369x178 avail_w=660 max_h=360
-2026-02-20 09:01:45,805 - ui.hanzi_font_controller - DEBUG - fit try: sz=199 text_px=372x179 avail_w=660 max_h=360
-2026-02-20 09:01:45,805 - ui.hanzi_font_controller - DEBUG - fit try: sz=200 text_px=374x181 avail_w=660 max_h=360
-2026-02-20 09:01:45,805 - ui.hanzi_font_controller - DEBUG - fit final: applied_pt=198 (best=200) text_px=370x178 avail_w=660
-2026-02-20 09:01:45,806 - ui.hanzi_font_controller - DEBUG - fit try: sz=103 text_px=193x93 avail_w=660 max_h=360
-2026-02-20 09:01:45,806 - ui.hanzi_font_controller - DEBUG - fit try: sz=152 text_px=284x137 avail_w=660 max_h=360
-2026-02-20 09:01:45,806 - ui.hanzi_font_controller - DEBUG - fit try: sz=176 text_px=330x159 avail_w=660 max_h=360
-2026-02-20 09:01:45,806 - ui.hanzi_font_controller - DEBUG - fit try: sz=188 text_px=352x169 avail_w=660 max_h=360
-2026-02-20 09:01:45,806 - ui.hanzi_font_controller - DEBUG - fit try: sz=194 text_px=363x174 avail_w=660 max_h=360
-2026-02-20 09:01:45,806 - ui.hanzi_font_controller - DEBUG - fit try: sz=197 text_px=369x178 avail_w=660 max_h=360
-2026-02-20 09:01:45,806 - ui.hanzi_font_controller - DEBUG - fit try: sz=199 text_px=372x179 avail_w=660 max_h=360
-2026-02-20 09:01:45,806 - ui.hanzi_font_controller - DEBUG - fit try: sz=200 text_px=374x181 avail_w=660 max_h=360
-2026-02-20 09:01:45,806 - ui.hanzi_font_controller - DEBUG - fit final: applied_pt=198 (best=200) text_px=370x178 avail_w=660
-2026-02-20 09:58:15,507 - ui.main_window_setup - DEBUG - Hanzi baseline reduced to 485 due to shrink
-2026-02-20 09:58:15,514 - ui.hanzi_font_controller - DEBUG - fit try: sz=103 text_px=193x93 avail_w=461 max_h=360
-2026-02-20 09:58:15,516 - ui.hanzi_font_controller - DEBUG - fit try: sz=152 text_px=284x137 avail_w=461 max_h=360
-2026-02-20 09:58:15,518 - ui.hanzi_font_controller - DEBUG - fit try: sz=176 text_px=330x159 avail_w=461 max_h=360
-2026-02-20 09:58:15,519 - ui.hanzi_font_controller - DEBUG - fit try: sz=188 text_px=352x169 avail_w=461 max_h=360
-2026-02-20 09:58:15,521 - ui.hanzi_font_controller - DEBUG - fit try: sz=194 text_px=363x174 avail_w=461 max_h=360
-2026-02-20 09:58:15,523 - ui.hanzi_font_controller - DEBUG - fit try: sz=197 text_px=369x178 avail_w=461 max_h=360
-2026-02-20 09:58:15,525 - ui.hanzi_font_controller - DEBUG - fit try: sz=199 text_px=372x179 avail_w=461 max_h=360
-2026-02-20 09:58:15,526 - ui.hanzi_font_controller - DEBUG - fit try: sz=200 text_px=374x181 avail_w=461 max_h=360
-2026-02-20 09:58:15,527 - ui.hanzi_font_controller - DEBUG - fit final: applied_pt=198 (best=200) text_px=370x178 avail_w=461
-2026-02-20 09:58:15,581 - ui.main_window_setup - DEBUG - Hanzi baseline reduced to 430 due to shrink
-2026-02-20 09:58:15,581 - ui.hanzi_font_controller - DEBUG - fit try: sz=103 text_px=193x93 avail_w=406 max_h=360
-2026-02-20 09:58:15,581 - ui.hanzi_font_controller - DEBUG - fit try: sz=152 text_px=284x137 avail_w=406 max_h=360
-2026-02-20 09:58:15,581 - ui.hanzi_font_controller - DEBUG - fit try: sz=176 text_px=330x159 avail_w=406 max_h=360
-2026-02-20 09:58:15,581 - ui.hanzi_font_controller - DEBUG - fit try: sz=188 text_px=352x169 avail_w=406 max_h=360
-2026-02-20 09:58:15,582 - ui.hanzi_font_controller - DEBUG - fit try: sz=194 text_px=363x174 avail_w=406 max_h=360
-2026-02-20 09:58:15,582 - ui.hanzi_font_controller - DEBUG - fit try: sz=197 text_px=369x178 avail_w=406 max_h=360
-2026-02-20 09:58:15,582 - ui.hanzi_font_controller - DEBUG - fit try: sz=199 text_px=372x179 avail_w=406 max_h=360
-2026-02-20 09:58:15,582 - ui.hanzi_font_controller - DEBUG - fit try: sz=200 text_px=374x181 avail_w=406 max_h=360
-2026-02-20 09:58:15,582 - ui.hanzi_font_controller - DEBUG - fit final: applied_pt=198 (best=200) text_px=370x178 avail_w=406
-2026-02-20 09:58:16,773 - category_manager - DEBUG - CategoryManagerDialog: init start (building UI and wiring)
-2026-02-20 09:58:16,773 - ui.category_manager_helpers - DEBUG - PERF start: CategoryManagerDialog.__init__
-2026-02-20 09:58:16,773 - category_manager - DEBUG - CategoryManagerDialog: sized to 1280x720 (parent=720x1280)
-2026-02-20 09:58:16,804 - ui.category_manager_initializer - DEBUG - AddItem: _cats keys (n=36): ['adjectives', 'animals', 'body_parts', 'colour', 'communication', 'direction', 'emotions_feelings', 'family', 'food_drink_eating_drinking', 'greetings', 'health', 'household', 'languages', 'measurements', 'money_shopping', 'nature_air', 'nature_land', 'nature_ocean', 'nature_water', 'numbers', 'people', 'places', 'pronouns_possessive', 'roles_titles', 'school', 'school_tests', 'technology_media', 'time_calendar', 'unassigned', 'vehicle', 'verb', 'verbs', 'weather', 'weekdays', 'work', 'zodiac']
-2026-02-20 09:58:16,804 - ui.category_manager_initializer - DEBUG - AddItem: _all_cats (n=36): ['adjectives', 'animals', 'body_parts', 'colour', 'communication', 'direction', 'emotions_feelings', 'family', 'food_drink_eating_drinking', 'greetings', 'health', 'household', 'languages', 'measurements', 'money_shopping', 'nature_air', 'nature_land', 'nature_ocean', 'nature_water', 'numbers', 'people', 'places', 'pronouns_possessive', 'roles_titles', 'school', 'school_tests', 'technology_media', 'time_calendar', 'unassigned', 'vehicle', 'verb', 'verbs', 'weather', 'weekdays', 'work', 'zodiac']
-2026-02-20 09:58:16,804 - ui.category_manager_initializer - DEBUG - CacheAudit: reverse_index source=parent size=25419
-2026-02-20 09:58:16,807 - ui.category_manager_initializer - DEBUG - MeaningFacade init: ok=True type=MeaningFacade
-2026-02-20 09:58:16,809 - ui.category_manager_initializer - DEBUG - Cantonese language service initialized (cache=/Users/david/PycharmProjects/LearnCanto_01/data/cantonese_language_cache.json)
-2026-02-20 09:58:16,810 - ui.category_manager_initializer - DEBUG - Cantonese meaning controller initialized
-2026-02-20 09:58:16,813 - ui.category_manager_initializer - DEBUG - VocabularyService initialized successfully
-2026-02-20 09:58:17,135 - ui.category_manager_typography - DEBUG - HANZI-GEO after _apply_add_edit_typography
-2026-02-20 09:58:17,137 - ui.category_manager_typography - DEBUG -   grp:   geo=x=0 y=0 w=350 h=280 cr=x=1 y=11 w=348 h=268 sh=w=544 h=216 min=350x280 max=16777215x16777215 font=family=.AppleSystemUIFont pt=13 px=-1
-2026-02-20 09:58:17,137 - ui.category_manager_typography - DEBUG -   hz:    geo=x=0 y=0 w=100 h=100 cr=x=0 y=0 w=100 h=100 sh=w=518 h=99 min=0x100 max=16777215x16777215 ro=False align=129 font=family=.AppleSystemUIFont pt=60 px=-1
-2026-02-20 09:58:17,137 - ui.category_manager_typography - DEBUG -   combo: geo=x=0 y=0 w=100 h=30 cr=x=0 y=0 w=100 h=30 sh=w=114 h=28 min=0x0 max=16777215x16777215 vis=False font=family=.AppleSystemUIFont pt=13 px=-1
-2026-02-20 09:58:17,137 - ui.category_manager_typography - DEBUG -   view:  geo=x=0 y=0 w=100 h=30 cr=x=0 y=0 w=100 h=30 sh=w=256 h=192 min=0x0 max=16777215x16777215 vis=False font=family=.AppleSystemUIFont pt=12 px=-1
-2026-02-20 09:58:17,137 - ui.category_manager_typography - DEBUG -   btn:   geo=x=0 y=0 w=100 h=30 cr=x=0 y=0 w=100 h=30 sh=w=152 h=30 min=0x0 max=16777215x16777215 text='Enter my own Hanzi' font=family=.AppleSystemUIFont pt=13 px=-1
-2026-02-20 09:58:17,137 - ui.category_manager_typography - DEBUG -   hz metrics: h=71 asc=58 desc=13 lead=0
-2026-02-20 09:58:17,137 - ui.category_manager_typography - DEBUG -   combo metrics: h=16 asc=13 desc=3 lead=0
-2026-02-20 09:58:17,152 - ui.category_manager_ui_builder - DEBUG - Vocab table type=QTableWidget
-2026-02-20 09:58:17,188 - category_manager - DEBUG - CategoryManagerDialog: init complete
-2026-02-20 09:58:17,188 - ui.category_manager_helpers - DEBUG - PERF end: CategoryManagerDialog.__init__ (414.7 ms)
-2026-02-20 09:58:17,188 - app.main_helpers - DEBUG - PERF start: CategoryManagerDialog.exec
-2026-02-20 10:01:05,465 - app.main_helpers - DEBUG - PERF end: CategoryManagerDialog.exec (168276.7 ms)
-2026-02-20 10:01:05,508 - controllers.main_controller - DEBUG - Category set to food_drink_eating_drinking -> 5 items
-2026-02-20 10:01:05,508 - controllers.main_controller - DEBUG - Show index=0 hanzi='飲野' jyut='jam2 je5' meanings=['drinks; drink something']
-2026-02-20 10:01:05,510 - ui.hanzi_font_controller - DEBUG - fit try: sz=103 text_px=193x93 avail_w=406 max_h=360
-2026-02-20 10:01:05,512 - ui.hanzi_font_controller - DEBUG - fit try: sz=152 text_px=284x137 avail_w=406 max_h=360
-2026-02-20 10:01:05,513 - ui.hanzi_font_controller - DEBUG - fit try: sz=176 text_px=330x159 avail_w=406 max_h=360
-2026-02-20 10:01:05,515 - ui.hanzi_font_controller - DEBUG - fit try: sz=188 text_px=352x169 avail_w=406 max_h=360
-2026-02-20 10:01:05,517 - ui.hanzi_font_controller - DEBUG - fit try: sz=194 text_px=363x174 avail_w=406 max_h=360
-2026-02-20 10:01:05,518 - ui.hanzi_font_controller - DEBUG - fit try: sz=197 text_px=369x178 avail_w=406 max_h=360
-2026-02-20 10:01:05,520 - ui.hanzi_font_controller - DEBUG - fit try: sz=199 text_px=372x179 avail_w=406 max_h=360
-2026-02-20 10:01:05,521 - ui.hanzi_font_controller - DEBUG - fit try: sz=200 text_px=374x181 avail_w=406 max_h=360
-2026-02-20 10:01:05,521 - ui.hanzi_font_controller - DEBUG - fit final: applied_pt=198 (best=200) text_px=370x178 avail_w=406
-2026-02-20 10:01:05,522 - controllers.main_controller - DEBUG - Tone row found=True
-2026-02-20 10:01:05,522 - controllers.main_controller - DEBUG - Tone row layout=QHBoxLayout
-2026-02-20 10:01:05,522 - controllers.main_controller - DEBUG - Tone row tokens=['jam2', 'je5'] tones=['2', '5']
-2026-02-20 10:01:05,524 - controllers.main_controller - DEBUG - Tone image load: tone=2 path=/Users/david/PycharmProjects/LearnCanto_01/assets/images/tone_2.png ok=True
-2026-02-20 10:01:05,526 - controllers.main_controller - DEBUG - Tone image load: tone=5 path=/Users/david/PycharmProjects/LearnCanto_01/assets/images/tone_5.png ok=True
-2026-02-20 10:01:05,526 - controllers.main_controller - DEBUG - Tone row count=2 height=104
-2026-02-20 10:01:05,532 - ui.hanzi_font_controller - DEBUG - fit try: sz=103 text_px=193x93 avail_w=406 max_h=360
-2026-02-20 10:01:05,532 - ui.hanzi_font_controller - DEBUG - fit try: sz=152 text_px=284x137 avail_w=406 max_h=360
-2026-02-20 10:01:05,532 - ui.hanzi_font_controller - DEBUG - fit try: sz=176 text_px=330x159 avail_w=406 max_h=360
-2026-02-20 10:01:05,532 - ui.hanzi_font_controller - DEBUG - fit try: sz=188 text_px=352x169 avail_w=406 max_h=360
-2026-02-20 10:01:05,532 - ui.hanzi_font_controller - DEBUG - fit try: sz=194 text_px=363x174 avail_w=406 max_h=360
-2026-02-20 10:01:05,532 - ui.hanzi_font_controller - DEBUG - fit try: sz=197 text_px=369x178 avail_w=406 max_h=360
-2026-02-20 10:01:05,532 - ui.hanzi_font_controller - DEBUG - fit try: sz=199 text_px=372x179 avail_w=406 max_h=360
-2026-02-20 10:01:05,532 - ui.hanzi_font_controller - DEBUG - fit try: sz=200 text_px=374x181 avail_w=406 max_h=360
-2026-02-20 10:01:05,532 - ui.hanzi_font_controller - DEBUG - fit final: applied_pt=198 (best=200) text_px=370x178 avail_w=406
+2026-02-21 14:53:31,735 - ui.main_window_setup - DEBUG - Found widgets: hanzi=True jyut=True meanings=True sliders=6 combos=1
+2026-02-21 14:53:31,735 - ui.main_window_setup - DEBUG - Found nav drawer: action=True drawer=True
+2026-02-21 14:53:31,735 - ui.main_window_setup - DEBUG - labelHanzi sizePolicy set to Ignored/Preferred
+2026-02-21 14:53:31,736 - ui.main_window_setup - DEBUG - Buttons resolved -> play:True next:True prev:True
+2026-02-21 14:53:31,736 - ui.main_window_setup - DEBUG - Sliders configured with persisted values
+2026-02-21 14:53:31,737 - ui.main_window_setup - DEBUG - comboCategory populated: 36 categories, initial='food_drink_eating_drinking'
+2026-02-21 14:53:31,737 - ui.main_window_setup - DEBUG - Hamburger action wired to nav drawer
+2026-02-21 14:53:31,737 - ui.main_window_setup - DEBUG - Connecting Play button
+2026-02-21 14:53:31,737 - ui.main_window_setup - DEBUG - MainWindowSetup complete
+2026-02-21 14:53:31,770 - ui.main_window_setup - DEBUG - comboCategory change wired
+2026-02-21 14:53:31,770 - controllers.main_controller - DEBUG - Category set to food_drink_eating_drinking -> 5 items
+2026-02-21 14:53:31,770 - controllers.main_controller - DEBUG - Show index=0 hanzi='飲野' jyut='jam2 je5' meanings=['drinks; drink something']
+2026-02-21 14:53:31,771 - controllers.main_controller - DEBUG - Tone row found=True
+2026-02-21 14:53:31,771 - controllers.main_controller - DEBUG - Tone row layout=QHBoxLayout
+2026-02-21 14:53:31,771 - controllers.main_controller - DEBUG - Tone row tokens=['jam2', 'je5'] tones=['2', '5']
+2026-02-21 14:53:31,772 - controllers.main_controller - DEBUG - Tone image load: tone=2 path=/Users/david/PycharmProjects/LearnCanto_01/assets/images/tone_2.png ok=True
+2026-02-21 14:53:31,775 - controllers.main_controller - DEBUG - Tone image load: tone=5 path=/Users/david/PycharmProjects/LearnCanto_01/assets/images/tone_5.png ok=True
+2026-02-21 14:53:31,777 - controllers.main_controller - DEBUG - Tone row count=2 height=104
+2026-02-21 14:53:34,002 - services.tts_service - DEBUG - Detected 188 voices
+2026-02-21 14:53:34,002 - services.tts_service - DEBUG - TTSService initialized: 188 voices, default=Sinji
+2026-02-21 14:53:34,002 - app.main_helpers - DEBUG - PERF start: load_unihan_char_map
+2026-02-21 14:53:34,018 - app.main_helpers - DEBUG - PERF end: load_unihan_char_map (15.7 ms)
+2026-02-21 14:53:34,018 - app.main_helpers - DEBUG - PERF start: load_reverse_index_files
+2026-02-21 14:53:34,883 - app.main_helpers - DEBUG - PERF end: load_reverse_index_files (864.9 ms)
+2026-02-21 14:53:34,883 - ui.disclosure_handlers - DEBUG - Delays disclosure configured
+2026-02-21 14:53:34,883 - ui.disclosure_handlers - DEBUG - About disclosure configured
+2026-02-21 14:53:34,883 - ui.disclosure_handlers - DEBUG - Tones & Radicals toggle configured
+2026-02-21 14:53:34,885 - app.main_window_ui_controls - DEBUG - TTS engine=google voice=yue-HK-Chirp3-HD-Achernar
+2026-02-21 14:53:34,888 - controllers.main_controller - DEBUG - Show index=0 hanzi='飲野' jyut='jam2 je5' meanings=['drinks; drink something']
+2026-02-21 14:53:34,912 - ui.hanzi_font_controller - DEBUG - fit try: sz=103 text_px=193x93 avail_w=76 max_h=360
+2026-02-21 14:53:34,914 - ui.hanzi_font_controller - DEBUG - fit try: sz=54 text_px=102x49 avail_w=76 max_h=360
+2026-02-21 14:53:34,916 - ui.hanzi_font_controller - DEBUG - fit try: sz=29 text_px=56x26 avail_w=76 max_h=360
+2026-02-21 14:53:34,917 - ui.hanzi_font_controller - DEBUG - fit try: sz=41 text_px=78x38 avail_w=76 max_h=360
+2026-02-21 14:53:34,919 - ui.hanzi_font_controller - DEBUG - fit try: sz=35 text_px=67x32 avail_w=76 max_h=360
+2026-02-21 14:53:34,921 - ui.hanzi_font_controller - DEBUG - fit try: sz=38 text_px=72x35 avail_w=76 max_h=360
+2026-02-21 14:53:34,922 - ui.hanzi_font_controller - DEBUG - fit try: sz=39 text_px=74x35 avail_w=76 max_h=360
+2026-02-21 14:53:34,924 - ui.hanzi_font_controller - DEBUG - fit try: sz=40 text_px=76x37 avail_w=76 max_h=360
+2026-02-21 14:53:34,924 - ui.hanzi_font_controller - DEBUG - fit final: applied_pt=38 (best=40) text_px=72x35 avail_w=76
+2026-02-21 14:53:34,924 - controllers.main_controller - DEBUG - Tone row found=True
+2026-02-21 14:53:34,924 - controllers.main_controller - DEBUG - Tone row layout=QHBoxLayout
+2026-02-21 14:53:34,924 - controllers.main_controller - DEBUG - Tone row tokens=['jam2', 'je5'] tones=['2', '5']
+2026-02-21 14:53:34,924 - controllers.main_controller - DEBUG - Tone image load: tone=2 path=/Users/david/PycharmProjects/LearnCanto_01/assets/images/tone_2.png ok=True
+2026-02-21 14:53:34,925 - controllers.main_controller - DEBUG - Tone image load: tone=5 path=/Users/david/PycharmProjects/LearnCanto_01/assets/images/tone_5.png ok=True
+2026-02-21 14:53:34,925 - controllers.main_controller - DEBUG - Tone row count=2 height=104
+2026-02-21 14:53:34,925 - ui.main_window_setup - DEBUG - Slider changes wired with persistence
+2026-02-21 14:53:34,925 - ui.main_window_setup - DEBUG - Reset button wired
+2026-02-21 14:53:34,936 - ui.hanzi_font_controller - DEBUG - fit try: sz=103 text_px=193x93 avail_w=660 max_h=360
+2026-02-21 14:53:34,938 - ui.hanzi_font_controller - DEBUG - fit try: sz=152 text_px=284x137 avail_w=660 max_h=360
+2026-02-21 14:53:34,939 - ui.hanzi_font_controller - DEBUG - fit try: sz=176 text_px=330x159 avail_w=660 max_h=360
+2026-02-21 14:53:34,941 - ui.hanzi_font_controller - DEBUG - fit try: sz=188 text_px=352x169 avail_w=660 max_h=360
+2026-02-21 14:53:34,943 - ui.hanzi_font_controller - DEBUG - fit try: sz=194 text_px=363x174 avail_w=660 max_h=360
+2026-02-21 14:53:34,944 - ui.hanzi_font_controller - DEBUG - fit try: sz=197 text_px=369x178 avail_w=660 max_h=360
+2026-02-21 14:53:34,946 - ui.hanzi_font_controller - DEBUG - fit try: sz=199 text_px=372x179 avail_w=660 max_h=360
+2026-02-21 14:53:34,948 - ui.hanzi_font_controller - DEBUG - fit try: sz=200 text_px=374x181 avail_w=660 max_h=360
+2026-02-21 14:53:34,949 - ui.hanzi_font_controller - DEBUG - fit final: applied_pt=198 (best=200) text_px=370x178 avail_w=660
+2026-02-21 14:53:34,976 - ui.hanzi_font_controller - DEBUG - Initial sizes: window_w=720 labelHanzi_w=684 contentsRect_w=684
+2026-02-21 14:53:34,976 - ui.hanzi_font_controller - DEBUG - Hanzi baseline avail_w0 set to 684
+2026-02-21 14:53:34,976 - ui.hanzi_font_controller - DEBUG - fit try: sz=103 text_px=193x93 avail_w=660 max_h=360
+2026-02-21 14:53:34,976 - ui.hanzi_font_controller - DEBUG - fit try: sz=152 text_px=284x137 avail_w=660 max_h=360
+2026-02-21 14:53:34,976 - ui.hanzi_font_controller - DEBUG - fit try: sz=176 text_px=330x159 avail_w=660 max_h=360
+2026-02-21 14:53:34,976 - ui.hanzi_font_controller - DEBUG - fit try: sz=188 text_px=352x169 avail_w=660 max_h=360
+2026-02-21 14:53:34,976 - ui.hanzi_font_controller - DEBUG - fit try: sz=194 text_px=363x174 avail_w=660 max_h=360
+2026-02-21 14:53:34,977 - ui.hanzi_font_controller - DEBUG - fit try: sz=197 text_px=369x178 avail_w=660 max_h=360
+2026-02-21 14:53:34,977 - ui.hanzi_font_controller - DEBUG - fit try: sz=199 text_px=372x179 avail_w=660 max_h=360
+2026-02-21 14:53:34,977 - ui.hanzi_font_controller - DEBUG - fit try: sz=200 text_px=374x181 avail_w=660 max_h=360
+2026-02-21 14:53:34,977 - ui.hanzi_font_controller - DEBUG - fit final: applied_pt=198 (best=200) text_px=370x178 avail_w=660
+2026-02-21 14:53:34,977 - ui.hanzi_font_controller - DEBUG - fit try: sz=103 text_px=193x93 avail_w=660 max_h=360
+2026-02-21 14:53:34,977 - ui.hanzi_font_controller - DEBUG - fit try: sz=152 text_px=284x137 avail_w=660 max_h=360
+2026-02-21 14:53:34,977 - ui.hanzi_font_controller - DEBUG - fit try: sz=176 text_px=330x159 avail_w=660 max_h=360
+2026-02-21 14:53:34,977 - ui.hanzi_font_controller - DEBUG - fit try: sz=188 text_px=352x169 avail_w=660 max_h=360
+2026-02-21 14:53:34,977 - ui.hanzi_font_controller - DEBUG - fit try: sz=194 text_px=363x174 avail_w=660 max_h=360
+2026-02-21 14:53:34,977 - ui.hanzi_font_controller - DEBUG - fit try: sz=197 text_px=369x178 avail_w=660 max_h=360
+2026-02-21 14:53:34,977 - ui.hanzi_font_controller - DEBUG - fit try: sz=199 text_px=372x179 avail_w=660 max_h=360
+2026-02-21 14:53:34,977 - ui.hanzi_font_controller - DEBUG - fit try: sz=200 text_px=374x181 avail_w=660 max_h=360
+2026-02-21 14:53:34,977 - ui.hanzi_font_controller - DEBUG - fit final: applied_pt=198 (best=200) text_px=370x178 avail_w=660
+2026-02-21 14:53:42,697 - urllib3.connectionpool - DEBUG - Starting new HTTPS connection (1): oauth2.googleapis.com:443
+2026-02-21 14:53:43,348 - urllib3.connectionpool - DEBUG - https://oauth2.googleapis.com:443 "POST /token HTTP/1.1" 200 None
+2026-02-21 14:53:43,349 - urllib3.connectionpool - DEBUG - Starting new HTTPS connection (1): texttospeech.googleapis.com:443
+2026-02-21 14:53:44,154 - urllib3.connectionpool - DEBUG - https://texttospeech.googleapis.com:443 "POST /v1beta1/text:synthesize HTTP/1.1" 200 None
+2026-02-21 14:53:44,158 - services.google_tts_service - DEBUG - Google TTS timepoints(rest)=0
+2026-02-21 14:53:51,272 - controllers.main_controller - DEBUG - Show index=1 hanzi='奶' jyut='naai5' meanings=['milk, mother']
+2026-02-21 14:53:51,282 - ui.hanzi_font_controller - DEBUG - fit try: sz=103 text_px=89x93 avail_w=660 max_h=360
+2026-02-21 14:53:51,283 - ui.hanzi_font_controller - DEBUG - fit try: sz=152 text_px=130x137 avail_w=660 max_h=360
+2026-02-21 14:53:51,283 - ui.hanzi_font_controller - DEBUG - fit try: sz=176 text_px=151x158 avail_w=660 max_h=360
+2026-02-21 14:53:51,283 - ui.hanzi_font_controller - DEBUG - fit try: sz=188 text_px=162x169 avail_w=660 max_h=360
+2026-02-21 14:53:51,283 - ui.hanzi_font_controller - DEBUG - fit try: sz=194 text_px=167x174 avail_w=660 max_h=360
+2026-02-21 14:53:51,283 - ui.hanzi_font_controller - DEBUG - fit try: sz=197 text_px=169x178 avail_w=660 max_h=360
+2026-02-21 14:53:51,283 - ui.hanzi_font_controller - DEBUG - fit try: sz=199 text_px=171x179 avail_w=660 max_h=360
+2026-02-21 14:53:51,283 - ui.hanzi_font_controller - DEBUG - fit try: sz=200 text_px=171x180 avail_w=660 max_h=360
+2026-02-21 14:53:51,283 - ui.hanzi_font_controller - DEBUG - fit final: applied_pt=198 (best=200) text_px=170x178 avail_w=660
+2026-02-21 14:53:51,284 - controllers.main_controller - DEBUG - Tone row found=True
+2026-02-21 14:53:51,284 - controllers.main_controller - DEBUG - Tone row layout=QHBoxLayout
+2026-02-21 14:53:51,284 - controllers.main_controller - DEBUG - Tone row tokens=['naai5'] tones=['5']
+2026-02-21 14:53:51,284 - controllers.main_controller - DEBUG - Tone image load: tone=5 path=/Users/david/PycharmProjects/LearnCanto_01/assets/images/tone_5.png ok=True
+2026-02-21 14:53:51,285 - controllers.main_controller - DEBUG - Tone row count=1 height=104
+2026-02-21 14:53:51,881 - urllib3.connectionpool - DEBUG - Starting new HTTPS connection (1): oauth2.googleapis.com:443
+2026-02-21 14:53:52,449 - urllib3.connectionpool - DEBUG - https://oauth2.googleapis.com:443 "POST /token HTTP/1.1" 200 None
+2026-02-21 14:53:52,454 - urllib3.connectionpool - DEBUG - Starting new HTTPS connection (1): texttospeech.googleapis.com:443
+2026-02-21 14:53:53,166 - urllib3.connectionpool - DEBUG - https://texttospeech.googleapis.com:443 "POST /v1beta1/text:synthesize HTTP/1.1" 200 None
+2026-02-21 14:53:53,169 - services.google_tts_service - DEBUG - Google TTS timepoints(rest)=0
+2026-02-21 14:53:53,181 - ui.hanzi_font_controller - DEBUG - fit try: sz=103 text_px=89x93 avail_w=660 max_h=360
+2026-02-21 14:53:53,182 - ui.hanzi_font_controller - DEBUG - fit try: sz=152 text_px=130x137 avail_w=660 max_h=360
+2026-02-21 14:53:53,182 - ui.hanzi_font_controller - DEBUG - fit try: sz=176 text_px=151x158 avail_w=660 max_h=360
+2026-02-21 14:53:53,182 - ui.hanzi_font_controller - DEBUG - fit try: sz=188 text_px=162x169 avail_w=660 max_h=360
+2026-02-21 14:53:53,182 - ui.hanzi_font_controller - DEBUG - fit try: sz=194 text_px=167x174 avail_w=660 max_h=360
+2026-02-21 14:53:53,182 - ui.hanzi_font_controller - DEBUG - fit try: sz=197 text_px=169x178 avail_w=660 max_h=360
+2026-02-21 14:53:53,182 - ui.hanzi_font_controller - DEBUG - fit try: sz=199 text_px=171x179 avail_w=660 max_h=360
+2026-02-21 14:53:53,182 - ui.hanzi_font_controller - DEBUG - fit try: sz=200 text_px=171x180 avail_w=660 max_h=360
+2026-02-21 14:53:53,182 - ui.hanzi_font_controller - DEBUG - fit final: applied_pt=198 (best=200) text_px=170x178 avail_w=660
+2026-02-21 14:54:01,804 - controllers.main_controller - DEBUG - Show index=2 hanzi='你食左飯未呀' jyut='nei5 sik6 zo2 faan6 mei6 aa3' meanings=['have you eaten (rice) yet?']
+2026-02-21 14:54:01,820 - ui.hanzi_font_controller - DEBUG - fit try: sz=103 text_px=598x94 avail_w=660 max_h=360
+2026-02-21 14:54:01,820 - ui.hanzi_font_controller - DEBUG - fit try: sz=152 text_px=882x138 avail_w=660 max_h=360
+2026-02-21 14:54:01,824 - ui.hanzi_font_controller - DEBUG - fit try: sz=127 text_px=737x115 avail_w=660 max_h=360
+2026-02-21 14:54:01,827 - ui.hanzi_font_controller - DEBUG - fit try: sz=115 text_px=667x105 avail_w=660 max_h=360
+2026-02-21 14:54:01,829 - ui.hanzi_font_controller - DEBUG - fit try: sz=109 text_px=633x99 avail_w=660 max_h=360
+2026-02-21 14:54:01,832 - ui.hanzi_font_controller - DEBUG - fit try: sz=112 text_px=650x102 avail_w=660 max_h=360
+2026-02-21 14:54:01,834 - ui.hanzi_font_controller - DEBUG - fit try: sz=113 text_px=655x103 avail_w=660 max_h=360
+2026-02-21 14:54:01,837 - ui.hanzi_font_controller - DEBUG - fit try: sz=114 text_px=661x103 avail_w=660 max_h=360
+2026-02-21 14:54:01,839 - ui.hanzi_font_controller - DEBUG - fit final: applied_pt=111 (best=113) text_px=645x101 avail_w=660
+2026-02-21 14:54:01,840 - controllers.main_controller - DEBUG - Tone row found=True
+2026-02-21 14:54:01,840 - controllers.main_controller - DEBUG - Tone row layout=QHBoxLayout
+2026-02-21 14:54:01,840 - controllers.main_controller - DEBUG - Tone row tokens=['nei5', 'sik6', 'zo2', 'faan6', 'mei6', 'aa3'] tones=['5', '6', '2', '6', '6', '3']
+2026-02-21 14:54:01,840 - controllers.main_controller - DEBUG - Tone image load: tone=5 path=/Users/david/PycharmProjects/LearnCanto_01/assets/images/tone_5.png ok=True
+2026-02-21 14:54:01,842 - controllers.main_controller - DEBUG - Tone image load: tone=6 path=/Users/david/PycharmProjects/LearnCanto_01/assets/images/tone_6.png ok=True
+2026-02-21 14:54:01,843 - controllers.main_controller - DEBUG - Tone image load: tone=2 path=/Users/david/PycharmProjects/LearnCanto_01/assets/images/tone_2.png ok=True
+2026-02-21 14:54:01,843 - controllers.main_controller - DEBUG - Tone image load: tone=6 path=/Users/david/PycharmProjects/LearnCanto_01/assets/images/tone_6.png ok=True
+2026-02-21 14:54:01,843 - controllers.main_controller - DEBUG - Tone image load: tone=6 path=/Users/david/PycharmProjects/LearnCanto_01/assets/images/tone_6.png ok=True
+2026-02-21 14:54:01,845 - controllers.main_controller - DEBUG - Tone image load: tone=3 path=/Users/david/PycharmProjects/LearnCanto_01/assets/images/tone_3.png ok=True
+2026-02-21 14:54:01,845 - controllers.main_controller - DEBUG - Tone row count=6 height=104
+2026-02-21 14:54:02,454 - urllib3.connectionpool - DEBUG - Starting new HTTPS connection (1): oauth2.googleapis.com:443
+2026-02-21 14:54:02,923 - urllib3.connectionpool - DEBUG - https://oauth2.googleapis.com:443 "POST /token HTTP/1.1" 200 None
+2026-02-21 14:54:02,928 - urllib3.connectionpool - DEBUG - Starting new HTTPS connection (1): texttospeech.googleapis.com:443
+2026-02-21 14:54:03,817 - urllib3.connectionpool - DEBUG - https://texttospeech.googleapis.com:443 "POST /v1beta1/text:synthesize HTTP/1.1" 200 None
+2026-02-21 14:54:03,820 - services.google_tts_service - DEBUG - Google TTS timepoints(rest)=0
+2026-02-21 14:54:03,832 - ui.hanzi_font_controller - DEBUG - fit try: sz=103 text_px=598x94 avail_w=660 max_h=360
+2026-02-21 14:54:03,832 - ui.hanzi_font_controller - DEBUG - fit try: sz=152 text_px=882x138 avail_w=660 max_h=360
+2026-02-21 14:54:03,832 - ui.hanzi_font_controller - DEBUG - fit try: sz=127 text_px=737x115 avail_w=660 max_h=360
+2026-02-21 14:54:03,832 - ui.hanzi_font_controller - DEBUG - fit try: sz=115 text_px=667x105 avail_w=660 max_h=360
+2026-02-21 14:54:03,832 - ui.hanzi_font_controller - DEBUG - fit try: sz=109 text_px=633x99 avail_w=660 max_h=360
+2026-02-21 14:54:03,832 - ui.hanzi_font_controller - DEBUG - fit try: sz=112 text_px=650x102 avail_w=660 max_h=360
+2026-02-21 14:54:03,832 - ui.hanzi_font_controller - DEBUG - fit try: sz=113 text_px=655x103 avail_w=660 max_h=360
+2026-02-21 14:54:03,832 - ui.hanzi_font_controller - DEBUG - fit try: sz=114 text_px=661x103 avail_w=660 max_h=360
+2026-02-21 14:54:03,833 - ui.hanzi_font_controller - DEBUG - fit final: applied_pt=111 (best=113) text_px=645x101 avail_w=660
+2026-02-21 14:54:03,836 - ui.hanzi_font_controller - DEBUG - fit try: sz=103 text_px=598x94 avail_w=660 max_h=360
+2026-02-21 14:54:03,836 - ui.hanzi_font_controller - DEBUG - fit try: sz=152 text_px=882x138 avail_w=660 max_h=360
+2026-02-21 14:54:03,836 - ui.hanzi_font_controller - DEBUG - fit try: sz=127 text_px=737x115 avail_w=660 max_h=360
+2026-02-21 14:54:03,836 - ui.hanzi_font_controller - DEBUG - fit try: sz=115 text_px=667x105 avail_w=660 max_h=360
+2026-02-21 14:54:03,836 - ui.hanzi_font_controller - DEBUG - fit try: sz=109 text_px=633x99 avail_w=660 max_h=360
+2026-02-21 14:54:03,836 - ui.hanzi_font_controller - DEBUG - fit try: sz=112 text_px=650x102 avail_w=660 max_h=360
+2026-02-21 14:54:03,836 - ui.hanzi_font_controller - DEBUG - fit try: sz=113 text_px=655x103 avail_w=660 max_h=360
+2026-02-21 14:54:03,836 - ui.hanzi_font_controller - DEBUG - fit try: sz=114 text_px=661x103 avail_w=660 max_h=360
+2026-02-21 14:54:03,836 - ui.hanzi_font_controller - DEBUG - fit final: applied_pt=111 (best=113) text_px=645x101 avail_w=660
+2026-02-21 14:54:03,836 - ui.hanzi_font_controller - DEBUG - fit try: sz=103 text_px=598x94 avail_w=660 max_h=360
+2026-02-21 14:54:03,836 - ui.hanzi_font_controller - DEBUG - fit try: sz=152 text_px=882x138 avail_w=660 max_h=360
+2026-02-21 14:54:03,836 - ui.hanzi_font_controller - DEBUG - fit try: sz=127 text_px=737x115 avail_w=660 max_h=360
+2026-02-21 14:54:03,836 - ui.hanzi_font_controller - DEBUG - fit try: sz=115 text_px=667x105 avail_w=660 max_h=360
+2026-02-21 14:54:03,836 - ui.hanzi_font_controller - DEBUG - fit try: sz=109 text_px=633x99 avail_w=660 max_h=360
+2026-02-21 14:54:03,836 - ui.hanzi_font_controller - DEBUG - fit try: sz=112 text_px=650x102 avail_w=660 max_h=360
+2026-02-21 14:54:03,836 - ui.hanzi_font_controller - DEBUG - fit try: sz=113 text_px=655x103 avail_w=660 max_h=360
+2026-02-21 14:54:03,836 - ui.hanzi_font_controller - DEBUG - fit try: sz=114 text_px=661x103 avail_w=660 max_h=360
+2026-02-21 14:54:03,836 - ui.hanzi_font_controller - DEBUG - fit final: applied_pt=111 (best=113) text_px=645x101 avail_w=660
+2026-02-21 14:54:21,196 - urllib3.connectionpool - DEBUG - Starting new HTTPS connection (1): oauth2.googleapis.com:443
+2026-02-21 14:54:21,838 - urllib3.connectionpool - DEBUG - https://oauth2.googleapis.com:443 "POST /token HTTP/1.1" 200 None
+2026-02-21 14:54:21,843 - urllib3.connectionpool - DEBUG - Starting new HTTPS connection (1): texttospeech.googleapis.com:443
+2026-02-21 14:54:22,759 - urllib3.connectionpool - DEBUG - https://texttospeech.googleapis.com:443 "POST /v1beta1/text:synthesize HTTP/1.1" 200 None
+2026-02-21 14:54:22,760 - services.google_tts_service - DEBUG - Google TTS timepoints(rest)=0
+2026-02-21 14:56:15,671 - ui.hanzi_font_controller - DEBUG - fit try: sz=103 text_px=598x94 avail_w=660 max_h=360
+2026-02-21 14:56:15,673 - ui.hanzi_font_controller - DEBUG - fit try: sz=152 text_px=882x138 avail_w=660 max_h=360
+2026-02-21 14:56:15,675 - ui.hanzi_font_controller - DEBUG - fit try: sz=127 text_px=737x115 avail_w=660 max_h=360
+2026-02-21 14:56:15,677 - ui.hanzi_font_controller - DEBUG - fit try: sz=115 text_px=667x105 avail_w=660 max_h=360
+2026-02-21 14:56:15,678 - ui.hanzi_font_controller - DEBUG - fit try: sz=109 text_px=633x99 avail_w=660 max_h=360
+2026-02-21 14:56:15,680 - ui.hanzi_font_controller - DEBUG - fit try: sz=112 text_px=650x102 avail_w=660 max_h=360
+2026-02-21 14:56:15,682 - ui.hanzi_font_controller - DEBUG - fit try: sz=113 text_px=655x103 avail_w=660 max_h=360
+2026-02-21 14:56:15,683 - ui.hanzi_font_controller - DEBUG - fit try: sz=114 text_px=661x103 avail_w=660 max_h=360
+2026-02-21 14:56:15,684 - ui.hanzi_font_controller - DEBUG - fit final: applied_pt=111 (best=113) text_px=645x101 avail_w=660
+2026-02-21 14:56:15,684 - ui.hanzi_font_controller - DEBUG - fit try: sz=103 text_px=598x94 avail_w=660 max_h=360
+2026-02-21 14:56:15,684 - ui.hanzi_font_controller - DEBUG - fit try: sz=152 text_px=882x138 avail_w=660 max_h=360
+2026-02-21 14:56:15,684 - ui.hanzi_font_controller - DEBUG - fit try: sz=127 text_px=737x115 avail_w=660 max_h=360
+2026-02-21 14:56:15,684 - ui.hanzi_font_controller - DEBUG - fit try: sz=115 text_px=667x105 avail_w=660 max_h=360
+2026-02-21 14:56:15,684 - ui.hanzi_font_controller - DEBUG - fit try: sz=109 text_px=633x99 avail_w=660 max_h=360
+2026-02-21 14:56:15,684 - ui.hanzi_font_controller - DEBUG - fit try: sz=112 text_px=650x102 avail_w=660 max_h=360
+2026-02-21 14:56:15,684 - ui.hanzi_font_controller - DEBUG - fit try: sz=113 text_px=655x103 avail_w=660 max_h=360
+2026-02-21 14:56:15,684 - ui.hanzi_font_controller - DEBUG - fit try: sz=114 text_px=661x103 avail_w=660 max_h=360
+2026-02-21 14:56:15,684 - ui.hanzi_font_controller - DEBUG - fit final: applied_pt=111 (best=113) text_px=645x101 avail_w=660
+2026-02-21 14:57:28,836 - ui.hanzi_font_controller - DEBUG - fit try: sz=103 text_px=598x94 avail_w=660 max_h=360
+2026-02-21 14:57:28,839 - ui.hanzi_font_controller - DEBUG - fit try: sz=152 text_px=882x138 avail_w=660 max_h=360
+2026-02-21 14:57:28,841 - ui.hanzi_font_controller - DEBUG - fit try: sz=127 text_px=737x115 avail_w=660 max_h=360
+2026-02-21 14:57:28,842 - ui.hanzi_font_controller - DEBUG - fit try: sz=115 text_px=667x105 avail_w=660 max_h=360
+2026-02-21 14:57:28,844 - ui.hanzi_font_controller - DEBUG - fit try: sz=109 text_px=633x99 avail_w=660 max_h=360
+2026-02-21 14:57:28,846 - ui.hanzi_font_controller - DEBUG - fit try: sz=112 text_px=650x102 avail_w=660 max_h=360
+2026-02-21 14:57:28,848 - ui.hanzi_font_controller - DEBUG - fit try: sz=113 text_px=655x103 avail_w=660 max_h=360
+2026-02-21 14:57:28,849 - ui.hanzi_font_controller - DEBUG - fit try: sz=114 text_px=661x103 avail_w=660 max_h=360
+2026-02-21 14:57:28,849 - ui.hanzi_font_controller - DEBUG - fit final: applied_pt=111 (best=113) text_px=645x101 avail_w=660
+2026-02-21 14:57:28,850 - ui.hanzi_font_controller - DEBUG - fit try: sz=103 text_px=598x94 avail_w=660 max_h=360
+2026-02-21 14:57:28,850 - ui.hanzi_font_controller - DEBUG - fit try: sz=152 text_px=882x138 avail_w=660 max_h=360
+2026-02-21 14:57:28,850 - ui.hanzi_font_controller - DEBUG - fit try: sz=127 text_px=737x115 avail_w=660 max_h=360
+2026-02-21 14:57:28,850 - ui.hanzi_font_controller - DEBUG - fit try: sz=115 text_px=667x105 avail_w=660 max_h=360
+2026-02-21 14:57:28,850 - ui.hanzi_font_controller - DEBUG - fit try: sz=109 text_px=633x99 avail_w=660 max_h=360
+2026-02-21 14:57:28,850 - ui.hanzi_font_controller - DEBUG - fit try: sz=112 text_px=650x102 avail_w=660 max_h=360
+2026-02-21 14:57:28,850 - ui.hanzi_font_controller - DEBUG - fit try: sz=113 text_px=655x103 avail_w=660 max_h=360
+2026-02-21 14:57:28,850 - ui.hanzi_font_controller - DEBUG - fit try: sz=114 text_px=661x103 avail_w=660 max_h=360
+2026-02-21 14:57:28,850 - ui.hanzi_font_controller - DEBUG - fit final: applied_pt=111 (best=113) text_px=645x101 avail_w=660
+2026-02-21 15:31:45,695 - ui.hanzi_font_controller - DEBUG - fit try: sz=103 text_px=598x94 avail_w=660 max_h=360
+2026-02-21 15:31:45,698 - ui.hanzi_font_controller - DEBUG - fit try: sz=152 text_px=882x138 avail_w=660 max_h=360
+2026-02-21 15:31:45,700 - ui.hanzi_font_controller - DEBUG - fit try: sz=127 text_px=737x115 avail_w=660 max_h=360
+2026-02-21 15:31:45,703 - ui.hanzi_font_controller - DEBUG - fit try: sz=115 text_px=667x105 avail_w=660 max_h=360
+2026-02-21 15:31:45,705 - ui.hanzi_font_controller - DEBUG - fit try: sz=109 text_px=633x99 avail_w=660 max_h=360
+2026-02-21 15:31:45,707 - ui.hanzi_font_controller - DEBUG - fit try: sz=112 text_px=650x102 avail_w=660 max_h=360
+2026-02-21 15:31:45,709 - ui.hanzi_font_controller - DEBUG - fit try: sz=113 text_px=655x103 avail_w=660 max_h=360
+2026-02-21 15:31:45,711 - ui.hanzi_font_controller - DEBUG - fit try: sz=114 text_px=661x103 avail_w=660 max_h=360
+2026-02-21 15:31:45,711 - ui.hanzi_font_controller - DEBUG - fit final: applied_pt=111 (best=113) text_px=645x101 avail_w=660
+2026-02-21 15:31:45,711 - ui.hanzi_font_controller - DEBUG - fit try: sz=103 text_px=598x94 avail_w=660 max_h=360
+2026-02-21 15:31:45,711 - ui.hanzi_font_controller - DEBUG - fit try: sz=152 text_px=882x138 avail_w=660 max_h=360
+2026-02-21 15:31:45,711 - ui.hanzi_font_controller - DEBUG - fit try: sz=127 text_px=737x115 avail_w=660 max_h=360
+2026-02-21 15:31:45,711 - ui.hanzi_font_controller - DEBUG - fit try: sz=115 text_px=667x105 avail_w=660 max_h=360
+2026-02-21 15:31:45,711 - ui.hanzi_font_controller - DEBUG - fit try: sz=109 text_px=633x99 avail_w=660 max_h=360
+2026-02-21 15:31:45,711 - ui.hanzi_font_controller - DEBUG - fit try: sz=112 text_px=650x102 avail_w=660 max_h=360
+2026-02-21 15:31:45,711 - ui.hanzi_font_controller - DEBUG - fit try: sz=113 text_px=655x103 avail_w=660 max_h=360
+2026-02-21 15:31:45,711 - ui.hanzi_font_controller - DEBUG - fit try: sz=114 text_px=661x103 avail_w=660 max_h=360
+2026-02-21 15:31:45,711 - ui.hanzi_font_controller - DEBUG - fit final: applied_pt=111 (best=113) text_px=645x101 avail_w=660
+2026-02-21 15:31:48,002 - ui.hanzi_font_controller - DEBUG - fit try: sz=103 text_px=598x94 avail_w=660 max_h=360
+2026-02-21 15:31:48,003 - ui.hanzi_font_controller - DEBUG - fit try: sz=152 text_px=882x138 avail_w=660 max_h=360
+2026-02-21 15:31:48,003 - ui.hanzi_font_controller - DEBUG - fit try: sz=127 text_px=737x115 avail_w=660 max_h=360
+2026-02-21 15:31:48,003 - ui.hanzi_font_controller - DEBUG - fit try: sz=115 text_px=667x105 avail_w=660 max_h=360
+2026-02-21 15:31:48,003 - ui.hanzi_font_controller - DEBUG - fit try: sz=109 text_px=633x99 avail_w=660 max_h=360
+2026-02-21 15:31:48,003 - ui.hanzi_font_controller - DEBUG - fit try: sz=112 text_px=650x102 avail_w=660 max_h=360
+2026-02-21 15:31:48,003 - ui.hanzi_font_controller - DEBUG - fit try: sz=113 text_px=655x103 avail_w=660 max_h=360
+2026-02-21 15:31:48,003 - ui.hanzi_font_controller - DEBUG - fit try: sz=114 text_px=661x103 avail_w=660 max_h=360
+2026-02-21 15:31:48,004 - ui.hanzi_font_controller - DEBUG - fit final: applied_pt=111 (best=113) text_px=645x101 avail_w=660
+2026-02-21 15:31:48,004 - ui.hanzi_font_controller - DEBUG - fit try: sz=103 text_px=598x94 avail_w=660 max_h=360
+2026-02-21 15:31:48,004 - ui.hanzi_font_controller - DEBUG - fit try: sz=152 text_px=882x138 avail_w=660 max_h=360
+2026-02-21 15:31:48,004 - ui.hanzi_font_controller - DEBUG - fit try: sz=127 text_px=737x115 avail_w=660 max_h=360
+2026-02-21 15:31:48,004 - ui.hanzi_font_controller - DEBUG - fit try: sz=115 text_px=667x105 avail_w=660 max_h=360
+2026-02-21 15:31:48,004 - ui.hanzi_font_controller - DEBUG - fit try: sz=109 text_px=633x99 avail_w=660 max_h=360
+2026-02-21 15:31:48,004 - ui.hanzi_font_controller - DEBUG - fit try: sz=112 text_px=650x102 avail_w=660 max_h=360
+2026-02-21 15:31:48,004 - ui.hanzi_font_controller - DEBUG - fit try: sz=113 text_px=655x103 avail_w=660 max_h=360
+2026-02-21 15:31:48,005 - ui.hanzi_font_controller - DEBUG - fit try: sz=114 text_px=661x103 avail_w=660 max_h=360
+2026-02-21 15:31:48,005 - ui.hanzi_font_controller - DEBUG - fit final: applied_pt=111 (best=113) text_px=645x101 avail_w=660
+2026-02-21 15:33:23,761 - ui.hanzi_font_controller - DEBUG - fit try: sz=103 text_px=598x94 avail_w=660 max_h=360
+2026-02-21 15:33:23,763 - ui.hanzi_font_controller - DEBUG - fit try: sz=152 text_px=882x138 avail_w=660 max_h=360
+2026-02-21 15:33:23,765 - ui.hanzi_font_controller - DEBUG - fit try: sz=127 text_px=737x115 avail_w=660 max_h=360
+2026-02-21 15:33:23,768 - ui.hanzi_font_controller - DEBUG - fit try: sz=115 text_px=667x105 avail_w=660 max_h=360
+2026-02-21 15:33:23,770 - ui.hanzi_font_controller - DEBUG - fit try: sz=109 text_px=633x99 avail_w=660 max_h=360
+2026-02-21 15:33:23,772 - ui.hanzi_font_controller - DEBUG - fit try: sz=112 text_px=650x102 avail_w=660 max_h=360
+2026-02-21 15:33:23,774 - ui.hanzi_font_controller - DEBUG - fit try: sz=113 text_px=655x103 avail_w=660 max_h=360
+2026-02-21 15:33:23,776 - ui.hanzi_font_controller - DEBUG - fit try: sz=114 text_px=661x103 avail_w=660 max_h=360
+2026-02-21 15:33:23,776 - ui.hanzi_font_controller - DEBUG - fit final: applied_pt=111 (best=113) text_px=645x101 avail_w=660
+2026-02-21 15:33:23,776 - ui.hanzi_font_controller - DEBUG - fit try: sz=103 text_px=598x94 avail_w=660 max_h=360
+2026-02-21 15:33:23,776 - ui.hanzi_font_controller - DEBUG - fit try: sz=152 text_px=882x138 avail_w=660 max_h=360
+2026-02-21 15:33:23,776 - ui.hanzi_font_controller - DEBUG - fit try: sz=127 text_px=737x115 avail_w=660 max_h=360
+2026-02-21 15:33:23,776 - ui.hanzi_font_controller - DEBUG - fit try: sz=115 text_px=667x105 avail_w=660 max_h=360
+2026-02-21 15:33:23,776 - ui.hanzi_font_controller - DEBUG - fit try: sz=109 text_px=633x99 avail_w=660 max_h=360
+2026-02-21 15:33:23,776 - ui.hanzi_font_controller - DEBUG - fit try: sz=112 text_px=650x102 avail_w=660 max_h=360
+2026-02-21 15:33:23,776 - ui.hanzi_font_controller - DEBUG - fit try: sz=113 text_px=655x103 avail_w=660 max_h=360
+2026-02-21 15:33:23,776 - ui.hanzi_font_controller - DEBUG - fit try: sz=114 text_px=661x103 avail_w=660 max_h=360
+2026-02-21 15:33:23,776 - ui.hanzi_font_controller - DEBUG - fit final: applied_pt=111 (best=113) text_px=645x101 avail_w=660
+2026-02-21 15:33:26,266 - ui.hanzi_font_controller - DEBUG - fit try: sz=103 text_px=598x94 avail_w=660 max_h=360
+2026-02-21 15:33:26,267 - ui.hanzi_font_controller - DEBUG - fit try: sz=152 text_px=882x138 avail_w=660 max_h=360
+2026-02-21 15:33:26,267 - ui.hanzi_font_controller - DEBUG - fit try: sz=127 text_px=737x115 avail_w=660 max_h=360
+2026-02-21 15:33:26,267 - ui.hanzi_font_controller - DEBUG - fit try: sz=115 text_px=667x105 avail_w=660 max_h=360
+2026-02-21 15:33:26,267 - ui.hanzi_font_controller - DEBUG - fit try: sz=109 text_px=633x99 avail_w=660 max_h=360
+2026-02-21 15:33:26,267 - ui.hanzi_font_controller - DEBUG - fit try: sz=112 text_px=650x102 avail_w=660 max_h=360
+2026-02-21 15:33:26,267 - ui.hanzi_font_controller - DEBUG - fit try: sz=113 text_px=655x103 avail_w=660 max_h=360
+2026-02-21 15:33:26,267 - ui.hanzi_font_controller - DEBUG - fit try: sz=114 text_px=661x103 avail_w=660 max_h=360
+2026-02-21 15:33:26,268 - ui.hanzi_font_controller - DEBUG - fit final: applied_pt=111 (best=113) text_px=645x101 avail_w=660
+2026-02-21 15:33:26,268 - ui.hanzi_font_controller - DEBUG - fit try: sz=103 text_px=598x94 avail_w=660 max_h=360
+2026-02-21 15:33:26,268 - ui.hanzi_font_controller - DEBUG - fit try: sz=152 text_px=882x138 avail_w=660 max_h=360
+2026-02-21 15:33:26,268 - ui.hanzi_font_controller - DEBUG - fit try: sz=127 text_px=737x115 avail_w=660 max_h=360
+2026-02-21 15:33:26,268 - ui.hanzi_font_controller - DEBUG - fit try: sz=115 text_px=667x105 avail_w=660 max_h=360
+2026-02-21 15:33:26,268 - ui.hanzi_font_controller - DEBUG - fit try: sz=109 text_px=633x99 avail_w=660 max_h=360
+2026-02-21 15:33:26,268 - ui.hanzi_font_controller - DEBUG - fit try: sz=112 text_px=650x102 avail_w=660 max_h=360
+2026-02-21 15:33:26,268 - ui.hanzi_font_controller - DEBUG - fit try: sz=113 text_px=655x103 avail_w=660 max_h=360
+2026-02-21 15:33:26,268 - ui.hanzi_font_controller - DEBUG - fit try: sz=114 text_px=661x103 avail_w=660 max_h=360
+2026-02-21 15:33:26,269 - ui.hanzi_font_controller - DEBUG - fit final: applied_pt=111 (best=113) text_px=645x101 avail_w=660
+2026-02-21 15:38:21,196 - ui.hanzi_font_controller - DEBUG - fit try: sz=103 text_px=598x94 avail_w=660 max_h=360
+2026-02-21 15:38:21,198 - ui.hanzi_font_controller - DEBUG - fit try: sz=152 text_px=882x138 avail_w=660 max_h=360
+2026-02-21 15:38:21,201 - ui.hanzi_font_controller - DEBUG - fit try: sz=127 text_px=737x115 avail_w=660 max_h=360
+2026-02-21 15:38:21,203 - ui.hanzi_font_controller - DEBUG - fit try: sz=115 text_px=667x105 avail_w=660 max_h=360
+2026-02-21 15:38:21,205 - ui.hanzi_font_controller - DEBUG - fit try: sz=109 text_px=633x99 avail_w=660 max_h=360
+2026-02-21 15:38:21,207 - ui.hanzi_font_controller - DEBUG - fit try: sz=112 text_px=650x102 avail_w=660 max_h=360
+2026-02-21 15:38:21,209 - ui.hanzi_font_controller - DEBUG - fit try: sz=113 text_px=655x103 avail_w=660 max_h=360
+2026-02-21 15:38:21,211 - ui.hanzi_font_controller - DEBUG - fit try: sz=114 text_px=661x103 avail_w=660 max_h=360
+2026-02-21 15:38:21,211 - ui.hanzi_font_controller - DEBUG - fit final: applied_pt=111 (best=113) text_px=645x101 avail_w=660
+2026-02-21 15:38:21,211 - ui.hanzi_font_controller - DEBUG - fit try: sz=103 text_px=598x94 avail_w=660 max_h=360
+2026-02-21 15:38:21,211 - ui.hanzi_font_controller - DEBUG - fit try: sz=152 text_px=882x138 avail_w=660 max_h=360
+2026-02-21 15:38:21,211 - ui.hanzi_font_controller - DEBUG - fit try: sz=127 text_px=737x115 avail_w=660 max_h=360
+2026-02-21 15:38:21,211 - ui.hanzi_font_controller - DEBUG - fit try: sz=115 text_px=667x105 avail_w=660 max_h=360
+2026-02-21 15:38:21,211 - ui.hanzi_font_controller - DEBUG - fit try: sz=109 text_px=633x99 avail_w=660 max_h=360
+2026-02-21 15:38:21,211 - ui.hanzi_font_controller - DEBUG - fit try: sz=112 text_px=650x102 avail_w=660 max_h=360
+2026-02-21 15:38:21,211 - ui.hanzi_font_controller - DEBUG - fit try: sz=113 text_px=655x103 avail_w=660 max_h=360
+2026-02-21 15:38:21,211 - ui.hanzi_font_controller - DEBUG - fit try: sz=114 text_px=661x103 avail_w=660 max_h=360
+2026-02-21 15:38:21,211 - ui.hanzi_font_controller - DEBUG - fit final: applied_pt=111 (best=113) text_px=645x101 avail_w=660
+2026-02-21 15:38:23,953 - ui.hanzi_font_controller - DEBUG - fit try: sz=103 text_px=598x94 avail_w=660 max_h=360
+2026-02-21 15:38:23,953 - ui.hanzi_font_controller - DEBUG - fit try: sz=152 text_px=882x138 avail_w=660 max_h=360
+2026-02-21 15:38:23,953 - ui.hanzi_font_controller - DEBUG - fit try: sz=127 text_px=737x115 avail_w=660 max_h=360
+2026-02-21 15:38:23,953 - ui.hanzi_font_controller - DEBUG - fit try: sz=115 text_px=667x105 avail_w=660 max_h=360
+2026-02-21 15:38:23,953 - ui.hanzi_font_controller - DEBUG - fit try: sz=109 text_px=633x99 avail_w=660 max_h=360
+2026-02-21 15:38:23,954 - ui.hanzi_font_controller - DEBUG - fit try: sz=112 text_px=650x102 avail_w=660 max_h=360
+2026-02-21 15:38:23,954 - ui.hanzi_font_controller - DEBUG - fit try: sz=113 text_px=655x103 avail_w=660 max_h=360
+2026-02-21 15:38:23,954 - ui.hanzi_font_controller - DEBUG - fit try: sz=114 text_px=661x103 avail_w=660 max_h=360
+2026-02-21 15:38:23,954 - ui.hanzi_font_controller - DEBUG - fit final: applied_pt=111 (best=113) text_px=645x101 avail_w=660
+2026-02-21 15:38:23,954 - ui.hanzi_font_controller - DEBUG - fit try: sz=103 text_px=598x94 avail_w=660 max_h=360
+2026-02-21 15:38:23,954 - ui.hanzi_font_controller - DEBUG - fit try: sz=152 text_px=882x138 avail_w=660 max_h=360
+2026-02-21 15:38:23,954 - ui.hanzi_font_controller - DEBUG - fit try: sz=127 text_px=737x115 avail_w=660 max_h=360
+2026-02-21 15:38:23,954 - ui.hanzi_font_controller - DEBUG - fit try: sz=115 text_px=667x105 avail_w=660 max_h=360
+2026-02-21 15:38:23,955 - ui.hanzi_font_controller - DEBUG - fit try: sz=109 text_px=633x99 avail_w=660 max_h=360
+2026-02-21 15:38:23,955 - ui.hanzi_font_controller - DEBUG - fit try: sz=112 text_px=650x102 avail_w=660 max_h=360
+2026-02-21 15:38:23,955 - ui.hanzi_font_controller - DEBUG - fit try: sz=113 text_px=655x103 avail_w=660 max_h=360
+2026-02-21 15:38:23,955 - ui.hanzi_font_controller - DEBUG - fit try: sz=114 text_px=661x103 avail_w=660 max_h=360
+2026-02-21 15:38:23,955 - ui.hanzi_font_controller - DEBUG - fit final: applied_pt=111 (best=113) text_px=645x101 avail_w=660
+2026-02-21 16:33:15,214 - ui.hanzi_font_controller - DEBUG - fit try: sz=103 text_px=598x94 avail_w=660 max_h=360
+2026-02-21 16:33:15,217 - ui.hanzi_font_controller - DEBUG - fit try: sz=152 text_px=882x138 avail_w=660 max_h=360
+2026-02-21 16:33:15,219 - ui.hanzi_font_controller - DEBUG - fit try: sz=127 text_px=737x115 avail_w=660 max_h=360
+2026-02-21 16:33:15,221 - ui.hanzi_font_controller - DEBUG - fit try: sz=115 text_px=667x105 avail_w=660 max_h=360
+2026-02-21 16:33:15,223 - ui.hanzi_font_controller - DEBUG - fit try: sz=109 text_px=633x99 avail_w=660 max_h=360
+2026-02-21 16:33:15,225 - ui.hanzi_font_controller - DEBUG - fit try: sz=112 text_px=650x102 avail_w=660 max_h=360
+2026-02-21 16:33:15,227 - ui.hanzi_font_controller - DEBUG - fit try: sz=113 text_px=655x103 avail_w=660 max_h=360
+2026-02-21 16:33:15,229 - ui.hanzi_font_controller - DEBUG - fit try: sz=114 text_px=661x103 avail_w=660 max_h=360
+2026-02-21 16:33:15,229 - ui.hanzi_font_controller - DEBUG - fit final: applied_pt=111 (best=113) text_px=645x101 avail_w=660
+2026-02-21 16:33:15,229 - ui.hanzi_font_controller - DEBUG - fit try: sz=103 text_px=598x94 avail_w=660 max_h=360
+2026-02-21 16:33:15,229 - ui.hanzi_font_controller - DEBUG - fit try: sz=152 text_px=882x138 avail_w=660 max_h=360
+2026-02-21 16:33:15,229 - ui.hanzi_font_controller - DEBUG - fit try: sz=127 text_px=737x115 avail_w=660 max_h=360
+2026-02-21 16:33:15,229 - ui.hanzi_font_controller - DEBUG - fit try: sz=115 text_px=667x105 avail_w=660 max_h=360
+2026-02-21 16:33:15,229 - ui.hanzi_font_controller - DEBUG - fit try: sz=109 text_px=633x99 avail_w=660 max_h=360
+2026-02-21 16:33:15,229 - ui.hanzi_font_controller - DEBUG - fit try: sz=112 text_px=650x102 avail_w=660 max_h=360
+2026-02-21 16:33:15,229 - ui.hanzi_font_controller - DEBUG - fit try: sz=113 text_px=655x103 avail_w=660 max_h=360
+2026-02-21 16:33:15,229 - ui.hanzi_font_controller - DEBUG - fit try: sz=114 text_px=661x103 avail_w=660 max_h=360
+2026-02-21 16:33:15,229 - ui.hanzi_font_controller - DEBUG - fit final: applied_pt=111 (best=113) text_px=645x101 avail_w=660

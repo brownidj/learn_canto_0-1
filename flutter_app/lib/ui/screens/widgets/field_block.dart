@@ -13,6 +13,9 @@ class FieldBlock extends StatelessWidget {
   final bool readOnly;
   final VoidCallback? onTap;
   final bool enabled;
+  final String? hintText;
+  final TextInputType? keyboardType;
+  final double bottomPadding;
 
   const FieldBlock({
     super.key,
@@ -27,12 +30,18 @@ class FieldBlock extends StatelessWidget {
     this.readOnly = false,
     this.onTap,
     this.enabled = true,
+    this.hintText,
+    this.keyboardType,
+    this.bottomPadding = 2,
   });
 
   @override
   Widget build(BuildContext context) {
+    final hasError = error != null && error!.isNotEmpty;
+    final hint = hasError ? error : hintText;
+    final hintStyle = hasError ? const TextStyle(fontSize: 11, color: Colors.red) : null;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
+      padding: EdgeInsets.only(bottom: bottomPadding),
       child: labelLeft
           ? Row(
               crossAxisAlignment: CrossAxisAlignment.center,
@@ -49,10 +58,12 @@ class FieldBlock extends StatelessWidget {
                           controller: initialValue != null ? TextEditingController(text: initialValue) : null,
                           decoration: InputDecoration(
                             isDense: true,
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                            errorText: (error != null && error!.isNotEmpty) ? error : null,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            hintText: hint,
+                            hintStyle: hintStyle,
                           ),
                           style: const TextStyle(fontSize: 12),
+                          keyboardType: keyboardType,
                           focusNode: focusNode,
                           onChanged: enabled ? onChanged : null,
                           onSubmitted: onSubmitted,
@@ -85,10 +96,12 @@ class FieldBlock extends StatelessWidget {
                   decoration: InputDecoration(
                     labelText: label,
                     labelStyle: const TextStyle(fontSize: 11),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                    errorText: (error != null && error!.isNotEmpty) ? error : null,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    hintText: hint,
+                    hintStyle: hintStyle,
                   ),
                   style: const TextStyle(fontSize: 12),
+                  keyboardType: keyboardType,
                   focusNode: focusNode,
                   onChanged: enabled ? onChanged : null,
                   onSubmitted: onSubmitted,

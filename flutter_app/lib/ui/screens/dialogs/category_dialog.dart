@@ -14,17 +14,17 @@ Future<void> showCategoryDialog(
     barrierDismissible: false,
     builder: (ctx) {
       final addController = TextEditingController();
-      return AlertDialog(
-        title: const Text('Select categories', style: TextStyle(fontSize: 12)),
-        titlePadding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-        contentPadding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
-        actionsPadding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
-        insetPadding: const EdgeInsets.all(12),
-        content: StatefulBuilder(
-          builder: (ctx2, setState) {
-            final filtered = List<String>.from(state.availableCategories)..sort();
-            final hasSelection = next.isNotEmpty;
-            return SizedBox(
+      return StatefulBuilder(
+        builder: (ctx2, setState) {
+          final filtered = List<String>.from(state.availableCategories)..sort();
+          final hasSelection = next.isNotEmpty;
+          return AlertDialog(
+            title: const Text('Select categories', style: TextStyle(fontSize: 12)),
+            titlePadding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+            contentPadding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
+            actionsPadding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+            insetPadding: const EdgeInsets.all(12),
+            content: SizedBox(
               width: 260,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -78,37 +78,37 @@ Future<void> showCategoryDialog(
                   ),
                 ],
               ),
-            );
-          },
-        ),
-        actions: [
-          TextButton(
-            onPressed: next.isNotEmpty
-                ? () {
-                    next.clear();
-                    Navigator.of(ctx).pop(next);
-                  }
-                : null,
-            child: const Text('Clear', style: TextStyle(fontSize: 11)),
-          ),
-          TextButton(
-            onPressed: next.isNotEmpty ? () => Navigator.of(ctx).pop(null) : null,
-            child: const Text('Cancel', style: TextStyle(fontSize: 11)),
-          ),
-          TextButton(
-            onPressed: next.isNotEmpty
-                ? () {
-                    for (final v in next) {
-                      if (!state.availableCategories.contains(v)) {
-                        onAddCategory(v);
+            ),
+            actions: [
+              TextButton(
+                onPressed: hasSelection
+                    ? () {
+                        next.clear();
+                        Navigator.of(ctx2).pop(next);
                       }
-                    }
-                    Navigator.of(ctx).pop(next);
-                  }
-                : null,
-            child: const Text('Apply', style: TextStyle(fontSize: 11)),
-          ),
-        ],
+                    : null,
+                child: const Text('Clear', style: TextStyle(fontSize: 11)),
+              ),
+              TextButton(
+                onPressed: hasSelection ? () => Navigator.of(ctx2).pop(null) : null,
+                child: const Text('Cancel', style: TextStyle(fontSize: 11)),
+              ),
+              TextButton(
+                onPressed: hasSelection
+                    ? () {
+                        for (final v in next) {
+                          if (!state.availableCategories.contains(v)) {
+                            onAddCategory(v);
+                          }
+                        }
+                        Navigator.of(ctx2).pop(next);
+                      }
+                    : null,
+                child: const Text('Select', style: TextStyle(fontSize: 11)),
+              ),
+            ],
+          );
+        },
       );
     },
   );

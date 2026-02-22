@@ -1,0 +1,1735 @@
+categories:
+  animals:
+    description: Animals, insects and other living creatures.
+    label: Animals
+  colors:
+    description: Basic colors and color expressions.
+    label: Colors
+  communication:
+    description: Verbs and phrases about speaking, asking, understanding, and information.
+    label: Communication & questions
+  adjectives:
+    description: Adjectives or short descriptive expressions.
+    label: Descriptions & adjectives
+  direction:
+    description: Spatial terms like up, down, here, there.
+    label: Direction & location words
+  emotions_feelings: {}
+  family:
+    description: Family members and kinship terms.
+    label: Family & relations
+  food_drink_eating_drinking:
+    description: Food and drink items and related actions.
+    label: Food, drink & eating
+  greetings:
+    description: Greetings, thanks, apologies and farewells.
+    label: Greetings & social niceties
+  health:
+    description: Health, pain, hospitals and medical-related terms.
+    label: Health & body
+  household:
+    description: Household objects and things around the home.
+    label: Household
+  languages:
+    description: Names of languages and related words.
+    label: Languages
+  measurements:
+    description: Units and expressions of amount or measure.
+    label: Measurements & quantities
+  money_shopping:
+    description: Money, prices, discounts and shopping-related expressions.
+    label: Money & shopping
+  nature_air:
+    description: Weather and natural phenomena in the air.
+    label: Nature – air & sky
+  nature_land:
+    description: Landforms and terrain-related words.
+    label: Nature – land
+  nature_ocean:
+    description: Sea, ocean, coast and marine environment words.
+    label: Nature – ocean & sea
+  nature_water:
+    description: Rivers, lakes and water-related words that aren’t specifically ocean.
+    label: Nature – water (general)
+  numbers:
+    description: Basic numbers and number-related expressions.
+    label: Numbers
+  people:
+    description: General words for people, roles, and unspecified persons.
+    label: People
+  places:
+    description: Countries, cities, and other place names.
+    label: Places
+  pronouns_possessive:
+    description: Personal pronouns and their possessive forms.
+    label: Pronouns & possessives
+  roles_titles:
+    description: Social or professional roles and titles.
+    label: Roles & titles
+  school_tests:
+    description: Exam, test and study-related words.
+    label: School & tests
+  technology_media:
+    description: Technology, phones, media and related things.
+    label: Technology & media
+  time_calendar:
+    description: Time of day, calendar dates, seasons and temporal expressions.
+    label: Time & calendar
+  unassigned:
+    description: Items that do not yet belong to a specific category.
+    label: Unassigned / misc
+  vehicle:
+    description: Vehicles and transport-related words.
+    label: Vehicles & transport
+  weather:
+    description: Weather conditions and related expressions.
+    label: Weather
+  weekdays:
+    description: Days of the week and related expressions.
+    label: Weekdays
+  work: {}
+  zodiac:
+    description: Zodiac animals and related words.
+    label: Chinese zodiac
+entries:
+  baai1 baai3:
+    headword: 拜拜
+    jyutping: baai1 baai3
+    senses:
+    - categories:
+      - greetings
+      gloss: bye bye (informal)
+      hanzi: 拜拜
+      register: colloquial
+  baak6:
+    jyutping: baak6
+    senses:
+    - categories:
+      - colors
+      gloss: White, snow
+      hanzi: 白
+  baat3:
+    headword: 八
+    jyutping: baat3
+    senses:
+    - categories:
+      - numbers
+      gloss: eight
+      hanzi: 八
+      register: both
+  bei2:
+    jyutping: bei2
+    senses:
+    - categories:
+      - communication
+      gloss: give
+      hanzi: 畀
+  bin1 dou6:
+    headword: 邊到
+    jyutping: bin1 dou6
+    senses:
+    - categories:
+      - communication
+      - direction
+      gloss: where
+      hanzi: 邊到
+      register: colloquial
+  bin1 go3:
+    headword: 邊個
+    jyutping: bin1 go3
+    senses:
+    - categories:
+      - communication
+      - people
+      gloss: who
+      hanzi: 邊個
+      register: colloquial
+  bin1 go3 ge3:
+    headword: 邊個嘅
+    jyutping: bin1 go3 ge3
+    senses:
+    - categories:
+      - communication
+      gloss: whose
+      hanzi: 邊個嘅
+      register: colloquial
+  caang2:
+    jyutping: caang2
+    senses:
+    - categories:
+      - colors
+      gloss: orange tree, orange (color)
+      hanzi: 橙
+  cat1:
+    headword: 七
+    jyutping: cat1
+    senses:
+    - categories:
+      - numbers
+      gloss: seven
+      hanzi: 七
+      register: both
+  cau1:
+    headword: 秋
+    jyutping: cau1
+    senses:
+    - categories:
+      - time_calendar
+      gloss: autumn
+      hanzi: 秋
+      register: both
+  ce1:
+    jyutping: ce1
+    senses:
+    - categories:
+      - vehicle
+      gloss: Car
+      hanzi: 車
+  ceng1:
+    jyutping: ceng1
+    senses:
+    - categories:
+      - colors
+      gloss: cyan
+      hanzi: 青
+  ceon1:
+    headword: 春
+    jyutping: ceon1
+    senses:
+    - categories:
+      - time_calendar
+      gloss: spring
+      hanzi: 春
+      register: both
+  cin2:
+    headword: 錢
+    jyutping: cin2
+    senses:
+    - categories:
+      - money_shopping
+      gloss: money
+      hanzi: 錢
+      register: both
+  cin2 laam4:
+    jyutping: cin2 laam4
+    senses:
+    - categories:
+      - colors
+      gloss: light blue
+      hanzi: 淺藍
+  cin4:
+    jyutping: cin4
+    senses:
+    - categories:
+      - direction
+      gloss: front, forward
+      hanzi: 前
+  cing2:
+    headword: 請
+    jyutping: cing2
+    senses:
+    - categories:
+      - greetings
+      - communication
+      gloss: please
+      hanzi: 請
+      register: colloquial
+  ciu4 sap1:
+    headword: 潮濕
+    jyutping: ciu4 sap1
+    senses:
+    - categories:
+      - weather
+      gloss: humid
+      hanzi: 潮濕
+      register: both
+  dai6 dai2:
+    headword: 弟弟
+    jyutping: dai6 dai2
+    senses:
+    - categories:
+      - family
+      gloss: younger brother
+      hanzi: 弟弟
+      register: colloquial
+  dei6 zan3:
+    headword: 地震
+    jyutping: dei6 zan3
+    senses:
+    - categories:
+      - nature_land
+      gloss: earthquake
+      hanzi: 地震
+      register: both
+  din6:
+    jyutping: din6
+    senses:
+    - categories:
+      - technology_media
+      gloss: (noun) electricity, (verb) to get electric shock, (slang) to flirt
+      hanzi: 電
+  din6 waa2:
+    headword: 電話
+    jyutping: din6 waa2
+    senses:
+    - categories:
+      - communication
+      - technology_media
+      gloss: phone; telephone
+      hanzi: 電話
+      register: both
+  do1 ze6 nei5:
+    headword: 多謝你
+    jyutping: do1 ze6 nei5
+    senses:
+    - categories:
+      - greetings
+      gloss: thank you very much
+      hanzi: 多謝你
+      notes: Stronger gratitude than 唔該, often used for gifts or significant help.
+      register: colloquial
+  dung1:
+    headword: 冬
+    jyutping: dung1
+    senses:
+    - categories:
+      - time_calendar
+      gloss: winter
+      hanzi: 冬
+      register: both
+    - categories:
+      - direction
+      gloss: east, host (i.e. sitting on east side of guest), landlord
+      hanzi: 東
+  dyun2:
+    jyutping: dyun2
+    senses:
+    - categories:
+      - adjectives
+      gloss: (adjective) short, deficient
+      hanzi: 短
+  faa1:
+    jyutping: faa1
+    senses:
+    - categories:
+      - nature_land
+      gloss: variant of 花[hua1], flower, blossom
+      hanzi: 花
+  fan2 hung4:
+    jyutping: fan2 hung4
+    senses:
+    - categories:
+      - colors
+      gloss: pink
+      hanzi: 粉紅
+  fe1:
+    jyutping: fe1
+    senses:
+    - categories:
+      - colors
+      gloss: (noun) (of color) 1. brown, (beverage) coffee
+      hanzi: 啡
+  fei1 gei1:
+    headword: 飛機
+    jyutping: fei1 gei1
+    senses:
+    - categories:
+      - vehicle
+      gloss: aeroplane
+      hanzi: 飛機
+      register: both
+  fong3 gaa3:
+    headword: 放假
+    jyutping: fong3 gaa3
+    senses:
+    - categories:
+      - time_calendar
+      - school_tests
+      gloss: have a day off; be on holiday
+      hanzi: 放假
+      register: colloquial
+  fu2:
+    headword: 虎
+    jyutping: fu2
+    senses:
+    - categories:
+      - zodiac
+      - animals
+      gloss: tiger
+      hanzi: 虎
+      register: both
+  gaa3 kei4:
+    headword: 假期
+    jyutping: gaa3 kei4
+    senses:
+    - categories:
+      - time_calendar
+      - school_tests
+      gloss: holiday
+      hanzi: 假期
+      register: both
+  gai1:
+    headword: 雞
+    jyutping: gai1
+    senses:
+    - categories:
+      - zodiac
+      - animals
+      gloss: rooster; chicken
+      hanzi: 雞
+      register: both
+  gam1:
+    jyutping: gam1
+    senses:
+    - categories:
+      - colors
+      gloss: golden colour
+      hanzi: 金
+  gam1 jat6 hai6:
+    headword: 今日係
+    jyutping: gam1 jat6 hai6
+    senses:
+    - categories:
+      - time_calendar
+      - communication
+      gloss: today is
+      hanzi: 今日係
+      register: colloquial
+  gau2:
+    headword: 九
+    jyutping: gau2
+    senses:
+    - categories:
+      - numbers
+      gloss: nine
+      hanzi: 九
+      register: both
+    - categories:
+      - zodiac
+      - animals
+      gloss: dog
+      hanzi: 狗
+      register: both
+  gei2:
+    headword: 幾
+    jyutping: gei2
+    senses:
+    - categories:
+      - communication
+      gloss: how much; how many
+      hanzi: 幾
+      register: colloquial
+  gei2 dim2 aa3:
+    headword: 幾點呀
+    jyutping: gei2 dim2 aa3
+    senses:
+    - categories:
+      - communication
+      - time_calendar
+      gloss: what time?
+      hanzi: 幾點呀
+      register: colloquial
+  geng3:
+    headword: 鏡
+    jyutping: geng3
+    senses:
+    - categories:
+      - household
+      gloss: mirror
+      hanzi: 鏡
+      register: both
+  go1 go1:
+    headword: 哥哥
+    jyutping: go1 go1
+    senses:
+    - categories:
+      - family
+      gloss: older brother
+      hanzi: 哥哥
+      register: colloquial
+  go2 dou6:
+    headword: 嗰度
+    jyutping: go2 dou6
+    senses:
+    - categories:
+      - direction
+      - places
+      gloss: there
+      hanzi: 嗰度
+      register: colloquial
+  gon1 cou3:
+    headword: 乾燥
+    jyutping: gon1 cou3
+    senses:
+    - categories:
+      - weather
+      gloss: dry
+      hanzi: 乾燥
+      register: both
+  gong2:
+    headword: 講
+    jyutping: gong2
+    senses:
+    - categories:
+      - communication
+      gloss: speak; say
+      hanzi: 講
+      register: colloquial
+  gung1 zok3:
+    jyutping: gung1 zok3
+    senses:
+    - categories:
+      - work
+      gloss: work
+      hanzi: 工作
+  gwong2 dung1 waa2:
+    headword: 廣東話
+    jyutping: gwong2 dung1 waa2
+    senses:
+    - categories:
+      - languages
+      gloss: Cantonese
+      hanzi: 廣東話
+      register: both
+  haa6:
+    headword: 下
+    jyutping: haa6
+    senses:
+    - categories:
+      - direction
+      gloss: down
+      hanzi: 下
+      register: both
+  haa6 ng5:
+    headword: 下午
+    jyutping: haa6 ng5
+    senses:
+    - categories:
+      - time_calendar
+      gloss: afternoon
+      hanzi: 下午
+      register: both
+  haa6 tin1:
+    headword: 夏天
+    jyutping: haa6 tin1
+    senses:
+    - categories:
+      - time_calendar
+      gloss: summer
+      hanzi: 夏天
+      register: both
+  haang4 leoi4:
+    headword: 行雷
+    jyutping: haang4 leoi4
+    senses:
+    - categories:
+      - nature_air
+      - weather
+      gloss: thunder
+      hanzi: 行雷
+      register: both
+  hau4:
+    headword: 猴
+    jyutping: hau4
+    senses:
+    - categories:
+      - zodiac
+      - animals
+      gloss: monkey
+      hanzi: 猴
+      register: both
+  heoi3 gin3 min6:
+    headword: 去見面
+    jyutping: heoi3 gin3 min6
+    senses:
+    - categories:
+      - communication
+      - people
+      gloss: meet
+      hanzi: 去見面
+      register: colloquial
+  ho2 ji5:
+    headword: 可以
+    jyutping: ho2 ji5
+    senses:
+    - categories:
+      - communication
+      gloss: can; may
+      hanzi: 可以
+      register: colloquial
+  ho2 nang4:
+    headword: 可能
+    jyutping: ho2 nang4
+    senses:
+    - categories:
+      - communication
+      gloss: maybe; possibly
+      hanzi: 可能
+      register: colloquial
+  hoeng1 gong2:
+    headword: 香港
+    jyutping: hoeng1 gong2
+    senses:
+    - categories:
+      - places
+      gloss: Hong Kong
+      hanzi: 香港
+      register: both
+  hoi1 sam1:
+    headword: 開心
+    jyutping: hoi1 sam1
+    senses:
+    - categories:
+      - adjectives
+      gloss: happy
+      hanzi: 開心
+      register: colloquial
+  hoi2 ciu4 zik6:
+    headword: 海潮汐
+    jyutping: hoi2 ciu4 zik6
+    senses:
+    - categories:
+      - nature_ocean
+      gloss: tide
+      hanzi: 海潮汐
+      register: both
+  hoi2 taan1:
+    headword: 海灘
+    jyutping: hoi2 taan1
+    senses:
+    - categories:
+      - nature_ocean
+      gloss: beach
+      hanzi: 海灘
+      register: both
+  hou2:
+    headword: 好
+    jyutping: hou2
+    senses:
+    - categories:
+      - adjectives
+      gloss: good
+      hanzi: 好
+      register: colloquial
+  hou2 dung3:
+    headword: 好凍
+    jyutping: hou2 dung3
+    senses:
+    - categories:
+      - weather
+      gloss: very cold
+      hanzi: 好凍
+      register: colloquial
+  hou2 jit6:
+    headword: 好熱
+    jyutping: hou2 jit6
+    senses:
+    - categories:
+      - weather
+      gloss: very hot
+      hanzi: 好熱
+      register: colloquial
+  hou6 maa5:
+    headword: 號碼
+    jyutping: hou6 maa5
+    senses:
+    - categories:
+      - communication
+      gloss: number; code
+      hanzi: 號碼
+      register: both
+  hung4:
+    jyutping: hung4
+    senses:
+    - categories:
+      - colors
+      gloss: surname Hong
+      hanzi: 紅
+  jam2 je5:
+    headword: 飲野
+    jyutping: jam2 je5
+    senses:
+    - categories:
+      - food_drink_eating_drinking
+      gloss: drinks; drink something
+      hanzi: 飲野
+      register: colloquial
+  jat1:
+    headword: 一
+    jyutping: jat1
+    senses:
+    - categories:
+      - numbers
+      gloss: one
+      hanzi: 一
+      register: both
+  jat6:
+    headword: 日
+    jyutping: jat6
+    senses:
+    - categories:
+      - time_calendar
+      gloss: day
+      hanzi: 日
+      register: both
+  jau5 mou5 zit3 aa3:
+    headword: 有冇折呀
+    jyutping: jau5 mou5 zit3 aa3
+    senses:
+    - categories:
+      - money_shopping
+      - communication
+      gloss: any discount?
+      hanzi: 有冇折呀
+      register: colloquial
+  jau6:
+    jyutping: jau6
+    senses:
+    - categories:
+      - communication
+      gloss: to forgive, to help, profound
+      hanzi: 宥
+  ji1 jyun2:
+    headword: 醫院
+    jyutping: ji1 jyun2
+    senses:
+    - categories:
+      - health
+      gloss: hospital
+      hanzi: 醫院
+      register: both
+  ji4 gaa1:
+    headword: 宜家
+    jyutping: ji4 gaa1
+    senses:
+    - categories:
+      - time_calendar
+      gloss: now
+      hanzi: 宜家
+      register: colloquial
+  ji6:
+    headword: 二
+    jyutping: ji6
+    senses:
+    - categories:
+      - numbers
+      gloss: two
+      hanzi: 二
+      register: both
+  ji6 ling4 ji6 ng5 nin4:
+    headword: 二零二五年
+    jyutping: ji6 ling4 ji6 ng5 nin4
+    senses:
+    - categories:
+      - time_calendar
+      - numbers
+      gloss: year 2025
+      hanzi: 二零二五年
+      register: both
+  joeng4:
+    headword: 羊
+    jyutping: joeng4
+    senses:
+    - categories:
+      - zodiac
+      - animals
+      gloss: sheep; goat
+      hanzi: 羊
+      register: both
+    - categories:
+      - nature_ocean
+      gloss: ocean; foreign (context-dependent)
+      hanzi: 洋
+      register: both
+  jyut6:
+    headword: 月
+    jyutping: jyut6
+    senses:
+    - categories:
+      - time_calendar
+      gloss: month
+      hanzi: 月
+      register: both
+  keoi5:
+    headword: 佢
+    jyutping: keoi5
+    senses:
+    - categories:
+      - pronouns_possessive
+      - people
+      gloss: he; she
+      hanzi: 佢
+      notes: Gender-neutral 3rd person pronoun in colloquial Cantonese.
+      register: colloquial
+  keoi5 dei6:
+    headword: 佢哋
+    jyutping: keoi5 dei6
+    senses:
+    - categories:
+      - pronouns_possessive
+      - people
+      gloss: they
+      hanzi: 佢哋
+      notes: Third-person plural; can also be used politely for singular “he/she and
+        their group”.
+      register: colloquial
+  keoi5 ge3:
+    headword: 佢嘅
+    jyutping: keoi5 ge3
+    senses:
+    - categories:
+      - pronouns_possessive
+      gloss: his; hers; their
+      hanzi: 佢嘅
+      notes: Possessive for 佢 / 佢哋; often context tells singular vs plural.
+      register: colloquial
+  laa1:
+    jyutping: laa1
+    senses:
+    - categories:
+      - communication
+      gloss: now, for now, up to now
+      hanzi: 啦
+  laam4:
+    jyutping: laam4
+    senses:
+    - categories:
+      - colors
+      gloss: surname Lan
+      hanzi: 藍
+  leng4:
+    jyutping: leng4
+    senses:
+    - categories:
+      - adjectives
+      gloss: (adjective) pretty, beautiful, young
+      hanzi: 靚
+  leot6 sik1:
+    jyutping: leot6 sik1
+    senses:
+    - categories:
+      - colors
+      gloss: maroon, chestnut brown
+      hanzi: 栗色
+  ling4:
+    headword: 零
+    jyutping: ling4
+    senses:
+    - categories:
+      - numbers
+      gloss: zero
+      hanzi: 零
+      register: both
+  luk6:
+    headword: 六
+    jyutping: luk6
+    senses:
+    - categories:
+      - numbers
+      gloss: six
+      hanzi: 六
+      register: both
+  lung4:
+    headword: 龍
+    jyutping: lung4
+    senses:
+    - categories:
+      - zodiac
+      gloss: dragon
+      hanzi: 龍
+      register: both
+  m4 dak1:
+    headword: 唔得
+    jyutping: m4 dak1
+    senses:
+    - categories:
+      - communication
+      gloss: cannot; not okay
+      hanzi: 唔得
+      register: colloquial
+  m4 goi1:
+    headword: 唔該
+    jyutping: m4 goi1
+    senses:
+    - categories:
+      - greetings
+      gloss: thanks (informal)
+      hanzi: 唔該
+      notes: Also used for "please" when asking for actions.
+      register: colloquial
+  m4 ho2 ji5:
+    headword: 唔可以
+    jyutping: m4 ho2 ji5
+    senses:
+    - categories:
+      - communication
+      gloss: cannot; not allowed
+      hanzi: 唔可以
+      register: colloquial
+  m4 hou2 ji3 si1:
+    headword: 唔好意思
+    jyutping: m4 hou2 ji3 si1
+    senses:
+    - categories:
+      - greetings
+      gloss: sorry; excuse me
+      hanzi: 唔好意思
+      notes: Used to apologise, get attention politely, or excuse oneself.
+      register: colloquial
+  m4 sai2 haak3 hei3:
+    headword: 唔駛客氣
+    jyutping: m4 sai2 haak3 hei3
+    senses:
+    - categories:
+      - greetings
+      gloss: you are welcome
+      hanzi: 唔駛客氣
+      register: colloquial
+  m4 sik1:
+    headword: 唔識
+    jyutping: m4 sik1
+    senses:
+    - categories:
+      - communication
+      gloss: not know; don&apos;t know
+      hanzi: 唔識
+      register: colloquial
+  maa4 maa1:
+    headword: 媽媽
+    jyutping: maa4 maa1
+    senses:
+    - categories:
+      - family
+      gloss: mama; mum
+      hanzi: 媽媽
+      register: colloquial
+  maa5:
+    headword: 馬
+    jyutping: maa5
+    senses:
+    - categories:
+      - zodiac
+      - animals
+      gloss: horse
+      hanzi: 馬
+      register: both
+  maan5:
+    jyutping: maan5
+    senses:
+    - categories:
+      - time_calendar
+      gloss: evening, night
+      hanzi: 晚
+  maan5 on1:
+    headword: 晚安
+    jyutping: maan5 on1
+    senses:
+    - categories:
+      - greetings
+      gloss: good night
+      hanzi: 晚安
+      register: colloquial
+  maan6:
+    jyutping: maan6
+    senses:
+    - categories:
+      - adjectives
+      gloss: slowly
+      hanzi: 慢
+  mai5 sik1:
+    jyutping: mai5 sik1
+    senses:
+    - categories:
+      - colors
+      gloss: beige
+      hanzi: 米色
+  man4:
+    jyutping: man4
+    senses:
+    - categories:
+      - communication
+      gloss: writings, language, culture
+      hanzi: 文
+  man6:
+    jyutping: man6
+    senses:
+    - categories:
+      - communication
+      gloss: (verb) to question, ask
+      hanzi: 問
+  mei6 loi4:
+    headword: 未來
+    jyutping: mei6 loi4
+    senses:
+    - categories:
+      - time_calendar
+      gloss: future
+      hanzi: 未來
+      register: both
+  ming4:
+    jyutping: ming4
+    senses:
+    - categories:
+      - adjectives
+      gloss: (adjective) bright, obvious
+      hanzi: 明
+  miu5:
+    headword: 秒
+    jyutping: miu5
+    senses:
+    - categories:
+      - time_calendar
+      - measurements
+      gloss: second (time)
+      hanzi: 秒
+      register: both
+  mou5:
+    headword: 冇
+    jyutping: mou5
+    senses:
+    - categories:
+      - communication
+      - adjectives
+      gloss: not have; there is not
+      hanzi: 冇
+      register: colloquial
+  mui6 mui2:
+    headword: 妹妹
+    jyutping: mui6 mui2
+    senses:
+    - categories:
+      - family
+      gloss: younger sister
+      hanzi: 妹妹
+      register: colloquial
+  naai5:
+    jyutping: naai5
+    senses:
+    - categories:
+      - food_drink_eating_drinking
+      gloss: milk, mother
+      hanzi: 奶
+  naam4:
+    headword: 男
+    jyutping: naam4
+    senses:
+    - categories:
+      - people
+      gloss: male
+      hanzi: 男
+      register: both
+  naam4 jan4:
+    headword: 男人
+    jyutping: naam4 jan4
+    senses:
+    - categories:
+      - people
+      gloss: man
+      hanzi: 男人
+      register: both
+  naam4 zai2:
+    headword: 男仔
+    jyutping: naam4 zai2
+    senses:
+    - categories:
+      - people
+      - family
+      gloss: boy
+      hanzi: 男仔
+      register: colloquial
+  naan4 gwo3:
+    jyutping: naan4 gwo3
+    senses:
+    - categories:
+      - emotions_feelings
+      gloss: sad, feel sorry
+      hanzi: 難過
+  nei5:
+    headword: 你
+    jyutping: nei5
+    senses:
+    - categories:
+      - pronouns_possessive
+      - people
+      gloss: you
+      hanzi: 你
+      notes: Singular second-person pronoun; very high frequency.
+      register: colloquial
+  nei5 dei6:
+    headword: 你哋
+    jyutping: nei5 dei6
+    senses:
+    - categories:
+      - pronouns_possessive
+      - people
+      gloss: you guys
+      hanzi: 你哋
+      notes: Plural “you”; can be used for two or more people.
+      register: colloquial
+  nei5 ge3:
+    headword: 你嘅
+    jyutping: nei5 ge3
+    senses:
+    - categories:
+      - pronouns_possessive
+      gloss: your; yours
+      hanzi: 你嘅
+      notes: Possessive “your/yours”; can stand alone as “yours”.
+      register: colloquial
+  nei5 hou2:
+    headword: 你好
+    jyutping: nei5 hou2
+    senses:
+    - categories:
+      - greetings
+      gloss: hello (informal); you good
+      hanzi: 你好
+      register: colloquial
+  nei5 hou2 ngo5 hai6 hou2 gou1 hing3 jing6 sik1 nei5:
+    headword: 你好 我係 好高興認識你
+    jyutping: nei5 hou2 ngo5 hai6 hou2 gou1 hing3 jing6 sik1 nei5
+    senses:
+    - categories:
+      - greetings
+      - communication
+      gloss: Hello. I am... Nice to meet you.
+      hanzi: 你好 我係 好高興認識你
+      register: colloquial
+  nei5 sik6 zo2 faan6 mei6 aa3:
+    headword: 你食左飯未呀
+    jyutping: nei5 sik6 zo2 faan6 mei6 aa3
+    senses:
+    - categories:
+      - food_drink_eating_drinking
+      - greetings
+      gloss: have you eaten (rice) yet?
+      hanzi: 你食左飯未呀
+      register: colloquial
+  neoi5:
+    headword: 女
+    jyutping: neoi5
+    senses:
+    - categories:
+      - family
+      - people
+      gloss: daughter; female
+      hanzi: 女
+      register: both
+  neoi5 jan4:
+    headword: 女人
+    jyutping: neoi5 jan4
+    senses:
+    - categories:
+      - people
+      gloss: woman
+      hanzi: 女人
+      register: both
+  ng5:
+    headword: 五
+    jyutping: ng5
+    senses:
+    - categories:
+      - numbers
+      gloss: five
+      hanzi: 五
+      register: both
+  ng5 on1:
+    headword: 午安
+    jyutping: ng5 on1
+    senses:
+    - categories:
+      - greetings
+      gloss: good afternoon
+      hanzi: 午安
+      register: colloquial
+  ngan4:
+    jyutping: ngan4
+    senses:
+    - categories:
+      - colors
+      gloss: silvery colour
+      hanzi: 銀
+  ngau4:
+    headword: 牛
+    jyutping: ngau4
+    senses:
+    - categories:
+      - zodiac
+      - animals
+      gloss: ox; cow
+      hanzi: 牛
+      register: both
+  ngo5:
+    headword: 我
+    jyutping: ngo5
+    senses:
+    - categories:
+      - pronouns_possessive
+      - people
+      gloss: I; me
+      hanzi: 我
+      notes: First-person singular pronoun.
+      register: colloquial
+  ngo5 dei6:
+    headword: 我哋
+    jyutping: ngo5 dei6
+    senses:
+    - categories:
+      - pronouns_possessive
+      - people
+      gloss: we; us
+      hanzi: 我哋
+      notes: First-person plural; inclusive or exclusive depending on context.
+      register: colloquial
+  ngo5 din6 waa2 hou6 maa5:
+    headword: 我電話號碼
+    jyutping: ngo5 din6 waa2 hou6 maa5
+    senses:
+    - categories:
+      - communication
+      - technology_media
+      gloss: my phone number
+      hanzi: 我電話號碼
+      register: colloquial
+  ngo5 din6 waa2 hou6 maa5 hai6:
+    headword: 我電話號碼係
+    jyutping: ngo5 din6 waa2 hou6 maa5 hai6
+    senses:
+    - categories:
+      - communication
+      - technology_media
+      gloss: my phone number is
+      hanzi: 我電話號碼係
+      register: colloquial
+  ngo5 ge3:
+    headword: 我嘅
+    jyutping: ngo5 ge3
+    senses:
+    - categories:
+      - pronouns_possessive
+      gloss: my; mine
+      hanzi: 我嘅
+      notes: Possessive form; can be followed by a noun or stand alone.
+      register: colloquial
+  ngo5 hai6:
+    headword: 我係
+    jyutping: ngo5 hai6
+    senses:
+    - categories:
+      - pronouns_possessive
+      - communication
+      gloss: I am
+      hanzi: 我係
+      notes: Common pattern for self-introduction (e.g. 我係 David).
+      register: colloquial
+  ngo5 soeng2 jam2:
+    headword: 我想飲
+    jyutping: ngo5 soeng2 jam2
+    senses:
+    - categories:
+      - food_drink_eating_drinking
+      - communication
+      gloss: I want to drink
+      hanzi: 我想飲
+      register: colloquial
+  ngo5 zung1 ji3 sik6:
+    headword: 我鐘意食
+    jyutping: ngo5 zung1 ji3 sik6
+    senses:
+    - categories:
+      - food_drink_eating_drinking
+      - communication
+      gloss: I like to eat
+      hanzi: 我鐘意食
+      register: colloquial
+  ni1 bun2 syu1 gei2 cin2 aa3:
+    headword: 呢本書幾錢呀
+    jyutping: ni1 bun2 syu1 gei2 cin2 aa3
+    senses:
+    - categories:
+      - money_shopping
+      - communication
+      gloss: how much is this book?
+      hanzi: 呢本書幾錢呀
+      notes: Common shopping question; can generalise to “how much is this?” with
+        呢個.
+      register: colloquial
+  ni1 dou6:
+    headword: 呢度
+    jyutping: ni1 dou6
+    senses:
+    - categories:
+      - direction
+      - places
+      gloss: here
+      hanzi: 呢度
+      register: colloquial
+  ni1 go3 hai6 me1:
+    headword: 呢個係咩
+    jyutping: ni1 go3 hai6 me1
+    senses:
+    - categories:
+      - communication
+      gloss: what is this item?
+      hanzi: 呢個係咩
+      register: colloquial
+  nin4:
+    headword: 年
+    jyutping: nin4
+    senses:
+    - categories:
+      - time_calendar
+      gloss: year
+      hanzi: 年
+      register: both
+  pin1 fuk1:
+    headword: 蝙蝠
+    jyutping: pin1 fuk1
+    senses:
+    - categories:
+      - animals
+      gloss: bat
+      hanzi: 蝙蝠
+      register: both
+  ping4 di1:
+    headword: 平啲
+    jyutping: ping4 di1
+    senses:
+    - categories:
+      - money_shopping
+      gloss: a bit cheaper
+      hanzi: 平啲
+      notes: Often used to ask for a lower price.
+      register: colloquial
+  ping4 jat6:
+    headword: 平日
+    jyutping: ping4 jat6
+    senses:
+    - categories:
+      - time_calendar
+      - weekdays
+      gloss: weekday
+      hanzi: 平日
+      register: both
+  pou2 tung1 waa2:
+    headword: 普通話
+    jyutping: pou2 tung1 waa2
+    senses:
+    - categories:
+      - languages
+      gloss: Mandarin
+      hanzi: 普通話
+      register: both
+  saa1:
+    headword: 沙
+    jyutping: saa1
+    senses:
+    - categories:
+      - nature_land
+      gloss: sand
+      hanzi: 沙
+      register: both
+  saa1 jyu4:
+    headword: 鯊魚
+    jyutping: saa1 jyu4
+    senses:
+    - categories:
+      - animals
+      gloss: shark
+      hanzi: 鯊魚
+      register: both
+  saam1:
+    headword: 三
+    jyutping: saam1
+    senses:
+    - categories:
+      - numbers
+      gloss: three
+      hanzi: 三
+      register: both
+  saam1 jyut6:
+    headword: 三月
+    jyutping: saam1 jyut6
+    senses:
+    - categories:
+      - time_calendar
+      gloss: March
+      hanzi: 三月
+      register: both
+  saan1 mun4:
+    headword: 閂門
+    jyutping: saan1 mun4
+    senses:
+    - categories:
+      - household
+      - communication
+      gloss: close the door
+      hanzi: 閂門
+      register: colloquial
+  sai3:
+    jyutping: sai3
+    senses:
+    - categories:
+      - adjectives
+      gloss: small, tiny, fine
+      hanzi: 細
+  sam1:
+    jyutping: sam1
+    senses:
+    - categories:
+      - health
+      gloss: heart, mind
+      hanzi: 心
+  sam1 luk6:
+    jyutping: sam1 luk6
+    senses:
+    - categories:
+      - colors
+      gloss: dark green
+      hanzi: 深綠
+  sap6:
+    headword: 十
+    jyutping: sap6
+    senses:
+    - categories:
+      - numbers
+      gloss: ten
+      hanzi: 十
+      register: both
+  sap6 jat1 jyut6:
+    headword: 十一月
+    jyutping: sap6 jat1 jyut6
+    senses:
+    - categories:
+      - time_calendar
+      gloss: November
+      hanzi: 十一月
+      register: both
+  sap6 ji6 jyut6:
+    headword: 十二月
+    jyutping: sap6 ji6 jyut6
+    senses:
+    - categories:
+      - time_calendar
+      gloss: December
+      hanzi: 十二月
+      register: both
+  sap6 jyut6:
+    headword: 十月
+    jyutping: sap6 jyut6
+    senses:
+    - categories:
+      - time_calendar
+      gloss: October
+      hanzi: 十月
+      register: both
+  se4:
+    headword: 蛇
+    jyutping: se4
+    senses:
+    - categories:
+      - zodiac
+      - animals
+      gloss: snake
+      hanzi: 蛇
+      register: both
+  sei3:
+    headword: 四
+    jyutping: sei3
+    senses:
+    - categories:
+      - numbers
+      gloss: four
+      hanzi: 四
+      register: both
+  sei3 gwai3:
+    headword: 四季
+    jyutping: sei3 gwai3
+    senses:
+    - categories:
+      - time_calendar
+      gloss: four seasons
+      hanzi: 四季
+      register: both
+  seoi2:
+    headword: 水
+    jyutping: seoi2
+    senses:
+    - categories:
+      - nature_water
+      gloss: water
+      hanzi: 水
+      register: both
+  seoi2 zam3:
+    headword: 水浸
+    jyutping: seoi2 zam3
+    senses:
+    - categories:
+      - nature_water
+      - weather
+      gloss: flood
+      hanzi: 水浸
+      register: both
+  si4:
+    headword: 時
+    jyutping: si4
+    senses:
+    - categories:
+      - time_calendar
+      gloss: time; hour
+      hanzi: 時
+      register: both
+  sik1:
+    headword: 識
+    jyutping: sik1
+    senses:
+    - categories:
+      - communication
+      gloss: know; be familiar with
+      hanzi: 識
+      register: colloquial
+  sik1 m4 sik1:
+    headword: 識唔識
+    jyutping: sik1 m4 sik1
+    senses:
+    - categories:
+      - communication
+      gloss: do you know
+      hanzi: 識唔識
+      register: colloquial
+  sing1 kei4:
+    headword: 星期
+    jyutping: sing1 kei4
+    senses:
+    - categories:
+      - time_calendar
+      - weekdays
+      gloss: day of the week; week
+      hanzi: 星期
+      register: both
+  sing1 kei4 jat1:
+    headword: 星期一
+    jyutping: sing1 kei4 jat1
+    senses:
+    - categories:
+      - weekdays
+      - time_calendar
+      gloss: Monday
+      hanzi: 星期一
+      register: both
+  sing1 kei4 jat6:
+    headword: 星期日
+    jyutping: sing1 kei4 jat6
+    senses:
+    - categories:
+      - weekdays
+      - time_calendar
+      gloss: Sunday
+      hanzi: 星期日
+      register: both
+  sing1 kei4 ji6:
+    headword: 星期二
+    jyutping: sing1 kei4 ji6
+    senses:
+    - categories:
+      - weekdays
+      - time_calendar
+      gloss: Tuesday
+      hanzi: 星期二
+      register: both
+  sing1 kei4 ng5:
+    headword: 星期五
+    jyutping: sing1 kei4 ng5
+    senses:
+    - categories:
+      - weekdays
+      - time_calendar
+      gloss: Friday
+      hanzi: 星期五
+      register: both
+  sing1 sing1:
+    headword: 星星
+    jyutping: sing1 sing1
+    senses:
+    - categories:
+      - nature_air
+      gloss: stars
+      hanzi: 星星
+      register: both
+  siu2 siu2:
+    headword: 少少
+    jyutping: siu2 siu2
+    senses:
+    - categories:
+      - measurements
+      - adjectives
+      gloss: a little; a bit
+      hanzi: 少少
+      register: colloquial
+  soeng6:
+    headword: 上
+    jyutping: soeng6
+    senses:
+    - categories:
+      - direction
+      gloss: up
+      hanzi: 上
+      register: both
+  soeng6 go3 jyut6:
+    headword: 上個月
+    jyutping: soeng6 go3 jyut6
+    senses:
+    - categories:
+      - time_calendar
+      gloss: last month
+      hanzi: 上個月
+      register: colloquial
+  syu2:
+    headword: 鼠
+    jyutping: syu2
+    senses:
+    - categories:
+      - zodiac
+      - animals
+      gloss: rat; mouse
+      hanzi: 鼠
+      register: both
+  taai3:
+    jyutping: taai3
+    senses:
+    - categories:
+      - adjectives
+      gloss: great, great-grand mother or father
+      hanzi: 太
+  taai3 joeng4:
+    headword: 太陽
+    jyutping: taai3 joeng4
+    senses:
+    - categories:
+      - nature_air
+      gloss: sun; the sun
+      hanzi: 太陽
+      register: both
+  tin1 hung1:
+    headword: 天空
+    jyutping: tin1 hung1
+    senses:
+    - categories:
+      - nature_air
+      gloss: sky
+      hanzi: 天空
+      register: both
+  tou3:
+    headword: 兔
+    jyutping: tou3
+    senses:
+    - categories:
+      - zodiac
+      - animals
+      gloss: rabbit
+      hanzi: 兔
+      register: both
+  tung3:
+    headword: 痛
+    jyutping: tung3
+    senses:
+    - categories:
+      - health
+      gloss: pain; ache
+      hanzi: 痛
+      register: both
+  wong4:
+    jyutping: wong4
+    senses:
+    - categories:
+      - colors
+      gloss: Yellow
+      hanzi: 黃
+  zam1:
+    headword: 針
+    jyutping: zam1
+    senses:
+    - categories:
+      - health
+      gloss: needle
+      hanzi: 針
+      register: both
+  zau1 mut6:
+    headword: 週末
+    jyutping: zau1 mut6
+    senses:
+    - categories:
+      - time_calendar
+      - weekdays
+      gloss: weekend
+      hanzi: 週末
+      register: both
+  ze2 ze1:
+    headword: 姐姐
+    jyutping: ze2 ze1
+    senses:
+    - categories:
+      - family
+      gloss: older sister
+      hanzi: 姐姐
+      register: colloquial
+  zi1 zyu1:
+    headword: 蜘蛛
+    jyutping: zi1 zyu1
+    senses:
+    - categories:
+      - animals
+      gloss: spider
+      hanzi: 蜘蛛
+      register: both
+  zoi3 gin3:
+    headword: 再見
+    jyutping: zoi3 gin3
+    senses:
+    - categories:
+      - greetings
+      gloss: good-bye (formal)
+      hanzi: 再見
+      register: colloquial
+  zou2 san4:
+    headword: 早晨
+    jyutping: zou2 san4
+    senses:
+    - categories:
+      - greetings
+      gloss: good morning
+      hanzi: 早晨
+      register: colloquial
+  zou6 je5:
+    jyutping: zou6 je5
+    senses:
+    - categories:
+      - work
+      gloss: to work on, to work (action-focussed)
+      hanzi: 做嘢
+  zung1:
+    jyutping: zung1
+    senses:
+    - categories:
+      - adjectives
+      gloss: end, finish
+      hanzi: 終
+  zung1 gwok3:
+    headword: 中國
+    jyutping: zung1 gwok3
+    senses:
+    - categories:
+      - places
+      gloss: China
+      hanzi: 中國
+      register: both
+  zyu1:
+    headword: 豬
+    jyutping: zyu1
+    senses:
+    - categories:
+      - zodiac
+      - animals
+      gloss: pig
+      hanzi: 豬
+      register: both

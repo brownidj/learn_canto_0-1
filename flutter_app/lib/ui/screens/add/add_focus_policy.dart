@@ -34,9 +34,9 @@ class AddFocusPolicy {
     final jyOk = jy.isNotEmpty && !state.errors.containsKey('jyutping');
     if (jyOk && _lastJy != jy) {
       _lastJy = jy;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        categoryFocus.requestFocus();
-      });
+      if (state.manualHanzi) {
+        return;
+      }
     }
   }
 
@@ -56,6 +56,7 @@ class AddFocusPolicy {
       if (items.isEmpty) {
         showMissingJyutpingDialog(context, cubit.state.jyutping.trim()).then((choice) async {
           if (choice == MissingJyutpingChoice.manual) {
+            cubit.setManualHanzi(true);
             final draft = await showManualEntryDialog(
               context,
               state: cubit.state,
@@ -87,8 +88,10 @@ class AddFocusPolicy {
         FocusScope.of(context).requestFocus(meaningFocus);
         return;
       }
-      debugPrint('[AddEditScreen] multiple candidates -> focus candidates');
-      FocusScope.of(context).requestFocus(candidateFocus);
+      if (!cubit.state.manualHanzi) {
+        debugPrint('[AddEditScreen] multiple candidates -> focus candidates');
+        FocusScope.of(context).requestFocus(candidateFocus);
+      }
     });
   }
 }

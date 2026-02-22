@@ -10,13 +10,13 @@ class AddEntryPanel extends StatelessWidget {
   final ValueChanged<String>? onJyutpingSubmitted;
   final Widget? jyutpingTrailing;
   final ValueChanged<List<String>> onCategoriesChanged;
-  final ValueChanged<String> onAddCategory;
   final FocusNode categoryFocus;
   final ValueChanged<BuildContext> onOpenCategories;
   final ValueChanged<String>? onCategorySubmitted;
   final ValueChanged<String> onMeaningChanged;
   final FocusNode meaningFocus;
   final Widget? meaningTrailing;
+  final ValueChanged<String>? onMeaningSubmitted;
   final bool enableAfterJyutping;
 
   const AddEntryPanel({
@@ -27,13 +27,13 @@ class AddEntryPanel extends StatelessWidget {
     required this.onJyutpingSubmitted,
     required this.jyutpingTrailing,
     required this.onCategoriesChanged,
-    required this.onAddCategory,
     required this.categoryFocus,
     required this.onOpenCategories,
     required this.onCategorySubmitted,
     required this.onMeaningChanged,
     required this.meaningFocus,
     required this.meaningTrailing,
+    this.onMeaningSubmitted,
     this.enableAfterJyutping = true,
   });
 
@@ -50,10 +50,11 @@ class AddEntryPanel extends StatelessWidget {
           onSubmitted: onJyutpingSubmitted,
           labelLeft: true,
           trailing: jyutpingTrailing,
+          keyboardType: TextInputType.none,
         ),
         if (state.duplicateWarning != null)
           Padding(
-            padding: const EdgeInsets.only(bottom: 6),
+            padding: const EdgeInsets.only(bottom: 2),
             child: Text(
               state.duplicateWarning!,
               style: const TextStyle(color: Colors.red, fontSize: 12),
@@ -64,7 +65,6 @@ class AddEntryPanel extends StatelessWidget {
           onChanged: onCategoriesChanged,
           error: state.errors['category'],
           allCategories: state.availableCategories,
-          onAddCategory: onAddCategory,
           focusNode: categoryFocus,
           onOpen: onOpenCategories,
           onSubmitted: onCategorySubmitted,
@@ -76,9 +76,21 @@ class AddEntryPanel extends StatelessWidget {
           error: state.errors['meanings'],
           onChanged: onMeaningChanged,
           focusNode: meaningFocus,
+          onSubmitted: onMeaningSubmitted,
           labelLeft: true,
           trailing: meaningTrailing,
           enabled: enableAfterJyutping,
+        ),
+        FieldBlock(
+          label: 'Notes',
+          error: null,
+          onChanged: (_) {},
+          focusNode: null,
+          labelLeft: true,
+          initialValue: state.notes,
+          readOnly: true,
+          enabled: false,
+          bottomPadding: 1,
         ),
       ],
     );

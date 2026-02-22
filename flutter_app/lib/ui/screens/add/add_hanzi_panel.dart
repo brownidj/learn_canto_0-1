@@ -12,6 +12,7 @@ class AddHanziPanel extends StatelessWidget {
   final ValueChanged<String> onCandidateSelected;
   final FocusNode candidateFocus;
   final bool enableAfterJyutping;
+  final VoidCallback? onManualHanzi;
 
   const AddHanziPanel({
     super.key,
@@ -22,6 +23,7 @@ class AddHanziPanel extends StatelessWidget {
     required this.onCandidateSelected,
     required this.candidateFocus,
     this.enableAfterJyutping = true,
+    this.onManualHanzi,
   });
 
   @override
@@ -29,21 +31,44 @@ class AddHanziPanel extends StatelessWidget {
     return Column(
       children: [
         FieldBlock(
-          label: 'Hanzi',
+          label: 'Hanzi will appear here',
           error: state.errors['hanzi'],
           onChanged: onHanziChanged,
           focusNode: hanziFocus,
           onSubmitted: onHanziSubmitted,
           enabled: enableAfterJyutping,
         ),
-        CandidateList(
-          candidates: state.candidateItems,
-          selected: state.selectedHanzi,
-          onSelect: onCandidateSelected,
-          focusNode: candidateFocus,
-          enabled: enableAfterJyutping,
-        ),
-        const SizedBox(height: 12),
+        if (!state.manualHanzi)
+          CandidateList(
+            candidates: state.candidateItems,
+            selected: state.selectedHanzi,
+            onSelect: onCandidateSelected,
+            focusNode: candidateFocus,
+            enabled: enableAfterJyutping,
+          ),
+        if (state.manualHanzi)
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: ActionChip(
+                label: const Text('Use candidates', style: TextStyle(fontSize: 11)),
+                onPressed: enableAfterJyutping ? onManualHanzi : null,
+              ),
+            ),
+          )
+        else
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: ActionChip(
+                label: const Text('Enter my own Hanzi', style: TextStyle(fontSize: 11)),
+                onPressed: enableAfterJyutping ? onManualHanzi : null,
+              ),
+            ),
+          ),
+        const SizedBox(height: 6),
         MeaningPreview(
           hanzi: state.selectedHanzi,
           meanings: state.meaningsPreview,

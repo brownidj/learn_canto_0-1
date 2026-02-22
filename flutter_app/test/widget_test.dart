@@ -1,17 +1,40 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:flutter_app/main.dart';
+import 'package:flutter_app/ui/cubits/main/main_cubit.dart';
+import 'package:flutter_app/ui/cubits/main/main_state.dart';
+import 'package:flutter_app/ui/screens/main/main_screen.dart';
+
+class _TestCubit extends MainCubit {
+  _TestCubit(MainState state) : super() {
+    emit(state);
+  }
+
+  @override
+  Future<void> loadData() async {}
+}
 
 void main() {
-  testWidgets('Add/Edit screen loads', (WidgetTester tester) async {
-    await tester.pumpWidget(const LearnCantoApp());
-    expect(find.text('Add (Prototype)'), findsOneWidget);
+  testWidgets('Main screen loads', (WidgetTester tester) async {
+    final state = MainState.initial().copyWith(
+      loading: false,
+      hanzi: '你好',
+      jyutping: 'nei5 hou2',
+      toneBlocks: const [],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: BlocProvider<MainCubit>(
+          create: (_) => _TestCubit(state),
+          child: const MainView(),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('My Cantonese Words'), findsOneWidget);
+    expect(find.text('Transliteration (Jyutping)'), findsOneWidget);
   });
 }

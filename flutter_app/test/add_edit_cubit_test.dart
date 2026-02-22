@@ -29,4 +29,37 @@ void main() {
     expect(ok, true);
     expect(vocab.containsKey('你好'), true);
   });
+
+  test('AddEditCubit sets notes when ambiguous', () {
+    final vocab = <String, dynamic>{};
+    final cats = <String, List<String>>{'unassigned': []};
+    final cubit = AddEditCubit(
+      validator: EntryValidator(),
+      vocabService: VocabularyService(vocab: vocab, categories: cats),
+      vocabMap: vocab,
+      categoriesMap: cats,
+    );
+
+    cubit.setJyutping('nei5 hou2');
+    expect(cubit.state.notes.isNotEmpty, true);
+  });
+
+  test('AddEditCubit blocks reserved categories', () {
+    final vocab = <String, dynamic>{};
+    final cats = <String, List<String>>{'unassigned': []};
+    final cubit = AddEditCubit(
+      validator: EntryValidator(),
+      vocabService: VocabularyService(vocab: vocab, categories: cats),
+      vocabMap: vocab,
+      categoriesMap: cats,
+    );
+
+    cubit.setJyutping('nei5 hou2');
+    cubit.setHanzi('你好');
+    cubit.setMeaning('hello');
+    cubit.setCategories(['unassigned']);
+
+    expect(cubit.state.saveEnabled, false);
+  });
+
 }

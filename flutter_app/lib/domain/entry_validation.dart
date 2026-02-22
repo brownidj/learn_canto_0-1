@@ -95,7 +95,8 @@ class EntryValidator {
     if (cat.isEmpty) {
       return ValidationResult.ok('category', '');
     }
-    if (cat.toLowerCase() == 'all') {
+    final catLower = cat.toLowerCase();
+    if (catLower == 'all' || catLower == 'unassigned') {
       return ValidationResult.error('category', cat, 'Reserved category name');
     }
     if (_validCategories != null && !_validCategories!.contains(cat)) {

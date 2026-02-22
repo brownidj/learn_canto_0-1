@@ -34,7 +34,7 @@ class CandidateList extends StatelessWidget {
             const Text('Candidates', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
             const SizedBox(height: 4),
             if (candidates.isEmpty)
-              const Text('No candidates yet.', style: TextStyle(fontSize: 11)),
+              const Text('No candidates yet. Use manual Hanzi.', style: TextStyle(fontSize: 11)),
             for (final item in candidates)
               ListTile(
                 dense: true,

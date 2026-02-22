@@ -3,12 +3,13 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../domain/entry_validation.dart';
 import '../../../domain/vocabulary_service.dart';
 import '../../../domain/exceptions.dart';
-import '../../../domain/jyutping_validation.dart';
 import '../../../domain/meaning_sources_models.dart';
 import '../../../domain/meaning_sources_cleaning.dart';
-import '../../../domain/hanzi_candidate_pipeline_core.dart';
 import '../../../data/asset_data_repository.dart';
 import 'add_edit_state.dart';
+import 'add_edit_candidate_service.dart';
+import 'add_edit_state_reducer.dart';
+import 'add_edit_payload_mapper.dart';
 
 class AddEditCubit extends Cubit<AddEditState> {
   final EntryValidator _validator;
@@ -21,6 +22,9 @@ class AddEditCubit extends Cubit<AddEditState> {
   AssetDataRepository? _repo;
   final Map<String, dynamic> _vocabMap;
   final Map<String, List<String>> _categoriesMap;
+  late AddEditCandidateService _candidateService;
+  late AddEditStateReducer _stateReducer;
+  late AddEditPayloadMapper _payloadMapper;
 
   AddEditCubit({
     required EntryValidator validator,
@@ -44,10 +48,24 @@ class AddEditCubit extends Cubit<AddEditState> {
             ),
         _reverseIndex = reverseIndex ?? _defaultReverseIndex,
         _hkWords = hkWords ?? const HkWordsData(freqMap: {}, colloquial: {}, attested: {}),
-        super(AddEditState.initial());
+        super(AddEditState.initial()) {
+    _initHelpers();
+  }
+
+  void _initHelpers() {
+    _candidateService = AddEditCandidateService(
+      meaningFacade: _meaningFacade,
+      reverseIndex: _reverseIndex,
+      hkWords: _hkWords,
+      cccantoMap: _cccantoMap,
+      cedictMap: _cedictMap,
+    );
+    _stateReducer = AddEditStateReducer(validator: _validator);
+    _payloadMapper = const AddEditPayloadMapper();
+  }
 
   void setJyutping(String value) {
-    emit(_recalc(state.copyWith(jyutping: value)));
+    emit(_recalc(state.copyWith(jyutping: value, manualHanzi: false)));
     _updateDuplicateWarning(value);
     _refreshCandidates(value);
   }
@@ -70,9 +88,14 @@ class AddEditCubit extends Cubit<AddEditState> {
     _refreshCandidates(state.jyutping);
   }
 
+  void setManualHanzi(bool enabled) {
+    emit(_recalc(state.copyWith(manualHanzi: enabled)));
+  }
+
   void selectCandidate(String hanzi) {
-    emit(_recalc(state.copyWith(selectedHanzi: hanzi, hanzi: hanzi)));
-    _updateMeaningPreview(hanzi);
+    final base = state.copyWith(selectedHanzi: hanzi, hanzi: hanzi);
+    final withMeaning = _applyMeaningFromCandidate(base, hanzi);
+    emit(_recalc(withMeaning));
   }
 
   Future<void> loadData(AssetDataRepository repo) async {
@@ -113,6 +136,7 @@ class AddEditCubit extends Cubit<AddEditState> {
         ),
         cleaner: cleanGlossesForDisplay,
       );
+      _initHelpers();
       emit(state.copyWith(availableCategories: cats));
       _refreshCandidates(state.jyutping);
     } catch (_) {
@@ -142,51 +166,64 @@ class AddEditCubit extends Cubit<AddEditState> {
 
   void _refreshCandidates(String jyutping) {
     final jy = jyutping.trim();
-    final jyNorm = normalizeJyutping(jy);
     debugPrint(
-      '[AddEditCubit] refreshCandidates jy="${jy}" norm="${jyNorm}" '
-      'cats=${state.categories.length} reverseSize=${_reverseIndex.length} '
-      'hasKey=${_reverseIndex.containsKey(jyNorm)}',
+      '[AddEditCubit] refreshCandidates jy="${jy}" '
+      'cats=${state.categories.length} reverseSize=${_reverseIndex.length}',
     );
     if (jy.isEmpty) {
       debugPrint('[AddEditCubit] refreshCandidates empty jy -> clear');
-      emit(state.copyWith(candidateItems: <CandidateItem>[], selectedHanzi: '', meaningsPreview: <String>[]));
+      emit(
+        _recalc(
+          state.copyWith(
+            candidateItems: <CandidateItem>[],
+            selectedHanzi: '',
+            meaningsPreview: <String>[],
+            meaningsFull: <String>[],
+            meaningSourceTag: '',
+            meaningText: '',
+            hanzi: '',
+            manualHanzi: false,
+            notes: '',
+          ),
+        ),
+      );
       return;
     }
-    final deps = HanziPipelineDeps(
-      normalizeJyutping: normalizeJyutping,
-      reverseIndex: _reverseIndex,
-      tier1ReverseCandidates: (jyNorm) => _reverseIndex[jyNorm] ?? <List<dynamic>>[],
-      ccGlossesFor: (hz) => _meaningFacade.meaningsForDisplay(hz),
-      glossCleaner: cleanGlossesForDisplay,
-      activeCategoryProvider: () =>
-          state.categories.isNotEmpty ? state.categories.first : '',
-      hkFreqMap: _hkWords.freqMap,
-      hkColloquial: _hkWords.colloquial,
-      hkAttested: _hkWords.attested,
-      maxCandidates: 10,
+    final resolution = _candidateService.resolve(
+      jyutping: jy,
+      activeCategories: state.categories,
     );
-    final pipeline = HanziCandidatePipeline(deps);
-    final ranked = pipeline.run(jy);
-    debugPrint('[AddEditCubit] refreshCandidates ranked=${ranked.length}');
-    final items = <CandidateItem>[];
-    for (var i = 0; i < ranked.length; i++) {
-      final row = ranked[i];
-      final hz = row[0].toString();
-      final src = row[1].toString();
-      final hk = _hkBadgeFor(hz);
-      final tag = _sourceChipFor(src);
-      final label = _meaningFacade.candidateLabel(
-        hz,
-        src,
-        preferred: i == 0,
-        maxItems: 2,
+    if (resolution.candidates.isEmpty) {
+      emit(
+        _recalc(
+          state.copyWith(
+            candidateItems: const <CandidateItem>[],
+            selectedHanzi: '',
+            meaningsPreview: const <String>[],
+            meaningsFull: const <String>[],
+            meaningSourceTag: '',
+            manualHanzi: resolution.manualHanzi,
+            notes: resolution.notes,
+          ),
+        ),
       );
-      items.add(CandidateItem(hanzi: hz, source: src, label: label, hkBadge: hk, sourceTag: tag));
+      return;
     }
-    final selected = items.isNotEmpty ? items.first.hanzi : '';
-    emit(state.copyWith(candidateItems: items, selectedHanzi: selected, hanzi: selected));
-    _updateMeaningPreview(selected);
+    emit(
+      _recalc(
+        state.copyWith(
+          candidateItems: resolution.candidates,
+          selectedHanzi: resolution.selectedHanzi,
+          hanzi: resolution.selectedHanzi,
+          meaningText: resolution.meaningText,
+          meaningsPreview: resolution.meaningsPreview,
+          meaningsFull: resolution.meaningsFull,
+          meaningSourceTag: resolution.meaningSourceTag,
+          manualHanzi: resolution.manualHanzi,
+          notes: resolution.notes,
+        ),
+      ),
+    );
   }
 
   void _updateMeaningPreview(String hanzi) {
@@ -197,66 +234,49 @@ class AddEditCubit extends Cubit<AddEditState> {
     }
     final full = _meaningFacade.meaningsForDisplay(hz);
     final preview = full.take(3).toList();
-    final tag = _sourceTagFor(hz);
+    final tag = _candidateService.meaningSourceTagFor(hz);
     emit(state.copyWith(meaningsPreview: preview, meaningsFull: full, meaningSourceTag: tag));
   }
 
-  String _sourceTagFor(String hanzi) {
-    if (hanzi.isEmpty) {
-      return '';
+  AddEditState _applyMeaningFromCandidate(AddEditState base, String hanzi) {
+    final hz = hanzi.trim();
+    if (hz.isEmpty) {
+      return base.copyWith(
+        meaningText: '',
+        meaningsPreview: <String>[],
+        meaningsFull: <String>[],
+        meaningSourceTag: '',
+      );
     }
-    if (_cccantoMap.containsKey(hanzi)) {
-      return 'CC';
+    final full = _meaningFacade.meaningsForDisplay(hz);
+    final preview = full.take(3).toList();
+    final tag = _candidateService.meaningSourceTagFor(hz);
+    if (full.isEmpty) {
+      return base.copyWith(
+        meaningsPreview: <String>[],
+        meaningsFull: <String>[],
+        meaningSourceTag: '',
+      );
     }
-    if (_cedictMap.containsKey(hanzi)) {
-      return 'CE';
-    }
-    return '';
+    final joined = full.join(', ');
+    return base.copyWith(
+      meaningText: joined,
+      meaningsPreview: preview,
+      meaningsFull: full,
+      meaningSourceTag: tag,
+    );
   }
 
-  String? _hkBadgeFor(String hanzi) {
-    if (hanzi.isEmpty) {
-      return null;
-    }
-    final attested = _hkWords.attested.contains(hanzi);
-    final colloq = _hkWords.colloquial.contains(hanzi);
-    if (colloq) {
-      return 'HK Colloq';
-    }
-    if (attested) {
-      return 'HK';
-    }
-    return null;
-  }
-
-  String? _sourceChipFor(String source) {
-    final s = source.trim().toLowerCase();
-    if (s.isEmpty) {
-      return null;
-    }
-    if (s.contains('tier1')) {
-      return 'T1';
-    }
-    if (s.contains('tier2')) {
-      return 'T2';
-    }
-    if (s.contains('cccanto')) {
-      return 'CC';
-    }
-    if (s.contains('cedict')) {
-      return 'CE';
-    }
-    return s.length > 3 ? s.substring(0, 3).toUpperCase() : s.toUpperCase();
-  }
 
   bool save() {
     try {
-      _vocabService.addEntry(
-        jyutping: state.jyutping,
-        hanzi: state.hanzi,
-        meanings: state.meaningText,
-        categories: state.categories,
-      );
+    _vocabService.addEntry(
+      jyutping: state.jyutping,
+      hanzi: state.hanzi,
+      meanings: state.meaningText,
+      categories: state.categories,
+      notes: state.notes,
+    );
       final repo = _repo;
       if (repo != null) {
         repo.persistEntry(
@@ -268,7 +288,7 @@ class AddEditCubit extends Cubit<AddEditState> {
           headword: state.hanzi.trim(),
         );
       }
-      emit(AddEditState.initial().copyWith(toastMessage: 'Saved'));
+      emit(_resetEntryState(toastMessage: 'Saved'));
       return true;
     } on VocabularyError {
       emit(_recalc(state));
@@ -276,14 +296,12 @@ class AddEditCubit extends Cubit<AddEditState> {
     }
   }
 
+  void resetEntry() {
+    emit(_resetEntryState());
+  }
+
   Map<String, dynamic> previewPayload() {
-    return {
-      'jyutping': state.jyutping.trim(),
-      'hanzi': state.hanzi.trim(),
-      'meanings': state.meaningText.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList(),
-      'categories': List<String>.from(state.categories),
-      'register': state.register.trim(),
-    };
+    return _payloadMapper.toPreviewPayload(state);
   }
 
   void _updateDuplicateWarning(String jyutping) {
@@ -305,24 +323,14 @@ class AddEditCubit extends Cubit<AddEditState> {
   }
 
   AddEditState _recalc(AddEditState next) {
-    final results = _validator.validateAll(
-      jyutping: next.jyutping,
-      hanzi: next.hanzi,
-      meanings: next.meaningText,
-      category: next.categories.isNotEmpty ? next.categories.first : '',
-    );
-    final errors = <String, String>{};
-    for (final entry in results.entries) {
-      if (!entry.value.valid) {
-        errors[entry.key] = entry.value.errorMessage ?? 'Invalid ${entry.key}';
-      }
-    }
-    if (next.categories.isEmpty) {
-      errors['category'] = 'Category is required';
-    }
-    final canSave = results.values.every((r) => r.valid) && next.categories.isNotEmpty;
-    return next.copyWith(saveEnabled: canSave, errors: errors);
+    return _stateReducer.recalc(next);
   }
+
+  AddEditState _resetEntryState({String? toastMessage}) {
+    final cleared = _stateReducer.resetEntry(state, toastMessage: toastMessage);
+    return cleared;
+  }
+
 }
 
 const Map<String, List<List<dynamic>>> _defaultReverseIndex = {

@@ -7,6 +7,7 @@ import 'add_focus_policy.dart';
 import '../dialogs/category_dialog.dart';
 import '../dialogs/save_confirm_dialog.dart';
 import '../widgets/panel_shell.dart';
+import '../edit/edit_screen.dart';
 import '../../cubits/add_edit/add_edit_cubit.dart';
 import '../../cubits/add_edit/add_edit_state.dart';
 import '../../../domain/entry_validation.dart';
@@ -14,7 +15,12 @@ import '../../../domain/vocabulary_service.dart';
 import '../../../data/asset_data_repository.dart';
 
 class AddScreen extends StatelessWidget {
-  const AddScreen({super.key});
+  final VoidCallback? onRequestEdit;
+
+  const AddScreen({
+    super.key,
+    this.onRequestEdit,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -31,13 +37,19 @@ class AddScreen extends StatelessWidget {
         cubit.loadData(AssetDataRepository());
         return cubit;
       },
-      child: const _AddView(),
+      child: _AddView(
+        onRequestEdit: onRequestEdit,
+      ),
     );
   }
 }
 
 class _AddView extends StatefulWidget {
-  const _AddView();
+  final VoidCallback? onRequestEdit;
+
+  const _AddView({
+    this.onRequestEdit,
+  });
 
   @override
   State<_AddView> createState() => _AddViewState();
@@ -86,9 +98,21 @@ class _AddViewState extends State<_AddView> {
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 12),
-            child: ActionChip(
-              label: const Text('Close', style: TextStyle(fontSize: 11)),
-              onPressed: () => Navigator.of(context).maybePop(),
+            child: Row(
+              children: [
+                ActionChip(
+                  label: const Text('Edit', style: TextStyle(fontSize: 11)),
+                  onPressed: () {
+                    if (widget.onRequestEdit != null) {
+                      widget.onRequestEdit!();
+                      return;
+                    }
+                    Navigator.of(context).pushReplacement(
+                      MaterialPageRoute(builder: (_) => const EditScreen()),
+                    );
+                  },
+                ),
+              ],
             ),
           ),
         ],
@@ -119,22 +143,18 @@ class _AddViewState extends State<_AddView> {
                 child: Text('Rotate to landscape to edit entries.'),
               );
             }
-            return Column(
+            return Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        flex: 3,
-                        child: PanelShell(
-                          title: 'Entry',
-                          child: AddEntryPanel(
-                            state: state,
-                            onJyutpingChanged: cubit.setJyutping,
-                            jyutpingFocus: _jyFocus,
-                            onJyutpingSubmitted: (_) => _openCategoryDialog(context),
+                  flex: 3,
+                  child: PanelShell(
+                    expandChild: false,
+                    child: AddEntryPanel(
+                      state: state,
+                      onJyutpingChanged: cubit.setJyutping,
+                      jyutpingFocus: _jyFocus,
+                      onJyutpingSubmitted: (_) => _openCategoryDialog(context),
                             jyutpingTrailing: ActionChip(
                               label: const Text('Apply', style: TextStyle(fontSize: 11)),
                               onPressed: state.jyutping.trim().isNotEmpty
@@ -142,54 +162,54 @@ class _AddViewState extends State<_AddView> {
                                   : null,
                             ),
                             onCategoriesChanged: cubit.setCategories,
-                            onAddCategory: cubit.addCategory,
                             categoryFocus: _categoryFocus,
                             onOpenCategories: (ctx) => _openCategoryDialog(ctx),
                             onCategorySubmitted: (_) => _openCategoryDialog(context),
-                            onMeaningChanged: cubit.setMeaning,
-                            meaningFocus: _meaningFocus,
-                            meaningTrailing: ActionChip(
-                              label: const Text('Save', style: TextStyle(fontSize: 11)),
-                              onPressed: state.saveEnabled
-                                  ? () async {
-                                      final ok = await showSaveConfirm(
-                                        context,
-                                        cubit.previewPayload(),
-                                      );
-                                      if (ok == true) {
-                                        cubit.save();
-                                      }
-                                    }
-                                  : null,
-                            ),
-                            enableAfterJyutping: enableAfterJyutping,
-                          ),
-                        ),
+                      onMeaningChanged: cubit.setMeaning,
+                      meaningFocus: _meaningFocus,
+                      meaningTrailing: ActionChip(
+                        label: const Text('Save', style: TextStyle(fontSize: 11)),
+                        onPressed: state.saveEnabled
+                            ? () => _confirmEntry(context, cubit)
+                            : null,
                       ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        flex: 2,
-                        child: PanelShell(
-                          title: 'Hanzi',
-                          child: AddHanziPanel(
-                            state: state,
-                            onHanziChanged: cubit.setHanzi,
-                            hanziFocus: _hanziFocus,
-                            onHanziSubmitted: (_) => _meaningFocus.requestFocus(),
-                            onCandidateSelected: (hz) {
-                              cubit.selectCandidate(hz);
-                              _hanziFocus.requestFocus();
-                            },
-                            candidateFocus: _candidateFocus,
-                            enableAfterJyutping: enableAfterJyutping,
-                          ),
-                        ),
-                      ),
-                    ],
+                      onMeaningSubmitted: (_) {
+                        if (state.saveEnabled) {
+                          _confirmEntry(context, cubit);
+                        }
+                      },
+                      enableAfterJyutping: enableAfterJyutping,
+                    ),
                   ),
                 ),
-                const SizedBox(height: 8),
-                const SizedBox.shrink(),
+                const SizedBox(width: 16),
+                Expanded(
+                  flex: 2,
+                  child: PanelShell(
+                    expandChild: false,
+                    child: AddHanziPanel(
+                      state: state,
+                      onHanziChanged: cubit.setHanzi,
+                      hanziFocus: _hanziFocus,
+                      onHanziSubmitted: (_) => _meaningFocus.requestFocus(),
+                      onCandidateSelected: (hz) {
+                        cubit.selectCandidate(hz);
+                        _hanziFocus.requestFocus();
+                      },
+                      candidateFocus: _candidateFocus,
+                      enableAfterJyutping: enableAfterJyutping,
+                      onManualHanzi: () {
+                        final next = !cubit.state.manualHanzi;
+                        cubit.setManualHanzi(next);
+                        if (next) {
+                          _hanziFocus.requestFocus();
+                        } else if (cubit.state.candidateItems.isNotEmpty) {
+                          _candidateFocus.requestFocus();
+                        }
+                      },
+                    ),
+                  ),
+                ),
               ],
             );
           },
@@ -219,5 +239,27 @@ class _AddViewState extends State<_AddView> {
     ).whenComplete(() {
       _focusPolicy.setCategoryDialogOpen(false);
     });
+  }
+
+  Future<void> _confirmEntry(BuildContext context, AddEditCubit cubit) async {
+    final decision = await showSaveDecision(context, cubit.previewPayload());
+    if (!mounted || decision == null) {
+      return;
+    }
+    switch (decision) {
+      case SaveDecision.save:
+        final ok = cubit.save();
+        if (ok) {
+          _jyFocus.requestFocus();
+        }
+        break;
+      case SaveDecision.edit:
+        _meaningFocus.requestFocus();
+        break;
+      case SaveDecision.cancel:
+        cubit.resetEntry();
+        _jyFocus.requestFocus();
+        break;
+    }
   }
 }

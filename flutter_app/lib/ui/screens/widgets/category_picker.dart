@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'field_block.dart';
 
-class CategoryPicker extends StatelessWidget {
+class CategoryPicker extends StatefulWidget {
   final List<String> selected;
   final ValueChanged<List<String>> onChanged;
   final String? error;
   final List<String> allCategories;
-  final ValueChanged<String> onAddCategory;
   final FocusNode? focusNode;
   final ValueChanged<BuildContext> onOpen;
   final ValueChanged<String>? onSubmitted;
@@ -19,7 +18,6 @@ class CategoryPicker extends StatelessWidget {
     required this.onChanged,
     required this.error,
     required this.allCategories,
-    required this.onAddCategory,
     required this.focusNode,
     required this.onOpen,
     required this.onSubmitted,
@@ -28,23 +26,49 @@ class CategoryPicker extends StatelessWidget {
   });
 
   @override
+  State<CategoryPicker> createState() => _CategoryPickerState();
+}
+
+class _CategoryPickerState extends State<CategoryPicker> {
+
+  @override
   Widget build(BuildContext context) {
-    final label = selected.isEmpty ? '' : selected.join(', ');
-    return FieldBlock(
-      label: 'Categories',
-      error: error,
-      onChanged: (_) {},
-      focusNode: focusNode,
-      onSubmitted: onSubmitted,
-      labelLeft: labelLeft,
-      trailing: ActionChip(
-        label: const Icon(Icons.arrow_drop_down, size: 16),
-        onPressed: enabled && selected.isNotEmpty ? () => onOpen(context) : null,
-      ),
-      initialValue: label,
-      readOnly: true,
-      onTap: enabled ? () => onOpen(context) : null,
-      enabled: enabled,
+    final label = widget.selected.isEmpty ? '' : widget.selected.join(', ');
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        FieldBlock(
+          label: 'Categories',
+          error: widget.error,
+          onChanged: (_) {},
+          focusNode: widget.focusNode,
+          onSubmitted: widget.onSubmitted,
+          labelLeft: widget.labelLeft,
+          trailing: ActionChip(
+            label: const Text('List', style: TextStyle(fontSize: 11)),
+            onPressed: widget.enabled && widget.selected.isNotEmpty ? () => widget.onOpen(context) : null,
+          ),
+          initialValue: label,
+          readOnly: true,
+          onTap: widget.enabled && widget.selected.isNotEmpty ? () => widget.onOpen(context) : null,
+          enabled: widget.enabled,
+        ),
+        Padding(
+          padding: const EdgeInsets.only(left: 72, bottom: 2),
+          child: Wrap(
+            spacing: 4,
+            runSpacing: -6,
+            children: [
+              for (final c in widget.selected)
+                Chip(
+                  label: Text(c, style: const TextStyle(fontSize: 10)),
+                  visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+                ),
+            ],
+          ),
+        ),
+      ],
     );
   }
+
 }
