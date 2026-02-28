@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 
@@ -12,6 +13,16 @@ class MainTtsService {
     }
     _initialized = true;
     await _tts.awaitSpeakCompletion(true);
+    if (Platform.isIOS) {
+      await _tts.setSharedInstance(true);
+      await _tts.setIosAudioCategory(
+        IosTextToSpeechAudioCategory.playback,
+        [
+          IosTextToSpeechAudioCategoryOptions.mixWithOthers,
+          IosTextToSpeechAudioCategoryOptions.defaultToSpeaker,
+        ],
+      );
+    }
     _tts.setErrorHandler((msg) {
       debugPrint('TTS: flutter_tts error=$msg');
     });

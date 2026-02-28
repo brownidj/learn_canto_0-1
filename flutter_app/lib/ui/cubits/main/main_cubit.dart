@@ -8,6 +8,7 @@ import '../../services/main_tts_service.dart';
 import '../../services/google_tts_timepoint_service.dart';
 import '../../services/google_tts_player.dart';
 import '../../services/google_tts_proxy_service.dart';
+import '../../services/firebase_tts_service.dart';
 import 'main_state.dart';
 
 class MainCubit extends Cubit<MainState> {
@@ -18,6 +19,7 @@ class MainCubit extends Cubit<MainState> {
   final MainTtsService _tts = MainTtsService();
   GoogleTtsTimepointService? _googleTimepoints;
   GoogleTtsProxyService? _googleProxy;
+  FirebaseTtsService? _firebaseTts;
   final GoogleTtsPlayer _googlePlayer = GoogleTtsPlayer();
   Map<String, dynamic> _vocab = <String, dynamic>{};
   Map<String, List<String>> _categories = <String, List<String>>{};
@@ -126,6 +128,7 @@ class MainCubit extends Cubit<MainState> {
   Future<void> _loadVoices() async {
     List<Map<String, String>> google = [];
     var fromProxy = false;
+    var fromFirebase = false;
     if (googleTtsProxyUrl().isNotEmpty) {
       try {
         _googleProxy ??= GoogleTtsProxyService(Uri.parse(googleTtsProxyUrl()));
@@ -145,21 +148,35 @@ class MainCubit extends Cubit<MainState> {
       }).toList();
       fromProxy = false;
     }
+    if (google.isEmpty && _firebaseConfigured()) {
+      try {
+        _firebaseTts ??= FirebaseTtsService(Uri.parse(firebaseTtsUrl()));
+        google = await _firebaseTts!.listVoices();
+        fromFirebase = google.isNotEmpty;
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('TTS: firebase voices failed: $e');
+        }
+      }
+    }
     String? selected;
     if (google.isNotEmpty) {
       selected = google.first['name'];
     }
     final googleConfigured = _googleConfigured();
+    final firebaseConfigured = _firebaseConfigured();
     if (kDebugMode) {
-      debugPrint('TTS: google voices=${google.length} proxy=${googleTtsProxyUrl().isNotEmpty} apiKey=${googleTtsApiKey().isNotEmpty}');
+      debugPrint(
+        'TTS: google voices=${google.length} proxy=${googleTtsProxyUrl().isNotEmpty} apiKey=${googleTtsApiKey().isNotEmpty} firebase=${firebaseConfigured}',
+      );
     }
-    final googleAvailable = google.isNotEmpty || googleConfigured;
+    final googleAvailable = google.isNotEmpty || googleConfigured || firebaseConfigured;
     emit(state.copyWith(
       googleVoices: google,
       selectedGoogleVoice: selected,
       ttsEngine: googleAvailable ? 'google' : 'macos',
       googleAvailable: googleAvailable,
-      googleVoicesFromProxy: fromProxy,
+      googleVoicesFromProxy: fromProxy || fromFirebase,
     ));
   }
 
@@ -168,7 +185,9 @@ class MainCubit extends Cubit<MainState> {
       return;
     }
     if (engine == 'google' && !state.googleAvailable) {
-      return;
+      if (!_googleConfigured() && !_firebaseConfigured()) {
+        return;
+      }
     }
     emit(state.copyWith(ttsEngine: engine));
   }
@@ -229,7 +248,7 @@ class MainCubit extends Cubit<MainState> {
     if (hanzi.isEmpty) {
       return;
     }
-    if (state.ttsEngine == 'google' && _googleConfigured()) {
+    if (state.ttsEngine == 'google' && _canUseGoogleTimepoints()) {
       await _playWithGoogleTimepoints(hanzi, state.wpm, enableHighlight: false);
       return;
     }
@@ -477,14 +496,21 @@ class MainCubit extends Cubit<MainState> {
   }
 
   bool _canUseGoogleTimepoints() {
-    return _googleConfigured();
+    return _firebaseConfigured() || _googleConfigured();
   }
 
   bool _googleConfigured() {
     return googleTtsProxyUrl().isNotEmpty || googleTtsApiKey().isNotEmpty;
   }
 
+  bool _firebaseConfigured() {
+    return firebaseTtsUrl().isNotEmpty;
+  }
+
   Future<bool> _playWithGoogleTimepoints(String hanzi, int wpm, {required bool enableHighlight}) async {
+    if (_firebaseConfigured()) {
+      return _playWithFirebaseTts(hanzi, wpm, enableHighlight: enableHighlight);
+    }
     if (_googleConfigured() && googleTtsProxyUrl().isNotEmpty) {
       return _playWithGoogleProxy(hanzi, wpm, enableHighlight: enableHighlight);
     }
@@ -565,6 +591,53 @@ class MainCubit extends Cubit<MainState> {
     } catch (e) {
       if (kDebugMode) {
         debugPrint('TTS: google proxy error: $e');
+      }
+      return false;
+    }
+  }
+
+  Future<bool> _playWithFirebaseTts(String hanzi, int wpm, {required bool enableHighlight}) async {
+    final url = firebaseTtsUrl();
+    if (url.isEmpty) {
+      return false;
+    }
+    _firebaseTts ??= FirebaseTtsService(Uri.parse(url));
+    try {
+      if (kDebugMode) {
+        debugPrint('TTS: firebase request url=$url textLen=${hanzi.length} wpm=$wpm');
+      }
+      final resp = await _firebaseTts!.synthesizeWithTimepoints(
+        text: hanzi,
+        voiceName: state.selectedGoogleVoice,
+        rate: wpm,
+      );
+      final audio = resp['audioContent']?.toString() ?? '';
+      final timepoints = (resp['timepoints'] as List<dynamic>?) ?? const [];
+      if (audio.isEmpty) {
+        if (kDebugMode) {
+          debugPrint('TTS: firebase empty payload audioLen=${audio.length} timepoints=${timepoints.length}');
+        }
+        return false;
+      }
+      if (enableHighlight && timepoints.isEmpty) {
+        if (kDebugMode) {
+          debugPrint('TTS: firebase missing timepoints for highlight');
+        }
+        return false;
+      }
+      if (kDebugMode) {
+        debugPrint('TTS: firebase ok audioLen=${audio.length} timepoints=${timepoints.length}');
+      }
+      final handle = await _googlePlayer.playBase64Mp3(audio);
+      final seq = enableHighlight ? _scheduleTimepointHighlights(timepoints, hanzi, handle.startedAt) : null;
+      await handle.completed;
+      if (enableHighlight && seq == _highlightSeq) {
+        _clearHanziHighlights();
+      }
+      return true;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('TTS: firebase error: $e');
       }
       return false;
     }

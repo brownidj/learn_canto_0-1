@@ -15,3 +15,11 @@ String googleTtsProxyUrl() {
   }
   return Platform.environment['GOOGLE_TTS_PROXY_URL'] ?? '';
 }
+
+String firebaseTtsUrl() {
+  const buildTime = String.fromEnvironment('FIREBASE_TTS_URL');
+  if (buildTime.isNotEmpty) {
+    return buildTime;
+  }
+  return Platform.environment['FIREBASE_TTS_URL'] ?? '';
+}

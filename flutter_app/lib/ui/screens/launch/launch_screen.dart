@@ -82,7 +82,7 @@ class _LaunchScreenState extends State<LaunchScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Image.asset(
-                  'assets/images/victoria_harbour_icon.png',
+                  'assets/images/victoria_harbour_icon_new.png',
                   width: 140,
                   height: 140,
                 ),

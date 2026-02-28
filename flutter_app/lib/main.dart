@@ -1,11 +1,32 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'firebase_options.dart';
 import 'ui/screens/add/add_screen.dart';
 import 'ui/screens/edit/edit_screen.dart';
 import 'ui/screens/launch/launch_screen.dart';
 import 'ui/screens/main/main_screen.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        await FirebaseAuth.instance.signInAnonymously();
+      }
+    } on FirebaseAuthException catch (e) {
+      debugPrint(
+        'Firebase auth failed: code=${e.code} message=${e.message}',
+      );
+    }
+  } catch (e) {
+    debugPrint('Firebase init failed: $e');
+  }
   runApp(const LearnCantoApp());
 }
 

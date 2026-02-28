@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
+import 'package:path_provider/path_provider.dart';
 
 class GooglePlaybackHandle {
   final DateTime startedAt;
@@ -31,7 +33,14 @@ class GoogleTtsPlayer {
     });
     final data = Uint8List.fromList(bytes);
     await _player.setReleaseMode(ReleaseMode.stop);
-    await _player.setSourceBytes(data);
+    if (Platform.isIOS) {
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/tts_${DateTime.now().microsecondsSinceEpoch}.mp3');
+      await file.writeAsBytes(data, flush: true);
+      await _player.setSourceDeviceFile(file.path);
+    } else {
+      await _player.setSourceBytes(data);
+    }
     await _player.resume();
     final startedAt = await startCompleter.future.timeout(
       const Duration(milliseconds: 250),
