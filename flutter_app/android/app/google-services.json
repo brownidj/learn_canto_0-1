@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "992813234327",
+    "project_id": "learncanto-ebbc0",
+    "storage_bucket": "learncanto-ebbc0.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:992813234327:android:1a5038455824bf53e251d2",
+        "android_client_info": {
+          "package_name": "org.topository.flutter_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDknjapJdfj45jxD-vMgfZgYX-4utYVVWE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:992813234327:android:aed828376f102953e251d2",
+        "android_client_info": {
+          "package_name": "org.topository.learncanto"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDknjapJdfj45jxD-vMgfZgYX-4utYVVWE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
