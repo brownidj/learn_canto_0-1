@@ -1,3 +1,4 @@
 #include? "Pods/Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"
 #include "Generated.xcconfig"
 CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES = YES
+DART_DEFINES=$(DART_DEFINES),RklSRUJBU0VfVFRTX1VSTD1odHRwczovL3VzLWNlbnRyYWwxLWxlYXJuY2FudG8tZWJiYzAuY2xvdWRmdW5jdGlvbnMubmV0L3R0cw==

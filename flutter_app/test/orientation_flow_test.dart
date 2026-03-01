@@ -15,10 +15,22 @@ void main() {
     await tester.pump();
   }
 
+  Future<void> _pumpUntilFound(WidgetTester tester, Finder finder, {int maxPumps = 10}) async {
+    for (var i = 0; i < maxPumps; i += 1) {
+      await tester.pump(const Duration(milliseconds: 50));
+      if (finder.evaluate().isNotEmpty) {
+        return;
+      }
+    }
+  }
+
   testWidgets('Rotation flow switches between Main/Add/Edit', (tester) async {
     await _setSize(tester, const Size(400, 800)); // portrait
     await tester.pumpWidget(const LearnCantoApp());
     await tester.pump();
+    expect(find.text('Start'), findsOneWidget);
+    await tester.tap(find.text('Start'));
+    await _pumpUntilFound(tester, find.text('My Cantonese Words'));
     expect(find.text('My Cantonese Words'), findsOneWidget);
 
     // Rotate to landscape -> Add
