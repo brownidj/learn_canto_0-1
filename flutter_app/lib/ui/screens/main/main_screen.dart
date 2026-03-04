@@ -92,16 +92,19 @@ class MainView extends StatelessWidget {
                         ),
                       ),
               ),
-              _BottomBar(
-                tortoise: state.tortoise,
-                autoMode: state.autoMode,
-                ttsArmed: state.ttsArmed,
-                isPlaying: state.isPlaying,
-                onPrev: () => context.read<MainCubit>().prevItem(),
-                onPlay: () => context.read<MainCubit>().playSequence(),
-                onNext: () => context.read<MainCubit>().nextItem(),
-                onTortoiseChanged: (v) => context.read<MainCubit>().toggleTortoise(v),
-                onAutoChanged: (v) => context.read<MainCubit>().toggleAuto(v),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 32),
+                child: _BottomBar(
+                  tortoise: state.tortoise,
+                  autoMode: state.autoMode,
+                  ttsArmed: state.ttsArmed,
+                  isPlaying: state.isPlaying,
+                  onPrev: () => context.read<MainCubit>().prevItem(),
+                  onPlay: () => context.read<MainCubit>().playSequence(),
+                  onNext: () => context.read<MainCubit>().nextItem(),
+                  onTortoiseChanged: (v) => context.read<MainCubit>().toggleTortoise(v),
+                  onAutoChanged: (v) => context.read<MainCubit>().toggleAuto(v),
+                ),
               ),
             ],
           ),
@@ -115,7 +118,7 @@ class MainView extends StatelessWidget {
       child: Container(
         color: Theme.of(context).colorScheme.surfaceVariant,
         child: ListView(
-          padding: const EdgeInsets.all(8),
+          padding: const EdgeInsets.fromLTRB(8, 44, 8, 8),
           children: [
             const SizedBox(height: 18),
             _GroupBox(
@@ -585,7 +588,7 @@ class _BottomBar extends StatelessWidget {
             key: const Key('chipAuto'),
             selected: autoMode,
             label: const Text('Auto'),
-            onSelected: (!isPlaying && (ttsArmed || autoMode)) ? onAutoChanged : null,
+            onSelected: (ttsArmed || autoMode) ? onAutoChanged : null,
             visualDensity: VisualDensity.compact,
             materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
             labelPadding: const EdgeInsets.symmetric(horizontal: 6),

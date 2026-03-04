@@ -77,6 +77,11 @@ class MainCubit extends Cubit<MainState> {
   // Tone/Radicals toggle removed in Flutter UI.
 
   void setWpm(int value) {
+    if (state.tortoise) {
+      _tortoisePrevWpm = value;
+      emit(state.copyWith(wpm: value, tortoise: false));
+      return;
+    }
     emit(state.copyWith(wpm: value));
   }
 
@@ -101,13 +106,18 @@ class MainCubit extends Cubit<MainState> {
   }
 
   void toggleTortoise(bool enabled) {
-    if (!state.ttsArmed || state.isPlaying || state.autoMode) {
+    if (!state.ttsArmed || state.autoMode) {
       return;
     }
     if (enabled) {
-      _tortoisePrevWpm = state.wpm;
+      if (!state.tortoise) {
+        _tortoisePrevWpm = state.wpm;
+      }
       emit(state.copyWith(tortoise: true, wpm: 60));
     } else {
+      if (!state.tortoise) {
+        return;
+      }
       final prev = _tortoisePrevWpm ?? state.wpm;
       emit(state.copyWith(tortoise: false, wpm: prev));
     }
@@ -122,10 +132,14 @@ class MainCubit extends Cubit<MainState> {
       _startAutoLoop();
     } else {
       _autoLooping = false;
+      _stopPlayback();
     }
   }
 
   Future<void> _loadVoices() async {
+    if (kDebugMode || kProfileMode) {
+      debugPrint('TTS: load voices start');
+    }
     List<Map<String, String>> google = [];
     var fromProxy = false;
     var fromFirebase = false;
@@ -135,8 +149,25 @@ class MainCubit extends Cubit<MainState> {
         google = await _googleProxy!.listVoices();
         fromProxy = google.isNotEmpty;
       } catch (e) {
-        if (kDebugMode) {
+        if (kDebugMode || kProfileMode) {
           debugPrint('TTS: proxy voices failed: $e');
+        }
+      }
+    }
+    if (!fromProxy && _firebaseConfigured()) {
+      try {
+        if (kDebugMode || kProfileMode) {
+          debugPrint('TTS: firebase voices request url=${firebaseTtsUrl()}');
+        }
+        _firebaseTts ??= FirebaseTtsService(Uri.parse(firebaseTtsUrl()));
+        final firebaseVoices = await _firebaseTts!.listVoices();
+        if (firebaseVoices.isNotEmpty) {
+          google = firebaseVoices;
+          fromFirebase = true;
+        }
+      } catch (e) {
+        if (kDebugMode || kProfileMode) {
+          debugPrint('TTS: firebase voices failed: $e');
         }
       }
     }
@@ -147,17 +178,7 @@ class MainCubit extends Cubit<MainState> {
         return locale.startsWith('yue');
       }).toList();
       fromProxy = false;
-    }
-    if (google.isEmpty && _firebaseConfigured()) {
-      try {
-        _firebaseTts ??= FirebaseTtsService(Uri.parse(firebaseTtsUrl()));
-        google = await _firebaseTts!.listVoices();
-        fromFirebase = google.isNotEmpty;
-      } catch (e) {
-        if (kDebugMode) {
-          debugPrint('TTS: firebase voices failed: $e');
-        }
-      }
+      fromFirebase = false;
     }
     String? selected;
     if (google.isNotEmpty) {
@@ -165,12 +186,17 @@ class MainCubit extends Cubit<MainState> {
     }
     final googleConfigured = _googleConfigured();
     final firebaseConfigured = _firebaseConfigured();
-    if (kDebugMode) {
+    if (kDebugMode || kProfileMode) {
       debugPrint(
         'TTS: google voices=${google.length} proxy=${googleTtsProxyUrl().isNotEmpty} apiKey=${googleTtsApiKey().isNotEmpty} firebase=${firebaseConfigured}',
       );
     }
     final googleAvailable = google.isNotEmpty || googleConfigured || firebaseConfigured;
+    if (kDebugMode || kProfileMode) {
+      debugPrint(
+        'TTS: googleAvailable=$googleAvailable selected=$selected engine=${state.ttsEngine} voicesFromProxy=${fromProxy || fromFirebase}',
+      );
+    }
     emit(state.copyWith(
       googleVoices: google,
       selectedGoogleVoice: selected,
@@ -223,7 +249,7 @@ class MainCubit extends Cubit<MainState> {
     final armed = state.ttsArmed;
     _index = (_index + 1) % _filtered.length;
     _emitCurrent();
-    if (armed) {
+    if (armed && !state.autoMode) {
       unawaited(playSequence());
     }
   }
@@ -238,7 +264,7 @@ class MainCubit extends Cubit<MainState> {
     final armed = state.ttsArmed;
     _index = (_index - 1) < 0 ? _filtered.length - 1 : _index - 1;
     _emitCurrent();
-    if (armed) {
+    if (armed && !state.autoMode) {
       unawaited(playSequence());
     }
   }
@@ -327,6 +353,15 @@ class MainCubit extends Cubit<MainState> {
     emit(state.copyWith(isPlaying: false));
   }
 
+  void _stopPlayback() {
+    _tts.stop();
+    _googlePlayer.stop();
+    _clearHanziHighlights();
+    if (state.isPlaying) {
+      emit(state.copyWith(isPlaying: false));
+    }
+  }
+
   Future<void> playSyllable(int index) async {
     if (index < 0 || index >= state.toneBlocks.length) {
       return;
@@ -351,6 +386,12 @@ class MainCubit extends Cubit<MainState> {
 
   Future<void> _autoTick() async {
     while (_autoLooping) {
+      while (_autoLooping && state.isPlaying) {
+        await Future.delayed(const Duration(milliseconds: 100));
+      }
+      if (!_autoLooping) {
+        break;
+      }
       await playSequence();
       if (!_autoLooping) {
         break;
@@ -531,13 +572,14 @@ class MainCubit extends Cubit<MainState> {
       if (audio.isEmpty) {
         return false;
       }
-      if (enableHighlight && timepoints.isEmpty) {
-        return false;
+      final doHighlight = enableHighlight && timepoints.isNotEmpty;
+      if (enableHighlight && timepoints.isEmpty && kDebugMode) {
+        debugPrint('TTS: google timepoints missing, playing audio without highlights');
       }
       final handle = await _googlePlayer.playBase64Mp3(audio);
-      final seq = enableHighlight ? _scheduleTimepointHighlights(timepoints, hanzi, handle.startedAt) : null;
+      final seq = doHighlight ? _scheduleTimepointHighlights(timepoints, hanzi, handle.startedAt) : null;
       await handle.completed;
-      if (enableHighlight && seq == _highlightSeq) {
+      if (doHighlight && seq == _highlightSeq) {
         _clearHanziHighlights();
       }
       return true;
@@ -572,19 +614,17 @@ class MainCubit extends Cubit<MainState> {
         }
         return false;
       }
-      if (enableHighlight && timepoints.isEmpty) {
-        if (kDebugMode) {
-          debugPrint('TTS: google proxy missing timepoints for highlight');
-        }
-        return false;
+      final doHighlight = enableHighlight && timepoints.isNotEmpty;
+      if (enableHighlight && timepoints.isEmpty && kDebugMode) {
+        debugPrint('TTS: google proxy missing timepoints, playing audio without highlights');
       }
       if (kDebugMode) {
         debugPrint('TTS: google proxy ok audioLen=${audio.length} timepoints=${timepoints.length}');
       }
       final handle = await _googlePlayer.playBase64Mp3(audio);
-      final seq = enableHighlight ? _scheduleTimepointHighlights(timepoints, hanzi, handle.startedAt) : null;
+      final seq = doHighlight ? _scheduleTimepointHighlights(timepoints, hanzi, handle.startedAt) : null;
       await handle.completed;
-      if (enableHighlight && seq == _highlightSeq) {
+      if (doHighlight && seq == _highlightSeq) {
         _clearHanziHighlights();
       }
       return true;
@@ -619,19 +659,17 @@ class MainCubit extends Cubit<MainState> {
         }
         return false;
       }
-      if (enableHighlight && timepoints.isEmpty) {
-        if (kDebugMode) {
-          debugPrint('TTS: firebase missing timepoints for highlight');
-        }
-        return false;
+      final doHighlight = enableHighlight && timepoints.isNotEmpty;
+      if (enableHighlight && timepoints.isEmpty && kDebugMode) {
+        debugPrint('TTS: firebase missing timepoints, playing audio without highlights');
       }
       if (kDebugMode) {
         debugPrint('TTS: firebase ok audioLen=${audio.length} timepoints=${timepoints.length}');
       }
       final handle = await _googlePlayer.playBase64Mp3(audio);
-      final seq = enableHighlight ? _scheduleTimepointHighlights(timepoints, hanzi, handle.startedAt) : null;
+      final seq = doHighlight ? _scheduleTimepointHighlights(timepoints, hanzi, handle.startedAt) : null;
       await handle.completed;
-      if (enableHighlight && seq == _highlightSeq) {
+      if (doHighlight && seq == _highlightSeq) {
         _clearHanziHighlights();
       }
       return true;

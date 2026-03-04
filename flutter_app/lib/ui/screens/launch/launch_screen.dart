@@ -31,66 +31,16 @@ class _LaunchScreenState extends State<LaunchScreen> {
           ),
           Container(color: Colors.black.withOpacity(0.2)),
           Positioned(
-            top: 50,
+            top: MediaQuery.of(context).size.height * 0.2,
             left: 16,
             right: 16,
-            child: Center(
-              child: Container(
-                constraints: const BoxConstraints(maxWidth: 320),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.9),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Text.rich(
-                  TextSpan(
-                    children: [
-                      TextSpan(
-                        text: 'Cantonese: Say it\n',
-                        style: TextStyle(fontWeight: FontWeight.w800),
-                      ),
-                      TextSpan(
-                        children: [
-                          const TextSpan(text: '• helps you learn to '),
-                          const TextSpan(text: 'recognise', style: TextStyle(fontWeight: FontWeight.w800)),
-                          const TextSpan(text: ' and '),
-                          const TextSpan(text: 'pronounce', style: TextStyle(fontWeight: FontWeight.w800)),
-                          const TextSpan(text: ' Cantonese\n'),
-                          const TextSpan(text: '• focuses on '),
-                          const TextSpan(text: 'spoken', style: TextStyle(fontWeight: FontWeight.w800)),
-                          const TextSpan(text: ' Cantonese\n'),
-                          const TextSpan(
-                            text:
-                                '• does not try to teach you the Cantonese language - use other apps for that!',
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  textAlign: TextAlign.left,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.black87,
-                  ),
-                ),
-              ),
-            ),
-          ),
-          Center(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Image.asset(
-                  'assets/images/victoria_harbour_icon_new.png',
-                  width: 140,
-                  height: 140,
-                ),
-                const SizedBox(height: 8),
                 const Text(
                   'Cantonese: Say it',
                   style: TextStyle(
-                    fontSize: 18,
+                    fontSize: 34,
                     fontWeight: FontWeight.w700,
                     color: Colors.white,
                     shadows: [
@@ -100,6 +50,45 @@ class _LaunchScreenState extends State<LaunchScreen> {
                         offset: Offset(0, 2),
                       ),
                     ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Center(
+                  child: Container(
+                    constraints: const BoxConstraints(maxWidth: 320),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.9),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Text.rich(
+                      TextSpan(
+                        children: [
+                          TextSpan(
+                            children: [
+                              TextSpan(text: '• helps you learn to '),
+                              TextSpan(text: 'recognise', style: TextStyle(fontWeight: FontWeight.w800)),
+                              TextSpan(text: ' and '),
+                              TextSpan(text: 'pronounce', style: TextStyle(fontWeight: FontWeight.w800)),
+                              TextSpan(text: ' Cantonese\n'),
+                              TextSpan(text: '• focuses on '),
+                              TextSpan(text: 'spoken', style: TextStyle(fontWeight: FontWeight.w800)),
+                              TextSpan(text: ' Cantonese\n'),
+                              TextSpan(
+                                text:
+                                    '• does not try to teach you the Cantonese language - use other apps for that!',
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      textAlign: TextAlign.left,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black87,
+                      ),
+                    ),
                   ),
                 ),
               ],
