@@ -6,6 +6,7 @@ import 'package:flutter_tts/flutter_tts.dart';
 class MainTtsService {
   final FlutterTts _tts = FlutterTts();
   bool _initialized = false;
+  String? _defaultLocale;
 
   Future<void> _init() async {
     if (_initialized) {
@@ -23,6 +24,13 @@ class MainTtsService {
         ],
       );
     }
+    try {
+      final languages = await _tts.getLanguages;
+      if (languages is List) {
+        final normalized = languages.map((e) => e.toString()).toList();
+        _defaultLocale = _pickDefaultLocale(normalized);
+      }
+    } catch (_) {}
     _tts.setErrorHandler((msg) {
       debugPrint('TTS: flutter_tts error=$msg');
     });
@@ -62,11 +70,13 @@ class MainTtsService {
   }) async {
     await _init();
     debugPrint('TTS: flutter_tts speak len=${text.length} rate=$rate voice=$voiceName locale=$locale');
-    if (locale != null && locale.isNotEmpty) {
-      await _tts.setLanguage(locale);
+    await _tts.stop();
+    final resolvedLocale = (locale == null || locale.isEmpty) ? _defaultLocale : locale;
+    if (resolvedLocale != null && resolvedLocale.isNotEmpty) {
+      await _tts.setLanguage(resolvedLocale);
     }
     if (voiceName != null && voiceName.isNotEmpty) {
-      await _tts.setVoice({'name': voiceName, 'locale': locale ?? ''});
+      await _tts.setVoice({'name': voiceName, 'locale': resolvedLocale ?? ''});
     }
     if (rate != null) {
       await _tts.setSpeechRate(rate);
@@ -82,27 +92,60 @@ class MainTtsService {
   }) async {
     await _init();
     debugPrint('TTS: flutter_tts speakAndWait len=${text.length} rate=$rate voice=$voiceName locale=$locale');
-    if (locale != null && locale.isNotEmpty) {
-      await _tts.setLanguage(locale);
+    await _tts.stop();
+    final resolvedLocale = (locale == null || locale.isEmpty) ? _defaultLocale : locale;
+    if (resolvedLocale != null && resolvedLocale.isNotEmpty) {
+      await _tts.setLanguage(resolvedLocale);
     }
     if (voiceName != null && voiceName.isNotEmpty) {
-      await _tts.setVoice({'name': voiceName, 'locale': locale ?? ''});
+      await _tts.setVoice({'name': voiceName, 'locale': resolvedLocale ?? ''});
     }
     if (rate != null) {
       await _tts.setSpeechRate(rate);
     }
     final completer = Completer<void>();
-    _tts.setCompletionHandler(() {
+    Timer? timeout;
+    void completeIfNeeded() {
+      if (timeout?.isActive ?? false) {
+        timeout?.cancel();
+      }
       if (!completer.isCompleted) {
         completer.complete();
       }
-    });
-    _tts.setErrorHandler((_) {
-      if (!completer.isCompleted) {
-        completer.complete();
-      }
-    });
+    }
+
+    _tts.setCompletionHandler(completeIfNeeded);
+    _tts.setErrorHandler((_) => completeIfNeeded());
     await _tts.speak(text);
+
+    final baseMs = (rate == null || rate <= 0) ? 800 : (800 / rate).round();
+    final timeoutMs = (text.isEmpty ? 1000 : (text.length * baseMs)).clamp(1500, 10000);
+    final isSimulator = Platform.isIOS && Platform.environment.containsKey('SIMULATOR_DEVICE_NAME');
+    if (isSimulator) {
+      timeout = Timer(Duration(milliseconds: timeoutMs), () {
+        debugPrint('TTS: flutter_tts timeout after ${timeoutMs}ms');
+        _tts.stop();
+        completeIfNeeded();
+      });
+    }
+
     await completer.future;
+  }
+
+  String? _pickDefaultLocale(List<String> languages) {
+    if (languages.isEmpty) {
+      return null;
+    }
+    const preferred = ['yue-HK', 'zh-HK', 'zh-CN', 'en-US', 'en-GB'];
+    for (final locale in preferred) {
+      final match = languages.firstWhere(
+        (l) => l.toLowerCase() == locale.toLowerCase(),
+        orElse: () => '',
+      );
+      if (match.isNotEmpty) {
+        return match;
+      }
+    }
+    return languages.first;
   }
 }

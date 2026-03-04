@@ -21,5 +21,9 @@ String firebaseTtsUrl() {
   if (buildTime.isNotEmpty) {
     return buildTime;
   }
-  return Platform.environment['FIREBASE_TTS_URL'] ?? '';
+  final env = Platform.environment['FIREBASE_TTS_URL'];
+  if (env != null && env.isNotEmpty) {
+    return env;
+  }
+  return 'https://us-central1-learncanto-ebbc0.cloudfunctions.net/tts';
 }

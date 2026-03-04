@@ -143,9 +143,6 @@ class _OrientationHome extends StatefulWidget {
 class _OrientationHomeState extends State<_OrientationHome> {
   _ScreenMode _desired = _ScreenMode.main;
   Orientation? _lastOrientation;
-  bool _awaitPortrait = false;
-  bool _awaitLandscape = false;
-  String? _overlayMessage;
   bool _addBuilt = false;
   bool _editBuilt = false;
 
@@ -161,6 +158,12 @@ class _OrientationHomeState extends State<_OrientationHome> {
     }
     setState(() {
       _desired = mode;
+      if (mode == _ScreenMode.add) {
+        _addBuilt = true;
+      }
+      if (mode == _ScreenMode.edit) {
+        _editBuilt = true;
+      }
     });
   }
 
@@ -195,62 +198,27 @@ class _OrientationHomeState extends State<_OrientationHome> {
   }
 
   void _handleOrientation(Orientation orientation) {
-    debugPrint('Orientation: handle $orientation desired=$_desired awaitPortrait=$_awaitPortrait awaitLandscape=$_awaitLandscape');
-    if (_awaitPortrait) {
-      if (orientation == Orientation.portrait) {
-        _awaitPortrait = false;
-        _overlayMessage = null;
-        _setDesired(_ScreenMode.edit);
-        _requestFreeRotation();
-      }
+    debugPrint('Orientation: handle $orientation desired=$_desired');
+    if (_desired == _ScreenMode.edit) {
       return;
     }
-    if (_awaitLandscape) {
-      if (orientation == Orientation.landscape) {
-        _awaitLandscape = false;
-        _overlayMessage = null;
-        _setDesired(_ScreenMode.add);
-        _requestFreeRotation();
-      }
+    if (orientation == Orientation.landscape) {
+      _setDesired(_ScreenMode.add);
       return;
     }
-    switch (_desired) {
-      case _ScreenMode.main:
-        if (orientation == Orientation.landscape) {
-          _setDesired(_ScreenMode.add);
-        }
-        break;
-      case _ScreenMode.add:
-        if (orientation == Orientation.portrait) {
-          _setDesired(_ScreenMode.main);
-        }
-        break;
-      case _ScreenMode.edit:
-        if (orientation == Orientation.landscape) {
-          _setDesired(_ScreenMode.add);
-        }
-        break;
-    }
+    _setDesired(_ScreenMode.main);
   }
 
   int _indexFor(Orientation orientation) {
-    if (orientation == Orientation.landscape) {
-      if (_desired == _ScreenMode.edit) {
-        return 1; // add
-      }
-      return 1; // add
-    }
-    // portrait
-    if (_desired == _ScreenMode.add) {
-      return 0; // main
-    }
     if (_desired == _ScreenMode.edit) {
-      return 2; // edit
+      return 2;
     }
-    return 0; // main
+    if (orientation == Orientation.landscape) {
+      return 1;
+    }
+    return 0;
   }
 
-  @override
   Widget build(BuildContext context) {
     return OrientationBuilder(
       builder: (context, orientation) {
@@ -276,7 +244,7 @@ class _OrientationHomeState extends State<_OrientationHome> {
             });
           });
         }
-        debugPrint('Orientation: render index=$index desired=$_desired overlay=${_overlayMessage != null}');
+        debugPrint('Orientation: render index=$index desired=$_desired');
         final content = IndexedStack(
           index: index,
           children: [
@@ -284,53 +252,22 @@ class _OrientationHomeState extends State<_OrientationHome> {
             _addBuilt
                 ? AddScreen(
                     onRequestEdit: () async {
-                      setState(() {
-                        _overlayMessage = 'Rotate to portrait to edit.';
-                      });
-                      _awaitPortrait = true;
+                      _setDesired(_ScreenMode.edit);
                       await _requestPortrait();
                     },
                   )
                 : const SizedBox.shrink(),
             _editBuilt
                 ? EditScreen(
-                    onRequestClose: () async {
-                      setState(() {
-                        _overlayMessage = 'Rotate to landscape to return to Add.';
-                      });
-                      _awaitLandscape = true;
-                      await _requestLandscape();
+                    onRequestClose: () {
+                      _requestFreeRotation();
+                      _setDesired(_ScreenMode.main);
                     },
                   )
                 : const SizedBox.shrink(),
           ],
         );
-        if (_overlayMessage == null) {
-          return content;
-        }
-        return Stack(
-          children: [
-            content,
-            Positioned.fill(
-              child: Container(
-                color: Colors.black.withOpacity(0.35),
-                alignment: Alignment.center,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.black12),
-                  ),
-                  child: Text(
-                    _overlayMessage ?? '',
-                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        );
+        return content;
       },
     );
   }

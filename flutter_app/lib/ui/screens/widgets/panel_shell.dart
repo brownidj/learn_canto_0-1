@@ -4,12 +4,14 @@ class PanelShell extends StatelessWidget {
   final String? title;
   final Widget child;
   final bool expandChild;
+  final bool scrollable;
 
   const PanelShell({
     super.key,
     this.title,
     required this.child,
     this.expandChild = true,
+    this.scrollable = true,
   });
 
   @override
@@ -30,14 +32,18 @@ class PanelShell extends StatelessWidget {
           ],
           if (expandChild)
             Expanded(
-              child: SingleChildScrollView(
-                child: child,
-              ),
+              child: scrollable
+                  ? SingleChildScrollView(
+                      child: child,
+                    )
+                  : child,
             )
-          else
+          else if (scrollable)
             SingleChildScrollView(
               child: child,
-            ),
+            )
+          else
+            child,
         ],
       ),
     );

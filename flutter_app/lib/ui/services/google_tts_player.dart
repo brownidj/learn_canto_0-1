@@ -24,11 +24,28 @@ class GoogleTtsPlayer {
       throw StateError('Google TTS audio was empty');
     }
     final startCompleter = Completer<DateTime>();
-    late final StreamSubscription<PlayerState> sub;
-    sub = _player.onPlayerStateChanged.listen((state) {
+    late final StreamSubscription<PlayerState> startSub;
+    late final StreamSubscription<PlayerState> completeStateSub;
+    late final StreamSubscription<void> completeEventSub;
+    final completeCompleter = Completer<void>();
+    Timer? durationTimer;
+    startSub = _player.onPlayerStateChanged.listen((state) {
       if (state == PlayerState.playing && !startCompleter.isCompleted) {
         startCompleter.complete(DateTime.now());
-        sub.cancel();
+        startSub.cancel();
+      }
+      if (state == PlayerState.completed && !completeCompleter.isCompleted) {
+        completeCompleter.complete();
+      }
+    });
+    completeStateSub = _player.onPlayerStateChanged.listen((state) {
+      if (state == PlayerState.completed && !completeCompleter.isCompleted) {
+        completeCompleter.complete();
+      }
+    });
+    completeEventSub = _player.onPlayerComplete.listen((_) {
+      if (!completeCompleter.isCompleted) {
+        completeCompleter.complete();
       }
     });
     final data = Uint8List.fromList(bytes);
@@ -46,7 +63,21 @@ class GoogleTtsPlayer {
       const Duration(milliseconds: 250),
       onTimeout: () => DateTime.now(),
     );
-    final completed = _player.onPlayerComplete.first;
+    final duration = await _resolveDuration();
+    if (duration != null) {
+      final fallbackMs = duration.inMilliseconds + 250;
+      durationTimer = Timer(Duration(milliseconds: fallbackMs), () {
+        if (!completeCompleter.isCompleted) {
+          completeCompleter.complete();
+        }
+      });
+    }
+    final completed = completeCompleter.future.whenComplete(() {
+      startSub.cancel();
+      completeStateSub.cancel();
+      completeEventSub.cancel();
+      durationTimer?.cancel();
+    });
     return GooglePlaybackHandle(startedAt, completed);
   }
 
@@ -68,5 +99,29 @@ class GoogleTtsPlayer {
     _player.onLog.listen((msg) {
       debugPrint('TTS: player log=$msg');
     });
+  }
+
+  Future<Duration?> _resolveDuration() async {
+    try {
+      final direct = await _player.getDuration();
+      if (direct != null) {
+        return direct;
+      }
+    } catch (_) {}
+    final completer = Completer<Duration?>();
+    late final StreamSubscription<Duration> sub;
+    sub = _player.onDurationChanged.listen((duration) {
+      if (!completer.isCompleted) {
+        completer.complete(duration);
+      }
+      sub.cancel();
+    });
+    return completer.future.timeout(
+      const Duration(milliseconds: 500),
+      onTimeout: () {
+        sub.cancel();
+        return null;
+      },
+    );
   }
 }

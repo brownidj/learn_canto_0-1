@@ -53,12 +53,6 @@ class _EditView extends StatefulWidget {
 class _EditViewState extends State<_EditView> {
 
   @override
-  @override
-  void dispose() {
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
@@ -68,6 +62,16 @@ class _EditViewState extends State<_EditView> {
             padding: const EdgeInsets.only(right: 12),
             child: Row(
               children: [
+                if (widget.onRequestClose != null)
+                  TextButton(
+                    onPressed: widget.onRequestClose,
+                    style: TextButton.styleFrom(
+                      backgroundColor: const Color(0xFFF5C2D3),
+                      foregroundColor: Colors.black,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    ),
+                    child: const Text('Return'),
+                  ),
               ],
             ),
           ),
@@ -85,6 +89,7 @@ class _EditViewState extends State<_EditView> {
                   flex: 1,
                   child: PanelShell(
                     title: 'Vocabulary',
+                    scrollable: false,
                     child: VocabTablePanel(
                       rows: state.vocabRows,
                       searchQuery: state.searchQuery,
